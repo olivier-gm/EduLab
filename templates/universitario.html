@@ -51,6 +51,19 @@
 
   <main class="shell builder-page">
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-stack" data-flash-error="{{ 'true' if messages|selectattr(0, 'equalto', 'error')|list else 'false' }}">
+      {% for category, text in messages %}
+      <div class="flash flash--{{ category }}" role="alert">
+        <i class="bx {{ 'bx-error-circle' if category == 'error' else 'bx-info-circle' }}"></i>
+        <span>{{ text }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
     <div class="builder-head">
       <div>
         <h1>Crea tu documento</h1>

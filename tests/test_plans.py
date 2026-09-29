@@ -171,7 +171,7 @@ def test_generar_sin_permiso_redirige_a_planes_sin_llamar_a_la_ia(client, monkey
 
     def boom(*a, **k):
         raise AssertionError('no debe llamarse a Gemini sin permiso')
-    monkeypatch.setattr(app_module, 'validate_titles', boom)
+    monkeypatch.setattr(app_module, 'check_title', boom)
 
     resp = client.post('/process_form', data={'title': 'Un titulo', 'global-mode': 'ia'})
     assert resp.status_code == 302

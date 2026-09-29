@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, session
+from flask import Flask, render_template, request, redirect, url_for, send_file, session, flash
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import os
 import logging
+import re
 from dotenv import load_dotenv
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
@@ -14,7 +15,8 @@ load_dotenv()
 
 from form_processor import FormProcessor
 from algorythms import Document_process
-from IA import generate_essay_content, generate_introduction, generate_conclusion, validate_titles
+from IA import (generate_essay_content, generate_introduction, generate_conclusion,
+                check_title, GenerationError)
 
 import db
 from auth import auth_bp, current_user, login_required
@@ -51,6 +53,40 @@ def inject_current_user():
     return {'current_user': current_user()}
 
 
+# ── Validaciones de la generación ─────────────────────────────────────
+
+TITLE_MIN_LEN = 5      # igual que la validación del formulario (builder.js)
+TITLE_MAX_LEN = 300    # maxlength del campo título
+_FILENAME_BAD = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+
+
+def safe_filename(name):
+    """Nombre de archivo seguro a partir del título: sin barras, dos puntos,
+    comillas ni otros caracteres que rompían la ruta de salida o creaban
+    subcarpetas, y de largo acotado."""
+    cleaned = _FILENAME_BAD.sub('_', name).strip(' ._')[:80].strip(' ._')
+    return cleaned or 'documento'
+
+
+def validate_title_field(title):
+    """Mensaje de error si el título no sirve, o None si está bien. Se valida
+    en el servidor porque el JavaScript del formulario se puede saltar."""
+    title = (title or '').strip()
+    if len(title) < TITLE_MIN_LEN:
+        return f'Escribe el título del trabajo (mínimo {TITLE_MIN_LEN} caracteres).'
+    if len(title) > TITLE_MAX_LEN:
+        return f'El título es demasiado largo (máximo {TITLE_MAX_LEN} caracteres).'
+    if not re.search(r'[^\W\d_]', title):
+        return 'El título debe tener palabras, no solo números o símbolos.'
+    return None
+
+
+def form_error(message, endpoint='show_form'):
+    """Vuelve al formulario mostrando POR QUÉ no se generó el documento."""
+    flash(message, 'error')
+    return redirect(url_for(endpoint))
+
+
 @app.route('/')
 def welcome():
     return render_template('main_page.html')
@@ -75,6 +111,10 @@ def process_form_bach():
 
         # Retrieve form data
     form_data = request.form
+    title_error = validate_title_field(form_data.get('title'))
+    if title_error:
+        return form_error(title_error, 'show_form_bach')
+
     processor = FormProcessor(form_data, 'bach')
     processor.process()
     replacements, head_title = processor.generate_replacements()
@@ -89,22 +129,35 @@ def process_form_bach():
     input_doc2='input/plantilla_bachempty.docx'
 
   # Check if the file exists
+    file_stem = safe_filename(head_title)
     random_code = ''
-    if os.path.isfile(f'output/{head_title}.docx'):
+    if os.path.isfile(f'output/{file_stem}.docx'):
         # If the file exists, generate a random code and append it to the filename
         random_code = '_' + Document_process.generate_random_code()
-    docx_output = f'output/{head_title}{random_code}.docx'
+    docx_output = f'output/{file_stem}{random_code}.docx'
 
     university_name = form_data.get('u', '')
-    Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
-                                        introduccion, body, conclusion, head_title, 'bach',
-                                        university_name=university_name)
+    try:
+        Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
+                                            introduccion, body, conclusion, head_title, 'bach',
+                                            university_name=university_name)
+    except Exception:
+        logging.exception('Error armando el documento "%s"', head_title)
+        return form_error('Ocurrió un error armando el documento. Inténtalo de nuevo; '
+                          'si se repite, avisa al administrador.', 'show_form_bach')
+
+    if not os.path.isfile(docx_output):
+        return form_error('El documento no se pudo guardar. Inténtalo de nuevo.', 'show_form_bach')
+    if not (body.strip() or introduccion.strip() or conclusion.strip()):
+        flash('El documento tiene solo la portada porque dejaste el contenido en blanco.', 'warning')
+    if not os.path.isfile(docx_output[:-5] + '.pdf'):
+        flash('No se pudo generar el PDF; solo está disponible la versión Word.', 'warning')
 
     db.record_document(user['id'], head_title, 'bach', tokens_used=0, mode='manual')
     session['file_generated'] = True
 
     # Redirect to a new page or indicate success
-    return redirect(url_for('choose_file', filename=head_title + random_code))
+    return redirect(url_for('choose_file', filename=file_stem + random_code))
     #return redirect(url_for('index'))
 
 @app.route('/form')
@@ -131,6 +184,12 @@ def process_form():
     if not allowed:
         return plans.redirect_to_plans(reason)
 
+    # El título sale en la portada en ambos modos, y en modo IA además es el
+    # tema a investigar: sin uno válido no hay nada que generar.
+    title_error = validate_title_field(form_data.get('title'))
+    if title_error:
+        return form_error(title_error)
+
     processor = FormProcessor(form_data, 'uni')
     processor.process()
     replacements, head_title = processor.generate_replacements()
@@ -146,6 +205,9 @@ def process_form():
     # Lista compartida donde cada llamada a Gemini anota sus tokens
     # (ver IA._record_usage); se suma al final para guardarla en la BD.
     usage_sink = []
+    # Avisos que no impiden entregar el documento pero el usuario debe
+    # saber (se muestran en la pantalla de descarga).
+    warnings = []
 
     if manual_mode:
         body = processor.body
@@ -153,48 +215,83 @@ def process_form():
             introduccion = processor.introduccion
         if incluir_conclusion:
             conclusion = processor.conclusion
+        if not (body.strip() or introduccion.strip() or conclusion.strip()):
+            # Portada sola: permitido en modo manual con todo en blanco.
+            warnings.append('El documento tiene solo la portada porque dejaste el contenido en blanco.')
     else:
-        body = ''
-        if validate_titles(processor.formatted_title, usage_sink=usage_sink).startswith('TRUE'):
-            body = generate_essay_content(processor.title, processor.subtitles, usage_sink=usage_sink)
+        # 1) ¿El título es un tema válido? Distinguir "el modelo lo rechazó"
+        #    de "no se pudo consultar al modelo": lo segundo NO es culpa del
+        #    título y antes se trataba igual (volvía al inicio sin decir nada).
+        try:
+            if not check_title(processor.formatted_title, usage_sink=usage_sink):
+                return form_error(
+                    f'La IA no reconoce «{processor.title}» como un tema que pueda investigar '
+                    '(parece texto sin sentido o letras al azar). Escríbelo con palabras claras.')
+        except GenerationError as e:
+            return form_error(f'No se pudo validar el título. {e.user_message}')
 
-        else:
+        # 2) Desarrollo del trabajo (con búsqueda en tiempo real si está disponible).
+        try:
+            body = generate_essay_content(processor.title, processor.subtitles,
+                                          usage_sink=usage_sink, warnings=warnings)
+        except GenerationError as e:
+            return form_error(f'No se pudo generar el desarrollo del trabajo. {e.user_message}')
 
-            return redirect(url_for('welcome'))  # Redirect to the form if the file wasn't generated
-        if body != '':
-            # La introducción y la conclusión solo dependen del título y del
-            # cuerpo ya generado, no una de la otra, así que se piden en
-            # paralelo en vez de esperar una llamada tras otra a Gemini.
-            # Sólo se piden las que el usuario dejó activadas.
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                intro_future = executor.submit(generate_introduction, processor.title, body, usage_sink) if incluir_introduccion else None
-                conclusion_future = executor.submit(generate_conclusion, processor.title, body, usage_sink) if incluir_conclusion else None
-                if intro_future:
-                    introduccion = intro_future.result()
-                if conclusion_future:
-                    conclusion = conclusion_future.result()
+        # 3) La introducción y la conclusión solo dependen del título y del
+        #    cuerpo ya generado, no una de la otra, así que se piden en
+        #    paralelo en vez de esperar una llamada tras otra a Gemini.
+        #    Sólo se piden las que el usuario dejó activadas. Si una falla el
+        #    documento se entrega igual, avisando cuál faltó y por qué.
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {}
+            if incluir_introduccion:
+                futures['introducción'] = executor.submit(
+                    generate_introduction, processor.title, body, usage_sink)
+            if incluir_conclusion:
+                futures['conclusión'] = executor.submit(
+                    generate_conclusion, processor.title, body, usage_sink)
+            results = {}
+            for label, future in futures.items():
+                try:
+                    results[label] = future.result()
+                except GenerationError as e:
+                    warnings.append(f'No se incluyó la {label}. {e.user_message}')
+            introduccion = results.get('introducción', '')
+            conclusion = results.get('conclusión', '')
 
     input_doc='input/plantilla.docx'
     input_doc2='input/plantillaempty.docx'
     # Check if the file exists
+    file_stem = safe_filename(head_title)
     random_code = ''
-    if os.path.isfile(f'output/{head_title}.docx'):
+    if os.path.isfile(f'output/{file_stem}.docx'):
         # If the file exists, generate a random code and append it to the filename
         random_code = '_' + Document_process.generate_random_code()
-    docx_output = f'output/{head_title}{random_code}.docx'
+    docx_output = f'output/{file_stem}{random_code}.docx'
     university_name = form_data.get('u', '')
-    Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
-                                        introduccion, body, conclusion, head_title, 'uni',
-                                        university_name=university_name,
-                                        detect_subtitles=not manual_mode)
+    try:
+        Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
+                                            introduccion, body, conclusion, head_title, 'uni',
+                                            university_name=university_name,
+                                            detect_subtitles=not manual_mode)
+    except Exception:
+        logging.exception('Error armando el documento "%s"', head_title)
+        return form_error('Ocurrió un error armando el documento. Inténtalo de nuevo; '
+                          'si se repite, avisa al administrador.')
+
+    if not os.path.isfile(docx_output):
+        return form_error('El documento no se pudo guardar. Inténtalo de nuevo.')
+    if not os.path.isfile(docx_output[:-5] + '.pdf'):
+        warnings.append('No se pudo generar el PDF; solo está disponible la versión Word.')
 
     db.record_document(user['id'], head_title, 'uni', tokens_used=sum(usage_sink),
                        mode='manual' if manual_mode else 'ai')
     session['file_generated'] = True
+    for text in warnings:
+        flash(text, 'warning')
 
     # Redirect to a new page or indicate success
-    return redirect(url_for('choose_file', filename=head_title + random_code))
-    #return redirect(url_for('index'))
+    return redirect(url_for('choose_file', filename=file_stem + random_code))
 
 
 @app.route('/choose_file/<filename>')
@@ -202,9 +299,16 @@ def process_form():
 def choose_file(filename):
     """Renders the file download page."""
     if 'file_generated' not in session:
-        return redirect(url_for('welcome'))  # Redirect to the form if the file wasn't generated
-        # Schedule the file removal after a delay
+        # Sesión vencida, o se volvió al formulario (que reinicia la marca).
+        return form_error('Esa descarga ya no está disponible en tu sesión. '
+                          'Genera el documento de nuevo.')
     file_path = f'output/{filename}.docx'
+    if not os.path.isfile(file_path):
+        # Los archivos se borran a las ~2 h; sin esto se mostraba la pantalla
+        # de descarga con enlaces que llevaban a un 404.
+        return form_error('El documento ya no existe (los archivos se conservan unas 2 horas). '
+                          'Genera el documento de nuevo.')
+    # Schedule the file removal after a delay
     threading.Timer(7800, Document_process.remove_file, args=[file_path]).start()
 
     # Enlaces públicos temporales para compartir (WhatsApp / Gmail / otros).
@@ -221,8 +325,11 @@ def choose_file(filename):
 @login_required
 def download_file(filename, filetype):
     if 'file_generated' not in session:
-        return redirect(url_for('welcome'))
-    file_path = f'output/{filename}.{filetype}'
+        return form_error('Esa descarga ya no está disponible en tu sesión. '
+                          'Genera el documento de nuevo.')
+    if filetype not in SHARE_FILETYPES:
+        return render_template('404.html'), 404
+    file_path = f'output/{os.path.basename(filename)}.{filetype}'
     try:
         return send_file(file_path, as_attachment=True)
     except Exception as e:

@@ -62,6 +62,18 @@
       <h1 class="done__title">¡Tu documento está listo!</h1>
       <p class="done__sub">Elige el formato en el que quieres descargarlo. Puedes bajar los dos si lo necesitas.</p>
 
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="notice-stack">
+        {% for category, text in messages %}
+        <div class="notice notice--{{ category }}" role="alert">
+          <i class="bx bx-info-circle"></i> <span>{{ text }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+
       <span class="file-tag">
         <i class="bx bx-file-blank"></i> <b>{{ filename }}</b>
       </span>

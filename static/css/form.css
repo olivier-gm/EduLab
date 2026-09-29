@@ -1080,3 +1080,38 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
   color: var(--gold);
   text-decoration: underline;
 }
+
+/* Avisos de la generación (errores al volver al formulario) */
+.flash-stack {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.flash {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: var(--r-lg);
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.flash i {
+  font-size: 1.25rem;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.flash--error {
+  background: rgba(226, 87, 76, 0.12);
+  border: 1px solid rgba(226, 87, 76, 0.4);
+  color: #ffaaa2;
+}
+
+.flash--warning {
+  background: rgba(232, 197, 71, 0.1);
+  border: 1px solid rgba(232, 197, 71, 0.32);
+  color: var(--gold);
+}

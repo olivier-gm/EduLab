@@ -735,6 +735,7 @@
     if (!validateStep(3)) { e.preventDefault(); goTo(3, true); return; }
     if (btnSubmit.disabled) { e.preventDefault(); return; }
 
+    saveDraft();
     btnSubmit.disabled = true;
     startLoader();
     // No se llama a preventDefault: el envío sigue su curso normal
@@ -758,4 +759,94 @@
   renderTitle();
   renderInfoBlock();
   renderFoot();
+
+  /* ==========================================================
+     14. BORRADOR: si la generación falla y el servidor devuelve al
+     formulario con un mensaje de error, se restauran los datos que el
+     usuario había escrito (antes se perdía todo y había que empezar de cero).
+     ========================================================== */
+  var DRAFT_KEY = 'gullieth_draft_v1';
+
+  function saveDraft() {
+    try {
+      var data = [];
+      $$('input, select, textarea', form).forEach(function (el) {
+        if (!el.name || el.type === 'file' || el.type === 'submit') { return; }
+        data.push([el.name, el.value, el.checked, el.type]);
+      });
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+    } catch (e) { /* sin sessionStorage simplemente no se restaura */ }
+  }
+
+  function restoreDraft() {
+    var data;
+    try { data = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { data = null; }
+    if (!data) { return false; }
+
+    var get = function (name) {
+      for (var i = 0; i < data.length; i++) { if (data[i][0] === name) { return data[i]; } }
+      return null;
+    };
+    var fire = function (el, type) { el.dispatchEvent(new Event(type, { bubbles: true })); };
+
+    // 1) Estructura que cambia los campos disponibles: institución, estudiantes, temas
+    data.forEach(function (d) {
+      if (d[0] === 'instituto' && d[2]) {
+        $$('input[name="instituto"]').forEach(function (r) { r.checked = (r.value === d[1]); });
+      }
+    });
+    applyInstitute();
+
+    var count = get('gblock-template-canvas-integrantes');
+    if (count) { countInput.value = count[1]; }
+    renderStudents();
+
+    var topics = data.filter(function (d) { return /^subtitle_\d+$/.test(d[0]); }).length;
+    for (var t = 0; t < topics && $$('.topic-row', topicsBox).length < MAX_TOPICS; t++) {
+      topicsBox.appendChild(buildTopicRow());
+    }
+    reindexTopics();
+
+    // 2) Valores
+    data.forEach(function (d) {
+      var name = d[0], value = d[1], checked = d[2], type = d[3];
+      if (name === 'date' || name === 'instituto') { return; }
+      $$('[name="' + name + '"]', form).forEach(function (el) {
+        if (type === 'radio') {
+          if (el.value === value) { el.checked = checked; if (checked) { fire(el, 'change'); } }
+        } else if (type === 'checkbox') {
+          if (el.value === value) { el.checked = checked; fire(el, 'change'); }
+        } else if (el.type === type || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+          el.value = value;
+          fire(el, 'input');
+          fire(el, 'change');
+        }
+      });
+    });
+
+    var date = get('date');
+    if (date && /^\d\d\/\d\d\/\d{4}$/.test(date[1])) {
+      datePicker.value = date[1].slice(6) + '-' + date[1].slice(3, 5) + '-' + date[1].slice(0, 2);
+      fire(datePicker, 'change');
+    }
+
+    applyInstitute();
+    applyMode();
+    applySections();
+    renderStudents();
+    renderHeader();
+    renderCrest();
+    renderTitle();
+    renderInfoBlock();
+    renderFoot();
+    goTo(3, true);
+    return true;
+  }
+
+  var flashBox = $('.flash-stack');
+  if (flashBox && flashBox.getAttribute('data-flash-error') === 'true') {
+    restoreDraft();
+  }
+  // Un borrador solo sirve para el intento que acaba de fallar.
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) { /* nada */ }
 })();

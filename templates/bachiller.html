@@ -27,6 +27,9 @@
 </head>
 
 <body class="entrada_body">
+{% with messages = get_flashed_messages(with_categories=true) %}{% for category, text in messages %}
+<div style="margin:12px auto;max-width:720px;padding:12px 16px;border-radius:8px;background:#fff3cd;border:1px solid #e0b93c;color:#5c4400;font-family:Arial,sans-serif;">{{ text }}</div>
+{% endfor %}{% endwith %}
 
   <header class="header">
     <div class="bottom-bar">

@@ -16,3 +16,6 @@ output/
 # Base de datos local (usuarios, documentos generados)
 *.db
 *.db-journal
+
+# Perfil propio de LibreOffice (se regenera solo)
+.lo_profile/

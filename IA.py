@@ -23,6 +23,22 @@ MODEL_NAME = "gemini-3.5-flash-lite"
 CACHE_TTL = os.environ.get("GEMINI_CACHE_TTL", "3600s")
 CACHE_ENABLED = os.environ.get("GEMINI_CONTEXT_CACHE", "true").strip().lower() != "false"
 
+# Búsqueda en tiempo real (Google Search grounding) para el desarrollo del
+# trabajo: el modelo no siempre tiene datos actuales. Es una herramienta con
+# CUOTA PROPIA en la API: si se agota (429 RESOURCE_EXHAUSTED) el desarrollo se
+# genera igual, sin búsqueda, y se le avisa al usuario. Se desactiva por
+# completo con GEMINI_GOOGLE_SEARCH=false.
+SEARCH_ENABLED = os.environ.get("GEMINI_GOOGLE_SEARCH", "true").strip().lower() != "false"
+# Tras un error de cuota no se vuelve a intentar la búsqueda durante este
+# tiempo (segundos): así no se pierde una llamada fallida por cada documento.
+SEARCH_COOLDOWN = 300
+_search_blocked_until = 0.0
+
+SEARCH_UNAVAILABLE_WARNING = (
+    'La búsqueda en tiempo real no estuvo disponible, así que el desarrollo se '
+    'generó sin datos actualizados de internet. Revisa las cifras o fechas recientes.'
+)
+
 # Shared safety settings — used by all generation functions
 SAFETY_SETTINGS = [
     types.SafetySetting(
@@ -65,15 +81,102 @@ def _clean(text):
     return text.strip()
 
 
+class GenerationError(Exception):
+    """Fallo al generar con Gemini, con un motivo que SÍ se le puede mostrar
+    al usuario (`user_message`) y un código para decidir qué hacer:
+    quota | auth | unavailable | bad_request | blocked | truncated | empty |
+    unknown. Antes cualquier error se convertía en '' o 'FALSE' sin decir por
+    qué, y el usuario acababa con una portada sola o de vuelta en el inicio.
+    """
+
+    def __init__(self, code, user_message, detail=''):
+        super().__init__(detail or user_message)
+        self.code = code
+        self.user_message = user_message
+
+
+def classify_error(e):
+    """Traduce cualquier excepción de la API a un GenerationError legible."""
+    if isinstance(e, GenerationError):
+        return e
+    code = getattr(e, 'code', None)
+    text = str(e)
+    low = text.lower()
+    name = type(e).__name__.lower()
+
+    if code == 429 or 'resource_exhausted' in low or 'quota' in low:
+        return GenerationError(
+            'quota',
+            'La IA alcanzó su límite de uso en este momento. Espera unos minutos e inténtalo de nuevo.',
+            text)
+    if code in (401, 403) or 'api key' in low or 'permission_denied' in low:
+        return GenerationError(
+            'auth',
+            'La IA no está disponible por un problema de configuración del servicio. Avisa al administrador.',
+            text)
+    if (code in (500, 502, 503, 504) or 'unavailable' in low or 'overloaded' in low
+            or 'deadline' in low or 'timeout' in name or 'connect' in name
+            or isinstance(e, (TimeoutError, ConnectionError))):
+        return GenerationError(
+            'unavailable',
+            'Los servidores de la IA están saturados o no respondieron. Inténtalo de nuevo en un momento.',
+            text)
+    if code == 400:
+        return GenerationError(
+            'bad_request',
+            'La IA rechazó la solicitud. Revisa que el título y los temas no tengan caracteres extraños.',
+            text)
+    return GenerationError('unknown', 'Ocurrió un error inesperado al comunicarse con la IA.', text)
+
+
+def _extract_text(response):
+    """Texto de la respuesta, o GenerationError explicando por qué no hay."""
+    feedback = getattr(response, 'prompt_feedback', None)
+    block = getattr(feedback, 'block_reason', None) if feedback else None
+    if block:
+        raise GenerationError(
+            'blocked',
+            'La IA no procesó este tema por sus filtros de seguridad. Prueba reformulando el título.',
+            str(block))
+
+    try:
+        text = response.text or ''
+    except Exception:
+        text = ''
+    if text.strip():
+        return text
+
+    candidates = getattr(response, 'candidates', None) or []
+    finish = str(getattr(candidates[0], 'finish_reason', '')) if candidates else ''
+    if any(k in finish for k in ('SAFETY', 'PROHIBITED', 'BLOCKLIST', 'RECITATION')):
+        raise GenerationError(
+            'blocked',
+            'La IA no procesó este tema por sus filtros de seguridad. Prueba reformulando el título.',
+            finish)
+    if 'MAX_TOKENS' in finish:
+        raise GenerationError(
+            'truncated',
+            'La IA se quedó sin espacio antes de escribir el texto. Prueba con un tema más específico.',
+            finish)
+    raise GenerationError(
+        'empty',
+        'La IA no devolvió texto para este tema. Inténtalo de nuevo o reformula el título.',
+        finish or 'respuesta vacía')
+
+
 def _with_retries(fn, *, attempts=3, base_delay=1.5):
     """Reintenta una llamada a la API ante errores transitorios (rate limit,
-    timeouts, errores 5xx) con backoff exponencial, en vez de fallar directo."""
+    timeouts, errores 5xx) con backoff exponencial, en vez de fallar directo.
+    Los errores permanentes (400/401/403/404) no se reintentan: repetirlos
+    sólo hace esperar al usuario para el mismo resultado."""
     last_err = None
     for attempt in range(attempts):
         try:
             return fn()
         except Exception as e:
             last_err = e
+            if getattr(e, 'code', None) in (400, 401, 403, 404):
+                break
             if attempt < attempts - 1:
                 delay = base_delay * (2 ** attempt)
                 logger.warning(
@@ -181,7 +284,62 @@ class _FewShotPrompt:
             return [final_turn]
         return self.example_contents + [final_turn]
 
-    def generate(self, user_text, *, temperature, max_output_tokens, usage_sink=None):
+    def _generate_with_search(self, user_text, temperature, max_output_tokens, usage_sink):
+        """Una sola llamada con Google Search. No usa el caché de contexto (una
+        request con caché no puede declarar herramientas) ni reintentos: si la
+        búsqueda falla, generate() cae a la generación normal."""
+        config = types.GenerateContentConfig(
+            system_instruction=self.system_instruction,
+            temperature=temperature,
+            top_p=0.95,
+            top_k=40,
+            max_output_tokens=max_output_tokens,
+            response_mime_type='text/plain',
+            safety_settings=SAFETY_SETTINGS,
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+        )
+        final_turn = types.Content(role='user', parts=[types.Part(text=user_text)])
+        response = client.models.generate_content(
+            model=self.model, config=config,
+            contents=self.example_contents + [final_turn],
+        )
+        _record_usage(usage_sink, response)
+        return _extract_text(response)
+
+    def generate(self, user_text, *, temperature, max_output_tokens, usage_sink=None,
+                 use_search=False, warnings=None):
+        """Devuelve el texto generado o lanza GenerationError con el motivo.
+
+        use_search: intenta primero con búsqueda en tiempo real; si falla por
+        cualquier motivo, genera sin ella y agrega SEARCH_UNAVAILABLE_WARNING a
+        `warnings` (lista opcional) para que el usuario lo sepa.
+        """
+        global _search_blocked_until
+        if use_search and SEARCH_ENABLED:
+            if time.time() < _search_blocked_until:
+                if warnings is not None:
+                    warnings.append(SEARCH_UNAVAILABLE_WARNING)
+            else:
+                try:
+                    return self._generate_with_search(
+                        user_text, temperature, max_output_tokens, usage_sink)
+                except Exception as e:
+                    err = classify_error(e)
+                    logger.warning('Búsqueda en tiempo real falló para "%s" (%s): %s. '
+                                   'Se genera sin búsqueda.', self.display_name, err.code, err)
+                    if err.code == 'quota':
+                        _search_blocked_until = time.time() + SEARCH_COOLDOWN
+                    if warnings is not None:
+                        warnings.append(SEARCH_UNAVAILABLE_WARNING)
+
+        try:
+            return self._generate_plain(user_text, temperature, max_output_tokens, usage_sink)
+        except GenerationError:
+            raise
+        except Exception as e:
+            raise classify_error(e) from e
+
+    def _generate_plain(self, user_text, temperature, max_output_tokens, usage_sink):
         self._ensure_cache()
 
         def _call():
@@ -206,7 +364,7 @@ class _FewShotPrompt:
             else:
                 raise
         _record_usage(usage_sink, response)
-        return response.text if response.text else ''
+        return _extract_text(response)
 
 
 # ---------------------------------------------------------------------------
@@ -242,24 +400,36 @@ _essay_prompt = _FewShotPrompt(
 )
 
 
-def generate_essay_content(title, subtitles, usage_sink=None):
+def generate_essay_content(title, subtitles, usage_sink=None, warnings=None):
+    """Desarrollo del trabajo. Lanza GenerationError si no se pudo generar.
+
+    Usa búsqueda en tiempo real cuando está disponible (ver SEARCH_ENABLED);
+    si no lo está, genera sin ella y anota un aviso en `warnings`.
+    """
+    # El armado sigue el mismo formato de los ejemplos few-shot (ver el
+    # caso 'ciclo de krebs' arriba): con 2+ subtítulos van en su propio
+    # bloque entrecomillado; con uno solo, entre paréntesis junto al
+    # título; sin ninguno, sólo el título.
+    if subtitles and len(subtitles) > 1:
+        user_text = f"Tema: '{title}' y en los subtitulos '{'; '.join(subtitles)}'"
+    elif subtitles:
+        user_text = f"Tema: '{title} ({subtitles[0]})'"
+    else:
+        user_text = f"Tema: '{title}'"
     try:
-        # El armado sigue el mismo formato de los ejemplos few-shot (ver el
-        # caso 'ciclo de krebs' arriba): con 2+ subtítulos van en su propio
-        # bloque entrecomillado; con uno solo, entre paréntesis junto al
-        # título; sin ninguno, sólo el título.
-        if subtitles and len(subtitles) > 1:
-            user_text = f"Tema: '{title}' y en los subtitulos '{'; '.join(subtitles)}'"
-        elif subtitles:
-            user_text = f"Tema: '{title} ({subtitles[0]})'"
-        else:
-            user_text = f"Tema: '{title}'"
-        text = _essay_prompt.generate(user_text, temperature=0.5, max_output_tokens=20000,
-                                       usage_sink=usage_sink)
-        return _clean(text)
+        text = _clean(_essay_prompt.generate(
+            user_text, temperature=0.5, max_output_tokens=20000,
+            usage_sink=usage_sink, use_search=True, warnings=warnings))
     except Exception as e:
-        logger.error('Error generando contenido del ensayo: %s', e)
-        return ''
+        err = classify_error(e)
+        logger.error('Error generando contenido del ensayo (%s): %s', err.code, err)
+        if err is e:
+            raise
+        raise err from e
+    if not text:
+        raise GenerationError(
+            'empty', 'La IA no devolvió texto para este tema. Inténtalo de nuevo o reformula el título.')
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -286,14 +456,21 @@ _intro_prompt = _FewShotPrompt(
 
 
 def generate_introduction(title, body, usage_sink=None):
+    """Introducción del trabajo. Lanza GenerationError si no se pudo generar."""
+    user_text = f"El título del trabajo es '{title}' y el texto es el siguiente: \"{body}\"."
     try:
-        user_text = f"El título del trabajo es \'{title}\' y el texto es el siguiente: \"{body}\"."
-        text = _intro_prompt.generate(user_text, temperature=0.5, max_output_tokens=5000,
-                                       usage_sink=usage_sink)
-        return _clean(text)
+        text = _clean(_intro_prompt.generate(
+            user_text, temperature=0.5, max_output_tokens=5000, usage_sink=usage_sink))
     except Exception as e:
-        logger.error('Error generando introducción: %s', e)
-        return ''
+        err = classify_error(e)
+        logger.error('Error generando introducción (%s): %s', err.code, err)
+        if err is e:
+            raise
+        raise err from e
+    if not text:
+        raise GenerationError(
+            'empty', 'La IA no devolvió texto para la introducción.')
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -320,21 +497,38 @@ _conclusion_prompt = _FewShotPrompt(
 
 
 def generate_conclusion(title, body, usage_sink=None):
+    """Conclusión del trabajo. Lanza GenerationError si no se pudo generar."""
+    user_text = f"El título del trabajo es '{title}' y el texto es el siguiente: \"{body}\"."
     try:
-        user_text = f"El título del trabajo es \'{title}\' y el texto es el siguiente: \"{body}\"."
-        text = _conclusion_prompt.generate(user_text, temperature=0.5, max_output_tokens=5000,
-                                            usage_sink=usage_sink)
-        return _clean(text)
+        text = _clean(_conclusion_prompt.generate(
+            user_text, temperature=0.5, max_output_tokens=5000, usage_sink=usage_sink))
     except Exception as e:
-        logger.error('Error generando conclusión: %s', e)
-        return ''
+        err = classify_error(e)
+        logger.error('Error generando conclusión (%s): %s', err.code, err)
+        if err is e:
+            raise
+        raise err from e
+    if not text:
+        raise GenerationError(
+            'empty', 'La IA no devolvió texto para la conclusión.')
+    return text
 
 
 # ---------------------------------------------------------------------------
 # VALIDACIÓN DE TÍTULOS
 # ---------------------------------------------------------------------------
 
-def validate_titles(title, usage_sink=None):
+_VERDICT_RE = re.compile(r'\b(TRUE|FALSE)\b', re.IGNORECASE)
+
+
+def check_title(title, usage_sink=None):
+    """True si el título es válido, False si el modelo lo rechaza.
+
+    Lanza GenerationError cuando NO se pudo evaluar (cuota, red, respuesta
+    vacía...): eso no es "título inválido" y no debe tratarse como tal. Antes
+    cualquier error de la API se devolvía como 'FALSE' y el usuario acababa
+    de vuelta en el inicio sin explicación.
+    """
     config = types.GenerateContentConfig(
         temperature=0.05,
         top_p=0.95,
@@ -345,8 +539,8 @@ def validate_titles(title, usage_sink=None):
     )
     prompt = (
         f"Analiza si este título es válido para buscar información en internet o escribir un "
-        f"artículo. Responde únicamente con la palabra \'TRUE\' si es coherente, o \'FALSE\' si no "
-        f"tiene sentido o son letras al azar. Título: \'{title}\'"
+        f"artículo. Responde únicamente con la palabra 'TRUE' si es coherente, o 'FALSE' si no "
+        f"tiene sentido o son letras al azar. Título: '{title}'"
     )
 
     try:
@@ -356,9 +550,25 @@ def validate_titles(title, usage_sink=None):
             contents=[prompt],
         ))
         _record_usage(usage_sink, response)
-        raw_text = response.text if hasattr(response, 'text') and response.text else ''
-        cleaned_text = _clean(raw_text)
-        return cleaned_text if cleaned_text else 'FALSE'
+        raw_text = _clean(_extract_text(response))
     except Exception as e:
-        logger.error('Error validando título: %s', e)
+        err = classify_error(e)
+        logger.error('Error validando título (%s): %s', err.code, err)
+        if err is e:
+            raise
+        raise err from e
+
+    match = _VERDICT_RE.search(raw_text)
+    if match is None:
+        # Respuesta con formato inesperado: no es un rechazo del título.
+        logger.warning('Respuesta inesperada al validar el título: %r', raw_text[:80])
+        return True
+    return match.group(1).upper() == 'TRUE'
+
+
+def validate_titles(title, usage_sink=None):
+    """Compatibilidad: 'TRUE'/'FALSE' como antes (los errores cuentan como FALSE)."""
+    try:
+        return 'TRUE' if check_title(title, usage_sink=usage_sink) else 'FALSE'
+    except GenerationError:
         return 'FALSE'

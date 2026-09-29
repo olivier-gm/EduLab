@@ -15,16 +15,30 @@ Hace dos cosas que `soffice --convert-to pdf` no puede hacer:
      mismo documento en memoria, de modo que ambos formatos salgan con el
      índice hecho y el usuario no tenga que pulsar nada en Word.
 
+LibreOffice se lanza aquí mismo (no con officehelper.bootstrap) por tres
+razones:
+  - officehelper no pasa --headless/--invisible/--norestore: mostraba
+    ventanas en pantalla y un cuadro de "recuperar documentos" pendiente
+    podía bloquear la generación hasta el timeout.
+  - Se le da la ruta como argumento de lista, sin shell: no hace falta
+    entrecomillar "C:\\Program Files\\...".
+  - Se usa un perfil propio y aislado (ver Document_process._lo_profile_arg):
+    no comparte instancia con el LibreOffice del usuario, así que terminar
+    este proceso nunca cierra las ventanas que el usuario tenga abiertas.
+
 Uso:
-    <lo_python> lo_finalize.py <ruta.docx> <ruta_salida.pdf> [ruta_soffice]
+    <lo_python> lo_finalize.py <ruta.docx> <ruta_salida.pdf> <ruta_soffice> [-env:UserInstallation=...]
 """
 import os
+import subprocess
 import sys
+import time
 
 import uno            # noqa: F401  (necesario para inicializar el puente UNO)
 import unohelper
-import officehelper
 from com.sun.star.beans import PropertyValue
+
+CONNECT_TIMEOUT = 90   # segundos esperando a que LibreOffice acepte conexiones
 
 
 def _pv(name, value):
@@ -34,72 +48,66 @@ def _pv(name, value):
     return prop
 
 
+def _start_office(soffice, profile_arg):
+    """Lanza soffice sin interfaz y devuelve (proceso, contexto UNO)."""
+    pipe = 'gullieth_%d' % os.getpid()
+    command = [
+        soffice, '--headless', '--invisible', '--norestore', '--nologo',
+        '--nodefault', '--nofirststartwizard',
+        '--accept=pipe,name=%s;urp;' % pipe,
+    ]
+    if profile_arg:
+        command.insert(1, profile_arg)
+    process = subprocess.Popen(command)
+
+    local = uno.getComponentContext()
+    resolver = local.ServiceManager.createInstanceWithContext(
+        'com.sun.star.bridge.UnoUrlResolver', local)
+    url = 'uno:pipe,name=%s;urp;StarOffice.ComponentContext' % pipe
+
+    deadline = time.time() + CONNECT_TIMEOUT
+    delay = 0.3
+    while True:
+        try:
+            return process, resolver.resolve(url)
+        except Exception:
+            if process.poll() is not None:
+                raise RuntimeError('LibreOffice se cerró al iniciar (código %s)' % process.returncode)
+            if time.time() > deadline:
+                _kill(process)
+                raise RuntimeError('LibreOffice no aceptó conexiones en %ds' % CONNECT_TIMEOUT)
+            time.sleep(delay)
+            delay = min(delay * 1.5, 2)
+
+
+def _kill(process):
+    """Cierra el proceso y sus hijos (en Windows soffice.exe lanza soffice.bin)."""
+    if process.poll() is not None:
+        return
+    if sys.platform.startswith('win'):
+        subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        process.kill()
+
+
 def main():
-    if len(sys.argv) < 3:
-        print('uso: lo_finalize.py <docx> <pdf>', file=sys.stderr)
+    if len(sys.argv) < 4:
+        print('uso: lo_finalize.py <docx> <pdf> <soffice> [-env:UserInstallation=...]', file=sys.stderr)
         return 2
 
     docx_path = os.path.abspath(sys.argv[1])
     pdf_path = os.path.abspath(sys.argv[2])
+    soffice = sys.argv[3]
+    profile_arg = sys.argv[4] if len(sys.argv) > 4 else None
 
     if not os.path.isfile(docx_path):
         print('no existe el docx: %s' % docx_path, file=sys.stderr)
         return 2
 
-    # Se le pasa la ruta exacta de soffice cuando el llamador la conoce:
-    # officehelper por defecto lo busca en el PATH y ahí normalmente no está.
-    #
-    # Ojo: officehelper arma el comando con ' '.join(...) y sólo entrecomilla
-    # la ruta que construye él mismo, no la que se le pasa por parámetro. Como
-    # en Windows vive en "C:\Program Files\...", hay que entrecomillarla aquí
-    # o el shell corta el comando en el primer espacio.
-    soffice = sys.argv[3] if len(sys.argv) > 3 else None
-    if soffice:
-        if sys.platform.startswith('win'):
-            if not soffice.startswith('"'):
-                soffice = '"' + soffice + '"'
-        else:
-            import shlex
-            soffice = shlex.quote(soffice)
-        ctx = officehelper.bootstrap(soffice=soffice)
-    else:
-        ctx = officehelper.bootstrap()
-
+    process, ctx = _start_office(soffice, profile_arg)
     desktop = ctx.ServiceManager.createInstanceWithContext(
         'com.sun.star.frame.Desktop', ctx)
-
-    # Desactiva el comprobador de actualizaciones de LibreOffice.
-    # Combina dos enfoques para cubrir todas las versiones:
-    #   - CheckInterval=0 en el nodo Jobs (persiste en el perfil)
-    #   - AutoCheckEnabled=False en el nodo Product (disponible en LO ≥ 7)
-    try:
-        cfg = ctx.ServiceManager.createInstanceWithContext(
-            'com.sun.star.configuration.ConfigurationProvider', ctx)
-
-        def _cfg_write(nodepath):
-            return cfg.createInstanceWithArguments(
-                'com.sun.star.configuration.ConfigurationUpdateAccess',
-                (_pv('nodepath', nodepath),),
-            )
-
-        try:
-            jobs = _cfg_write(
-                '/org.openoffice.Office.Jobs/Jobs'
-                '/org.openoffice.Office.Jobs:UpdateCheck/Arguments'
-            )
-            jobs.replaceByName('CheckInterval', 0)
-            jobs.commitChanges()
-        except Exception:
-            pass
-
-        try:
-            prod = _cfg_write('/org.openoffice.Office.Update/Update')
-            prod.replaceByName('AutoCheckEnabled', False)
-            prod.commitChanges()
-        except Exception:
-            pass
-    except Exception:
-        pass
 
     doc = None
     try:
@@ -145,6 +153,10 @@ def main():
             desktop.terminate()
         except Exception:
             pass
+        try:
+            process.wait(timeout=10)
+        except Exception:
+            _kill(process)
 
 
 if __name__ == '__main__':

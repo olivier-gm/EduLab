@@ -4,6 +4,7 @@ import string
 import random
 import shutil
 import logging
+import pathlib
 import threading
 import unicodedata
 import re
@@ -67,6 +68,54 @@ class Document_process:
                 return candidate
         return None
 
+    # Ajustes del perfil propio de LibreOffice para la app. Rutas verificadas
+    # contra share/registry/*.xcd de la instalación:
+    #   - Jobs/UpdateCheck/Arguments: comprobación y descarga de actualizaciones
+    #     (la ventana "LibreOffice Update - actualizando su instalación" salía
+    #     de aquí); desactivadas.
+    #   - Save/Document/CreateBackup: por defecto cada documento exportado
+    #     dejaba una copia .bak en el perfil del usuario, acumulándose sin fin.
+    #   - Recovery/AutoSave: sin autoguardado ni cuadros de recuperación.
+    _LO_PROFILE_XCU = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<oor:items xmlns:oor="http://openoffice.org/2001/registry" '
+        'xmlns:xs="http://www.w3.org/2001/XMLSchema" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
+        '<item oor:path="/org.openoffice.Office.Jobs/Jobs/UpdateCheck/Arguments">'
+        '<prop oor:name="AutoCheckEnabled" oor:op="fuse"><value>false</value></prop></item>\n'
+        '<item oor:path="/org.openoffice.Office.Jobs/Jobs/UpdateCheck/Arguments">'
+        '<prop oor:name="AutoDownloadEnabled" oor:op="fuse"><value>false</value></prop></item>\n'
+        '<item oor:path="/org.openoffice.Office.Common/Save/Document">'
+        '<prop oor:name="CreateBackup" oor:op="fuse"><value>false</value></prop></item>\n'
+        '<item oor:path="/org.openoffice.Office.Recovery/AutoSave">'
+        '<prop oor:name="Enabled" oor:op="fuse"><value>false</value></prop></item>\n'
+        '<item oor:path="/org.openoffice.Office.Recovery/AutoSave">'
+        '<prop oor:name="UserAutoSave" oor:op="fuse"><value>false</value></prop></item>\n'
+        '</oor:items>\n'
+    )
+
+    @staticmethod
+    def _lo_profile_arg():
+        """Argumento -env:UserInstallation de un perfil de LibreOffice propio
+        de la app (carpeta .lo_profile), creado con los ajustes de arriba.
+
+        Un perfil aparte hace que esta instancia sea independiente de la del
+        usuario: no comparte ajustes de actualización ni cierra sus ventanas
+        abiertas al terminar. Devuelve None si no se puede crear (entonces se
+        usa el perfil normal, como antes)."""
+        try:
+            profile = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.lo_profile')
+            user_dir = os.path.join(profile, 'user')
+            os.makedirs(user_dir, exist_ok=True)
+            xcu = os.path.join(user_dir, 'registrymodifications.xcu')
+            if not os.path.isfile(xcu):
+                with open(xcu, 'w', encoding='utf-8') as f:
+                    f.write(Document_process._LO_PROFILE_XCU)
+            return '-env:UserInstallation=' + pathlib.Path(profile).as_uri()
+        except OSError as e:
+            logger.warning('No se pudo preparar el perfil de LibreOffice: %s', e)
+            return None
+
     @staticmethod
     def _finalize_with_uno(input_file, pdf_output):
         """Actualiza el índice y exporta el PDF vía UNO.
@@ -88,14 +137,14 @@ class Document_process:
             lo_python, script,
             os.path.abspath(input_file), os.path.abspath(pdf_output), soffice_path,
         ]
+        profile_arg = Document_process._lo_profile_arg()
+        if profile_arg:
+            command.append(profile_arg)
 
-        # Una sola conversión a la vez: LibreOffice es de instancia única y dos
-        # procesos simultáneos se bloquean entre sí.
-        # SAL_DISABLE_UPDATECHECK=1: suprime el diálogo de actualización de
-        # LibreOffice. Sin esto, si hay conexión lenta o actualización pendiente,
-        # el diálogo bloquea el proceso headless y la conversión falla.
+        # Una sola conversión a la vez: es un único proceso de LibreOffice con
+        # un perfil compartido, y dos a la vez se bloquearían entre sí.
         env = os.environ.copy()
-        env['SAL_DISABLE_UPDATECHECK'] = '1'
+        env['SAL_DISABLE_UPDATECHECK'] = '1'   # refuerzo; el bloqueo real está en el perfil
 
         with Document_process._LO_LOCK:
             try:
@@ -143,10 +192,11 @@ class Document_process:
             logger.error(str(e))
             return
 
-        commandStrings = [
-            libre_path, "--headless", "--convert-to",
-            "pdf", "--outdir", output_folder, input_file
-        ]
+        commandStrings = [libre_path, "--headless", "--norestore", "--nologo"]
+        profile_arg = Document_process._lo_profile_arg()
+        if profile_arg:
+            commandStrings.append(profile_arg)
+        commandStrings += ["--convert-to", "pdf", "--outdir", output_folder, input_file]
         try:
             retCode = subprocess.call(commandStrings, timeout=120)
             if retCode == 0:
