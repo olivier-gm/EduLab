@@ -260,11 +260,23 @@
               <div class="seg-group">
                 <span>¿Quién escribe el contenido?</span>
                 <div class="seg">
-                  <input type="radio" id="mode-ia" name="global-mode" value="ia" checked>
+                  <input type="radio" id="mode-ia" name="global-mode" value="ia" {% if access.ai.ok %}checked{% else %}disabled{% endif %}>
                   <label for="mode-ia"><i class="bx bx-shape-triangle"></i> Gullieth AI</label>
-                  <input type="radio" id="mode-standard" name="global-mode" value="standard">
+                  <input type="radio" id="mode-standard" name="global-mode" value="standard" {% if not access.manual.ok %}disabled{% elif not access.ai.ok %}checked{% endif %}>
                   <label for="mode-standard"><i class="bx bx-pencil"></i> Lo escribo yo</label>
                 </div>
+                {% if not access.ai.ok or not access.manual.ok %}
+                <span class="help mode-lock">
+                  <i class="bx bx-lock-alt"></i>
+                  {{ 'Gullieth AI' if not access.ai.ok else 'Escribirlo tú' }} requiere el plan.
+                  <a href="{{ url_for('plans.plans') }}">Ver planes</a>
+                </span>
+                {% elif access.ai.limit is not none or access.manual.limit is not none %}
+                <span class="help">
+                  {% if access.ai.limit is not none %}Con IA: {{ [access.ai.limit - access.ai.used, 0]|max }} restante(s). {% endif %}
+                  {% if access.manual.limit is not none %}Manuales: {{ [access.manual.limit - access.manual.used, 0]|max }} restante(s).{% endif %}
+                </span>
+                {% endif %}
               </div>
 
               <div class="seg-group">

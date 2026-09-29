@@ -1,0 +1,67 @@
+/* ============================================================
+   GULLIETH · Planes
+   ============================================================ */
+
+.plans-page { padding: 40px 0 90px; max-width: 880px; }
+.plans-head { text-align: center; margin-bottom: 26px; }
+.plans-head h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); letter-spacing: -1px; }
+.plans-head p { color: var(--text-soft); margin-top: 6px; }
+
+.plans-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  margin-bottom: 22px;
+  border-radius: var(--r-lg);
+  font-size: 0.92rem;
+}
+
+.plans-alert--warn { background: rgba(232, 197, 71, 0.1); border: 1px solid rgba(232, 197, 71, 0.32); color: var(--gold); }
+.plans-alert--ok { background: rgba(43, 200, 102, 0.1); border: 1px solid rgba(43, 200, 102, 0.35); color: #63e08f; }
+.plans-alert--err { background: rgba(226, 87, 76, 0.1); border: 1px solid rgba(226, 87, 76, 0.35); color: #ff8b80; }
+
+.plans-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 20px; align-items: start; }
+
+.plan-card { padding: 28px 26px; text-align: center; border-color: rgba(232, 197, 71, 0.35); }
+.plan-card__name { font-size: 1.1rem; color: var(--gold); }
+.plan-card__price { font-family: 'Outfit', sans-serif; font-size: 3rem; font-weight: 800; margin: 8px 0 2px; }
+.plan-card__price small { font-size: 1rem; color: var(--text-dim); font-weight: 500; }
+.plan-card__bs { color: var(--text-dim); font-size: 0.86rem; }
+.plan-card ul { list-style: none; padding: 0; margin: 18px 0 0; text-align: left; display: grid; gap: 10px; }
+.plan-card li { display: flex; gap: 8px; font-size: 0.92rem; color: var(--text-soft); }
+.plan-card li i { color: var(--gold); font-size: 1.15rem; flex-shrink: 0; }
+.plan-card__status { margin-top: 18px; }
+
+.pay-card { padding: 26px; }
+.pay-card h2 { font-size: 1.1rem; margin-bottom: 4px; }
+.pay-card > p { color: var(--text-dim); font-size: 0.86rem; margin-bottom: 16px; }
+
+.pay-tabs { display: inline-flex; padding: 4px; margin-bottom: 16px; border-radius: var(--r-full); background: var(--glass); border: 1px solid var(--stroke); }
+.pay-tabs input { position: absolute; opacity: 0; pointer-events: none; }
+.pay-tabs label { padding: 8px 18px; border-radius: var(--r-full); font-size: 0.88rem; color: var(--text-soft); cursor: pointer; }
+.pay-tabs input:checked + label { background: var(--glass-strong); color: #fff; }
+.pay-tabs input:focus-visible + label { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.pay-data { display: none; margin-bottom: 16px; padding: 14px 16px; border-radius: var(--r-lg); background: var(--glass); border: 1px solid var(--stroke); }
+.pay-data.is-on { display: block; }
+.pay-data dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 0.9rem; }
+.pay-data dt { color: var(--text-dim); }
+.pay-data dd { margin: 0; color: #fff; word-break: break-all; }
+.pay-data .empty { color: var(--text-dim); font-size: 0.88rem; }
+
+.pay-card .field { margin-bottom: 14px; text-align: left; }
+.pay-card .btn { width: 100%; }
+
+.pay-history { margin-top: 26px; }
+.pay-history h3 { font-size: 0.95rem; margin-bottom: 10px; }
+.pay-history table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.pay-history th, .pay-history td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--stroke); }
+.pay-history th { color: var(--text-dim); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.st { font-weight: 600; }
+.st--pending { color: var(--gold); }
+.st--approved { color: #63e08f; }
+.st--rejected { color: #ff8b80; }
+
+@media (max-width: 760px) { .plans-grid { grid-template-columns: 1fr; } }

@@ -1070,3 +1070,13 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
     gap: 16px;
   }
 }
+/* Modo bloqueado por el plan */
+.seg input:disabled+label {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mode-lock a {
+  color: var(--gold);
+  text-decoration: underline;
+}

@@ -383,10 +383,74 @@ class Document_process:
                 count += 1
         return count
 
+    # Caracteres por línea en mayúsculas Arial 12pt sobre 6.5" de ancho
+    # (estimación conservadora: FormProcessor pasa todo a mayúsculas), y
+    # columna donde arranca el nombre del integrante (tab a ~2" del margen).
+    _LINE_CAPACITY_CHARS = 62
+    _TAB_COLUMN_CHARS = 19
+    _TITLE_GAP_PT = 20
+
+    @staticmethod
+    def _title_metrics(title_text):
+        """(tamaño_pt, caracteres_por_línea, alto_de_línea_pt) del título.
+
+        Un título corto va a 17.5pt. Los muy largos (el formulario admite
+        hasta 300 caracteres) bajan de tamaño para que no ocupen media
+        página y empujen el bloque de detalle fuera de la portada. Los
+        caracteres por línea son para mayúsculas anchas (peor caso).
+        """
+        n = len(title_text)
+        if n > 200:
+            return 12, 50, 16
+        if n > 110:
+            return 14, 43, 19
+        return 17.5, 34, 24
+
+    @staticmethod
+    def _estimate_detail_lines(document, title_para, date_para, replacements):
+        """Estima cuántas líneas ocupará de verdad el bloque de detalle.
+
+        _count_detail_lines cuenta renglones de la plantilla (1 línea cada
+        uno), pero con valores largos un renglón se parte en 2 o 3 líneas:
+        docente/materia de 60 caracteres, o un nombre de 40 caracteres que
+        no cabe a la derecha de una materia larga. Aquí se simula el texto
+        final de cada renglón (izquierda + tab + derecha) y se cuentan las
+        líneas que ocuparía. La estimación es conservadora: sobreestimar
+        sólo sube un poco el bloque; subestimar lo desbordaría a otra página.
+        """
+        cap = Document_process._LINE_CAPACITY_CHARS
+        tab_col = Document_process._TAB_COLUMN_CHARS
+
+        all_paragraphs = document.paragraphs
+        title_idx = next(
+            (i for i, p in enumerate(all_paragraphs) if p._p is title_para._p), -1)
+        date_idx = next(
+            (i for i, p in enumerate(all_paragraphs) if p._p is date_para._p),
+            len(all_paragraphs)) if date_para is not None else len(all_paragraphs)
+
+        total = 0
+        for p in all_paragraphs[title_idx + 1:date_idx]:
+            if p.text.strip() == '' or Document_process._has_drawing(p):
+                continue
+            text = p.text
+            for key, value in replacements.items():
+                text = text.replace(key, value)
+            left, _, right = text.partition('\t')
+            left, right = left.strip(), right.strip()
+
+            lines = -(-len(left) // cap) if left else 1
+            if right:
+                used = len(left) % cap if len(left) > cap else len(left)
+                start = max(used + 1, tab_col)
+                if start + len(right) > cap:
+                    lines += 1 + (len(right) - 1) // cap
+            total += lines
+        return total
+
     @staticmethod
     def _trim_cover_spacers(document, title_para, date_para=None,
                              has_logo=False, university_name='',
-                             detail_lines=0):
+                             detail_lines=0, title_text=''):
         """Reemplaza los 22 párrafos en blanco que rodean el título por UNO
         solo, ubicado DESPUÉS del título, con la altura exacta para que el
         bloque de detalle (docente/integrantes) quede justo encima de la
@@ -468,9 +532,21 @@ class Document_process:
         
         # El spacer usa todo el espacio entre el encabezado institucional
         # y la posición del bloque de detalle (arriba de la fecha).
+        # Mínimo para que el bloque nunca suba hasta el título flotante: el
+        # título está centrado en la página y, si es largo, ocupa varias
+        # líneas hacia abajo. Se reserva su mitad inferior más un respiro.
+        _, chars_per_line, line_h = Document_process._title_metrics(title_text)
+        title_lines = max(1, -(-len(title_text) // chars_per_line))
+        title_bottom_pt = page_height_pt / 2 + title_lines * line_h / 2
+        below_title_pt = (
+            title_bottom_pt + Document_process._TITLE_GAP_PT
+            - header_end - Document_process._DETAIL_LINE_HEIGHT_PT
+        )
+
         needed_pt = max(
             Document_process._MIN_SPACER_PT,
             date_y_pt - header_end - detail_space_pt,
+            below_title_pt,
         )
         spacer.paragraph_format.space_after = Pt(needed_pt)
 
@@ -862,8 +938,8 @@ class Document_process:
         # Contar líneas de detalle ANTES de borrar los párrafos en blanco
         detail_lines = 0
         if title_para is not None and date_para is not None:
-            detail_lines = Document_process._count_detail_lines(
-                document, title_para, date_para,
+            detail_lines = Document_process._estimate_detail_lines(
+                document, title_para, date_para, replacements,
             )
 
         # Recortar los párrafos en blanco que ya no cumplen ningún propósito
@@ -878,6 +954,7 @@ class Document_process:
                 has_logo=has_logo,
                 university_name=replacements.get('[u]', ''),
                 detail_lines=detail_lines,
+                title_text=replacements.get('[title]', ''),
             )
 
         # Llenar campos de la plantilla
@@ -899,7 +976,9 @@ class Document_process:
         # de la universidad ocupa una o dos líneas, o cuántos integrantes
         # se listen debajo.
         if title_para is not None and title_para.runs:
-            title_para.runs[0].font.size = Pt(17.5)
+            title_size = Document_process._title_metrics(replacements.get('[title]', ''))[0]
+            for run in title_para.runs:
+                run.font.size = Pt(title_size)
             Document_process._anchor_paragraph_to_page(document, title_para, y_align='center')
         else:
             logger.warning('No se pudo ubicar/anclar el título en la portada')

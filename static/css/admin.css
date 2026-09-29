@@ -140,3 +140,110 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------------- PLANES Y PAGOS ---------------- */
+.admin-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  margin-bottom: 22px;
+  border-radius: var(--r-lg);
+  background: rgba(232, 197, 71, 0.1);
+  border: 1px solid rgba(232, 197, 71, 0.3);
+  color: var(--gold);
+  font-size: 0.9rem;
+}
+
+.admin-form { padding: 22px; margin-bottom: 26px; }
+.admin-form h3 { font-size: 0.95rem; margin: 18px 0 8px; }
+.admin-form h3:first-child { margin-top: 0; }
+.admin-form__hint { color: var(--text-dim); font-size: 0.84rem; margin-bottom: 12px; }
+
+.admin-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.admin-form label.check { flex-direction: row; align-items: center; gap: 8px; color: #fff; }
+
+.admin-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-lg);
+}
+
+.admin-form legend { padding: 0 6px; font-size: 0.85rem; font-weight: 600; }
+.admin-form .btn { margin-top: 16px; }
+.admin-sub { font-size: 0.95rem; margin: 0 0 10px; }
+form.inline { display: inline; }
+
+.mini {
+  padding: 5px 12px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--stroke-strong);
+  background: var(--glass);
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mini--ok { background: rgba(43, 200, 102, 0.16); border-color: rgba(43, 200, 102, 0.4); color: #63e08f; }
+.mini--no { background: rgba(226, 87, 76, 0.14); border-color: rgba(226, 87, 76, 0.4); color: #ff8b80; }
+
+.badge--pending { background: rgba(232, 197, 71, 0.15); color: var(--gold); border: 1px solid rgba(232, 197, 71, 0.3); }
+.badge--approved { background: rgba(43, 200, 102, 0.14); color: #63e08f; border: 1px solid rgba(43, 200, 102, 0.35); }
+.badge--rejected { background: rgba(226, 87, 76, 0.14); color: #ff8b80; border: 1px solid rgba(226, 87, 76, 0.35); }
+
+/* Campos del formulario de ajustes (form.css no se carga en esta página) */
+.admin-form .input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--r-md);
+  color: #fff;
+  font: inherit;
+  font-size: 0.94rem;
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.admin-form .input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.admin-form .input:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-form .input:focus {
+  outline: none;
+  border-color: var(--purple-light);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 0 0 4px rgba(151, 84, 178, 0.18);
+}
+
+.admin-form input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--purple-light);
+}
+
+.admin-form input[type="number"] {
+  -moz-appearance: textfield;
+}

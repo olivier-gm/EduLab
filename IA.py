@@ -155,7 +155,6 @@ class _FewShotPrompt:
             )
 
     def _config(self, temperature, max_output_tokens):
-        search_tool = types.Tool(google_search=types.GoogleSearch())
         if self._cache_name:
             return types.GenerateContentConfig(
                 cached_content=self._cache_name,
@@ -165,7 +164,6 @@ class _FewShotPrompt:
                 max_output_tokens=max_output_tokens,
                 response_mime_type='text/plain',
                 safety_settings=SAFETY_SETTINGS,
-                tools=[search_tool],
             )
         return types.GenerateContentConfig(
             system_instruction=self.system_instruction,
@@ -175,7 +173,6 @@ class _FewShotPrompt:
             max_output_tokens=max_output_tokens,
             response_mime_type='text/plain',
             safety_settings=SAFETY_SETTINGS,
-            tools=[search_tool],
         )
 
     def _contents(self, user_text):

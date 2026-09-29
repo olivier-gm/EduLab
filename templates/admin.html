@@ -61,6 +61,82 @@
       </div>
     </div>
 
+    {% if msg %}<div class="admin-msg" role="status"><i class="bx bx-info-circle"></i> {{ msg }}</div>{% endif %}
+
+    <section class="admin-section" id="planes">
+      <h2 class="admin-section__title"><i class="bx bx-credit-card"></i> Planes y pagos</h2>
+
+      <form method="POST" action="{{ url_for('admin.save_settings') }}" class="card admin-form">
+        <h3>Usuarios sin plan</h3>
+        <p class="admin-form__hint">Qué pueden generar quienes no tienen plan activo. Límite vacío = ilimitado; el límite es el total de documentos por usuario. Admins y usuarios con plan no tienen límites.</p>
+        <div class="admin-form__grid">
+          <fieldset>
+            <legend><i class="bx bx-shape-triangle"></i> Documentos con IA</legend>
+            <label class="check"><input type="checkbox" name="free_ai_enabled" {% if settings['free_ai_enabled'] == '1' %}checked{% endif %}> Permitir sin plan</label>
+            <label>Máximo por usuario
+              <input class="input" type="number" min="0" name="free_ai_limit" value="{{ settings['free_ai_limit'] }}" placeholder="Ilimitado">
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend><i class="bx bx-pencil"></i> Documentos manuales</legend>
+            <label class="check"><input type="checkbox" name="free_manual_enabled" {% if settings['free_manual_enabled'] == '1' %}checked{% endif %}> Permitir sin plan</label>
+            <label>Máximo por usuario
+              <input class="input" type="number" min="0" name="free_manual_limit" value="{{ settings['free_manual_limit'] }}" placeholder="Ilimitado">
+            </label>
+          </fieldset>
+        </div>
+
+        <h3>Plan de pago</h3>
+        <div class="admin-form__grid">
+          <label>Nombre <input class="input" name="plan_name" maxlength="60" value="{{ settings['plan_name'] }}"></label>
+          <label>Precio (USD) <input class="input" name="plan_price_usd" inputmode="decimal" value="{{ settings['plan_price_usd'] }}"></label>
+          <label>Duración (días) <input class="input" type="number" min="1" name="plan_days" value="{{ settings['plan_days'] }}"></label>
+          <label>Tasa Bs por $ (opcional) <input class="input" name="bs_rate" inputmode="decimal" value="{{ settings['bs_rate'] }}" placeholder="Ej. 40.5"></label>
+        </div>
+
+        <h3>Datos de cobro</h3>
+        <div class="admin-form__grid">
+          <label>Correo de Binance <input class="input" type="email" name="binance_email" maxlength="120" value="{{ settings['binance_email'] }}"></label>
+          <label>Banco (Pago Móvil) <input class="input" name="pm_bank" maxlength="80" value="{{ settings['pm_bank'] }}"></label>
+          <label>Teléfono <input class="input" name="pm_phone" maxlength="30" value="{{ settings['pm_phone'] }}" placeholder="0414-0000000"></label>
+          <label>Cédula / RIF <input class="input" name="pm_id" maxlength="30" value="{{ settings['pm_id'] }}"></label>
+          <label>Titular <input class="input" name="pm_holder" maxlength="80" value="{{ settings['pm_holder'] }}"></label>
+        </div>
+        <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar ajustes</button>
+      </form>
+
+      <h3 class="admin-sub">Pagos reportados</h3>
+      <div class="table-wrap">
+        {% if payments %}
+        <table class="admin-table">
+          <thead>
+            <tr><th>Usuario</th><th>Método</th><th>Referencia</th><th>Monto</th><th>Estado</th><th>Reportado</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for p in payments %}
+            <tr>
+              <td>{{ p['user_name'] or p['user_email'] }}<br><span class="is-dim">{{ p['user_email'] }}</span></td>
+              <td>{{ 'Binance' if p['method'] == 'binance' else 'Pago Móvil' }}</td>
+              <td><code>{{ p['reference'] }}</code></td>
+              <td>${{ '%g'|format(p['amount_usd']) }}</td>
+              <td><span class="badge badge--{{ p['status'] }}">{{ {'pending': 'Pendiente', 'approved': 'Aprobado', 'rejected': 'Rechazado'}[p['status']] }}</span></td>
+              <td class="is-dim">{{ p['created_at'] }}</td>
+              <td>
+                {% if p['status'] == 'pending' %}
+                <form method="POST" action="{{ url_for('admin.review_payment', payment_id=p['id'], action='approve') }}" class="inline"><button class="mini mini--ok" type="submit">Aprobar</button></form>
+                <form method="POST" action="{{ url_for('admin.review_payment', payment_id=p['id'], action='reject') }}" class="inline"><button class="mini mini--no" type="submit">Rechazar</button></form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="admin-empty">Todavía nadie ha reportado un pago.</div>
+        {% endif %}
+      </div>
+    </section>
+
     <section class="admin-section">
       <h2 class="admin-section__title"><i class="bx bx-group"></i> Usuarios</h2>
       <div class="table-wrap">
@@ -75,6 +151,7 @@
               <th>Documentos</th>
               <th>Tokens usados</th>
               <th>Registrado</th>
+              <th>Plan manual</th>
             </tr>
           </thead>
           <tbody>
@@ -83,10 +160,22 @@
               <td>{{ u['name'] or '—' }}{% if u['is_admin'] %} <span class="badge badge--admin"><i class="bx bx-crown"></i> admin</span>{% endif %}</td>
               <td>{{ u['email'] }}</td>
               <td>{% if u['google_id'] %}<span class="badge badge--google"><i class="bx bxl-google"></i> Google</span>{% else %}<span class="badge badge--free">Correo</span>{% endif %}</td>
-              <td><span class="badge badge--free">{{ u['plan'] }}</span></td>
+              <td>{% if active_plan(u) %}<span class="badge badge--approved">Premium</span><br><span class="is-dim">hasta {{ plan_expiry(u).strftime('%d/%m/%Y') }}</span>{% else %}<span class="badge badge--free">Sin plan</span>{% endif %}</td>
               <td>{{ u['documents_count'] }}</td>
               <td>{{ '{:,}'.format(u['tokens_used']) }}</td>
               <td class="is-dim">{{ u['created_at'] }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('admin.user_plan', user_id=u['id']) }}" class="inline">
+                  <input type="hidden" name="action" value="grant">
+                  <button class="mini mini--ok" type="submit">{{ 'Extender' if active_plan(u) else 'Dar plan' }}</button>
+                </form>
+                {% if active_plan(u) %}
+                <form method="POST" action="{{ url_for('admin.user_plan', user_id=u['id']) }}" class="inline">
+                  <input type="hidden" name="action" value="revoke">
+                  <button class="mini mini--no" type="submit">Quitar</button>
+                </form>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>

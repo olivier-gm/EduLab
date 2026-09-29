@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#141430">
+  <meta name="robots" content="noindex">
+  <title>Planes · Gullieth</title>
+
+  <link rel="icon" href="{{ url_for('static', filename='icono.jpg') }}" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/form.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/plans.css') }}">
+
+  <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
+</head>
+
+<body>
+
+  <header class="nav" data-nav>
+    <div class="shell nav__inner">
+      <a href="{{ url_for('welcome') }}" class="brand">
+        <img class="brand__img" src="{{ url_for('static', filename='img/logo.png') }}" alt="Gullieth">
+        <span class="brand__name">Gulli<span>eth</span></span>
+      </a>
+      <nav class="nav__links" data-nav-links>
+        <a class="nav__link" href="{{ url_for('welcome') }}">Inicio</a>
+        <a class="nav__link" href="{{ url_for('show_form') }}">Crear documento</a>
+      </nav>
+      <div class="nav__actions">
+        <span class="pill btn--nav-cta"><i class="bx bx-crown"></i> Planes</span>
+        <button class="nav__burger" data-burger type="button" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell plans-page">
+
+    <div class="plans-head">
+      <h1>Elige tu plan</h1>
+      <p>Genera documentos sin límites con un solo pago.</p>
+    </div>
+
+    {% if reason_message %}
+    <div class="plans-alert plans-alert--warn"><i class="bx bx-lock-alt"></i> {{ reason_message }}</div>
+    {% endif %}
+    {% if sent %}
+    <div class="plans-alert plans-alert--ok"><i class="bx bx-check-circle"></i> Recibimos tu referencia. Revisaremos el pago y activaremos tu plan pronto.</div>
+    {% endif %}
+    {% if error %}
+    <div class="plans-alert plans-alert--err"><i class="bx bx-error-circle"></i> {{ error }}</div>
+    {% endif %}
+
+    <div class="plans-grid">
+
+      <!-- ---------- El plan ---------- -->
+      <article class="card plan-card">
+        <h2 class="plan-card__name">{{ settings['plan_name'] }}</h2>
+        <div class="plan-card__price">${{ '%g'|format(price) }} <small>/ {{ settings['plan_days'] }} días</small></div>
+        {% if price_bs %}<div class="plan-card__bs">≈ Bs. {{ '{:,.2f}'.format(price_bs) }}</div>{% endif %}
+        <ul>
+          <li><i class="bx bx-check"></i> Documentos con IA sin límite</li>
+          <li><i class="bx bx-check"></i> Documentos escritos por ti sin límite</li>
+          <li><i class="bx bx-check"></i> Universitario y bachillerato</li>
+          <li><i class="bx bx-check"></i> Descarga en Word y PDF</li>
+        </ul>
+        <div class="plan-card__status">
+          {% if active %}
+          <span class="st st--approved"><i class="bx bx-check-circle"></i> Plan activo hasta {{ expires_at.strftime('%d/%m/%Y') }}</span>
+          {% else %}
+          {% for mode, label in [('ai', 'con IA'), ('manual', 'manuales')] %}
+            {% if summary[mode].limit is not none %}
+            <div class="plan-card__bs">Documentos {{ label }} gratis: {{ summary[mode].used }} de {{ summary[mode].limit }} usados</div>
+            {% endif %}
+          {% endfor %}
+          {% endif %}
+        </div>
+      </article>
+
+      <!-- ---------- Pago ---------- -->
+      <section class="card pay-card">
+        <h2>{{ 'Renovar o extender' if active else 'Activar el plan' }}</h2>
+        <p>Paga, luego escribe la referencia del pago. Lo revisamos y se activa el plan.</p>
+
+        {% if has_pending %}
+        <div class="plans-alert plans-alert--warn"><i class="bx bx-time-five"></i> Tienes un pago en revisión. Se activará cuando se apruebe.</div>
+        {% else %}
+        <form method="POST" action="{{ url_for('plans.pay') }}" data-pay>
+          <div class="pay-tabs" role="radiogroup" aria-label="Método de pago">
+            <input type="radio" id="pm-binance" name="method" value="binance" checked>
+            <label for="pm-binance">Binance</label>
+            <input type="radio" id="pm-pm" name="method" value="pago_movil">
+            <label for="pm-pm">Pago Móvil</label>
+          </div>
+
+          <div class="pay-data is-on" data-pay-data="binance">
+            {% if settings['binance_email'] %}
+            <dl>
+              <dt>Binance Pay</dt><dd>{{ settings['binance_email'] }}</dd>
+              <dt>Monto</dt><dd>${{ '%g'|format(price) }} USDT</dd>
+            </dl>
+            {% else %}<div class="empty">Los datos de Binance aún no están disponibles.</div>{% endif %}
+          </div>
+
+          <div class="pay-data" data-pay-data="pago_movil">
+            {% if settings['pm_phone'] %}
+            <dl>
+              <dt>Banco</dt><dd>{{ settings['pm_bank'] }}</dd>
+              <dt>Teléfono</dt><dd>{{ settings['pm_phone'] }}</dd>
+              {% if settings['pm_id'] %}<dt>Cédula/RIF</dt><dd>{{ settings['pm_id'] }}</dd>{% endif %}
+              {% if settings['pm_holder'] %}<dt>Titular</dt><dd>{{ settings['pm_holder'] }}</dd>{% endif %}
+              <dt>Monto</dt><dd>{% if price_bs %}Bs. {{ '{:,.2f}'.format(price_bs) }} (${{ '%g'|format(price) }}){% else %}${{ '%g'|format(price) }} al cambio del día{% endif %}</dd>
+            </dl>
+            {% else %}<div class="empty">Los datos de Pago Móvil aún no están disponibles.</div>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="f-ref">Referencia del pago</label>
+            <input class="input" id="f-ref" name="reference" required minlength="4" maxlength="40"
+              placeholder="Ej. 0012345678" autocomplete="off">
+            <span class="help">En Binance es el ID de la orden; en Pago Móvil, el número de referencia.</span>
+          </div>
+          <button class="btn btn--primary" type="submit"><i class="bx bx-send"></i> Ya pagué</button>
+        </form>
+        {% endif %}
+      </section>
+    </div>
+
+    {% if payments %}
+    <section class="pay-history">
+      <h3>Tus pagos</h3>
+      <table>
+        <thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th>Estado</th></tr></thead>
+        <tbody>
+          {% for p in payments %}
+          <tr>
+            <td>{{ p['created_at'] }}</td>
+            <td>{{ pay_methods[p['method']] }}</td>
+            <td>{{ p['reference'] }}</td>
+            <td><span class="st st--{{ p['status'] }}">{{ {'pending': 'En revisión', 'approved': 'Aprobado', 'rejected': 'Rechazado'}[p['status']] }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer__bottom" style="border: 0; padding-top: 0;">
+      <span>&copy; 2026 Gullieth. Todos los derechos reservados.</span>
+      <span>Hecho en Venezuela 🇻🇪</span>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var form = document.querySelector('[data-pay]');
+      if (!form) return;
+      function sync() {
+        var method = form.querySelector('input[name="method"]:checked').value;
+        form.querySelectorAll('[data-pay-data]').forEach(function (box) {
+          box.classList.toggle('is-on', box.getAttribute('data-pay-data') === method);
+        });
+      }
+      form.querySelectorAll('input[name="method"]').forEach(function (r) {
+        r.addEventListener('change', sync);
+      });
+      sync();
+    })();
+  </script>
+</body>
+
+</html>

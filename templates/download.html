@@ -89,6 +89,32 @@
 
       </div>
 
+      <!-- ---------- Compartir por enlace ---------- -->
+      <section class="share" data-share>
+        <h2 class="share__title"><i class="bx bx-share-alt"></i> Compartir el documento</h2>
+        <p class="share__sub">Se envía un enlace de descarga que funciona sin iniciar sesión y vence en 2 horas.</p>
+
+        <div class="seg share__format" role="radiogroup" aria-label="Formato a compartir">
+          <input type="radio" id="sh-docx" name="share-format" value="docx" checked>
+          <label for="sh-docx"><i class="bx bxs-file-doc"></i> Word</label>
+          <input type="radio" id="sh-pdf" name="share-format" value="pdf">
+          <label for="sh-pdf"><i class="bx bxs-file-pdf"></i> PDF</label>
+        </div>
+
+        <div class="share__btns">
+          <button type="button" class="share-btn share-btn--wa" data-share-wa>
+            <i class="bx bxl-whatsapp"></i> WhatsApp
+          </button>
+          <button type="button" class="share-btn share-btn--gm" data-share-gmail>
+            <i class="bx bx-envelope"></i> Gmail
+          </button>
+          <button type="button" class="share-btn share-btn--any" data-share-any>
+            <i class="bx bx-share-alt"></i> <span data-share-any-label>Compartir</span>
+          </button>
+        </div>
+        <p class="share__toast" data-share-toast role="status" aria-live="polite"></p>
+      </section>
+
       <!-- ---------- Notas ---------- -->
       <div class="done__notes">
         <span class="done__note"><i class="bx bx-time-five"></i> Disponible por unas 2 horas</span>
@@ -115,6 +141,78 @@
       <span>Hecho en Venezuela 🇻🇪</span>
     </div>
   </footer>
+
+  <script>
+    (function () {
+      var urls = {{ share_urls | tojson }};
+      var root = document.querySelector('[data-share]');
+      if (!root) return;
+
+      var toast = root.querySelector('[data-share-toast]');
+      var anyBtn = root.querySelector('[data-share-any]');
+      var toastTimer;
+
+      function format() {
+        return root.querySelector('input[name="share-format"]:checked').value;
+      }
+      function link() { return urls[format()]; }
+      function message() {
+        return 'Te comparto mi documento (' + (format() === 'pdf' ? 'PDF' : 'Word') +
+          '). Descárgalo aquí, el enlace vence en 2 horas: ' + link();
+      }
+      function say(text) {
+        toast.textContent = text;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.textContent = ''; }, 3500);
+      }
+      function copy(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          return navigator.clipboard.writeText(text);
+        }
+        return new Promise(function (resolve, reject) {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy') ? resolve() : reject(); }
+          catch (e) { reject(e); }
+          document.body.removeChild(ta);
+        });
+      }
+
+      root.querySelector('[data-share-wa]').addEventListener('click', function () {
+        window.open('https://wa.me/?text=' + encodeURIComponent(message()), '_blank', 'noopener');
+      });
+
+      root.querySelector('[data-share-gmail]').addEventListener('click', function () {
+        window.open(
+          'https://mail.google.com/mail/?view=cm&fs=1&su=' +
+          encodeURIComponent('Mi documento de Gullieth') +
+          '&body=' + encodeURIComponent(message()),
+          '_blank', 'noopener'
+        );
+      });
+
+      // Con hoja de compartir nativa (móvil, Safari, Edge) se abre esa; si el
+      // navegador no la tiene, el botón pasa a copiar el enlace.
+      var native = !!navigator.share;
+      if (!native) root.querySelector('[data-share-any-label]').textContent = 'Copiar enlace';
+
+      anyBtn.addEventListener('click', function () {
+        if (native) {
+          navigator.share({ title: 'Mi documento de Gullieth', text: message() })
+            .catch(function () { /* el usuario cerró el diálogo */ });
+          return;
+        }
+        copy(link()).then(
+          function () { say('Enlace copiado al portapapeles'); },
+          function () { say('No se pudo copiar: ' + link()); }
+        );
+      });
+    })();
+  </script>
 
 </body>
 

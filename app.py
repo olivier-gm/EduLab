@@ -4,6 +4,7 @@ import threading
 import os
 import logging
 from dotenv import load_dotenv
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 # Tiene que ejecutarse ANTES de importar db/auth: ambos leen variables de
 # entorno (ADMIN_EMAILS, GOOGLE_CLIENT_ID, etc.) al nivel de módulo, en el
@@ -18,32 +19,36 @@ from IA import generate_essay_content, generate_introduction, generate_conclusio
 import db
 from auth import auth_bp, current_user, login_required
 from admin import admin_bp
+import plans
+from plans import plans_bp
 
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
+# Lax: el navegador no manda la cookie de sesión en POST desde otros sitios,
+# que es lo que protege las acciones del panel admin de peticiones falsas.
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.secret_key = os.getenv('SECRET_KEY', '7f8b9a2c3d4e5f608192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8')
+
+# Enlaces para compartir: firmados con la clave de la app y válidos 2 h (los
+# archivos se borran a los ~130 min, así que el enlace no sobrevive al archivo).
+SHARE_MAX_AGE = 7200
+SHARE_FILETYPES = ('docx', 'pdf')
+
+
+def _share_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt='share-file')
+
 
 db.init_app(app)
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(plans_bp)
 
 
 @app.context_processor
 def inject_current_user():
     return {'current_user': current_user()}
-
-
-def user_can_generate(user):
-    """Punto único de control para el futuro plan de pago.
-
-    Hoy siempre deja generar (documentos ilimitados para cualquier usuario
-    con sesión iniciada): el registro sólo sirve para llevar el conteo de
-    documentos/tokens en la base de datos. El día que se quiera activar el
-    límite gratuito, la lógica de plan/cuota va aquí — el resto del código
-    no tiene que cambiar.
-    """
-    return True
 
 
 @app.route('/')
@@ -54,14 +59,19 @@ def welcome():
 @login_required
 def show_form_bach():
     session.pop('file_generated', None)
+    allowed, reason = plans.generation_access(current_user(), 'manual')
+    if not allowed:
+        return plans.redirect_to_plans(reason)
     return render_template('bachiller.html')
 
 @app.route('/process_form_bach', methods=['POST'])
 @login_required
 def process_form_bach():
     user = current_user()
-    if not user_can_generate(user):
-        return redirect(url_for('welcome'))
+    # Bachillerato siempre se escribe a mano: cuenta como documento manual.
+    allowed, reason = plans.generation_access(user, 'manual')
+    if not allowed:
+        return plans.redirect_to_plans(reason)
 
         # Retrieve form data
     form_data = request.form
@@ -90,7 +100,7 @@ def process_form_bach():
                                         introduccion, body, conclusion, head_title, 'bach',
                                         university_name=university_name)
 
-    db.record_document(user['id'], head_title, 'bach', tokens_used=0)
+    db.record_document(user['id'], head_title, 'bach', tokens_used=0, mode='manual')
     session['file_generated'] = True
 
     # Redirect to a new page or indicate success
@@ -101,16 +111,26 @@ def process_form_bach():
 @login_required
 def show_form():
     session.pop('file_generated', None)
-    return render_template('universitario.html')
+    access = plans.access_summary(current_user())
+    if not access['ai']['ok'] and not access['manual']['ok']:
+        # Ningún modo disponible: no tiene sentido mostrar el formulario.
+        return plans.redirect_to_plans(access['ai']['reason'])
+    return render_template('universitario.html', access=access)
 
 @app.route('/process_form', methods=['POST'])
 @login_required
 def process_form():
     user = current_user()
-    if not user_can_generate(user):
-        return redirect(url_for('welcome'))
 
     form_data = request.form
+    manual_mode = form_data.get('global-mode') == 'standard'
+
+    # Se valida ANTES de llamar a Gemini: un usuario sin permiso no debe
+    # gastar tokens. Con IA y manual hay reglas distintas (ver plans.py).
+    allowed, reason = plans.generation_access(user, 'manual' if manual_mode else 'ai')
+    if not allowed:
+        return plans.redirect_to_plans(reason)
+
     processor = FormProcessor(form_data, 'uni')
     processor.process()
     replacements, head_title = processor.generate_replacements()
@@ -118,7 +138,6 @@ def process_form():
     # 'Lo escribo yo': el usuario redacta el contenido a mano en vez de
     # pedírselo a la IA. Estos checkboxes controlan, en ambos modos, si la
     # introducción y la conclusión se incluyen en el documento o no.
-    manual_mode = form_data.get('global-mode') == 'standard'
     incluir_introduccion = 'incluir_introduccion' in form_data
     incluir_conclusion = 'incluir_conclusion' in form_data
 
@@ -169,7 +188,8 @@ def process_form():
                                         university_name=university_name,
                                         detect_subtitles=not manual_mode)
 
-    db.record_document(user['id'], head_title, 'uni', tokens_used=sum(usage_sink))
+    db.record_document(user['id'], head_title, 'uni', tokens_used=sum(usage_sink),
+                       mode='manual' if manual_mode else 'ai')
     session['file_generated'] = True
 
     # Redirect to a new page or indicate success
@@ -186,7 +206,16 @@ def choose_file(filename):
         # Schedule the file removal after a delay
     file_path = f'output/{filename}.docx'
     threading.Timer(7800, Document_process.remove_file, args=[file_path]).start()
-    return render_template('download.html', filename=filename)
+
+    # Enlaces públicos temporales para compartir (WhatsApp / Gmail / otros).
+    # Van firmados y con caducidad: el destinatario no tiene sesión, así que
+    # no puede pasar por /download_file, que exige login.
+    token = _share_serializer().dumps(filename)
+    share_urls = {
+        filetype: url_for('shared_file', token=token, filetype=filetype, _external=True)
+        for filetype in SHARE_FILETYPES
+    }
+    return render_template('download.html', filename=filename, share_urls=share_urls)
 
 @app.route('/download_file/<filename>/<filetype>')
 @login_required
@@ -199,6 +228,23 @@ def download_file(filename, filetype):
     except Exception as e:
         logging.error('Error descargando archivo: %s', e)
         return render_template('404.html')
+
+
+@app.route('/s/<token>/<filetype>')
+def shared_file(token, filetype):
+    """Descarga pública mediante enlace firmado (sin login, caduca a las 2 h)."""
+    if filetype not in SHARE_FILETYPES:
+        return render_template('404.html'), 404
+    try:
+        filename = _share_serializer().loads(token, max_age=SHARE_MAX_AGE)
+    except (SignatureExpired, BadSignature):
+        return render_template('404.html'), 410
+    file_path = f'output/{os.path.basename(filename)}.{filetype}'
+    try:
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        logging.error('Error sirviendo archivo compartido: %s', e)
+        return render_template('404.html'), 404
 
 
 @app.errorhandler(404)
