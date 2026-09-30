@@ -1,0 +1,249 @@
+/* ============================================================
+   GULLIETH · Panel admin
+   ============================================================ */
+
+.admin-page {
+  padding: 30px 0 90px;
+}
+
+.admin-head {
+  margin-bottom: 22px;
+}
+
+.admin-head h1 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  letter-spacing: -0.8px;
+}
+
+.admin-head p {
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  margin-top: 4px;
+}
+
+/* ---------------- ESTADÍSTICAS ---------------- */
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 30px;
+}
+
+.admin-stat {
+  padding: 20px 22px;
+}
+
+.admin-stat__num {
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 800;
+  color: #fff;
+}
+
+.admin-stat__label {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* ---------------- SECCIONES / TABLAS ---------------- */
+.admin-section {
+  margin-bottom: 34px;
+}
+
+.admin-section__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-lg);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.admin-table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-table td.is-dim {
+  color: var(--text-dim);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.badge--admin {
+  background: rgba(232, 197, 71, 0.15);
+  color: var(--gold);
+  border: 1px solid rgba(232, 197, 71, 0.3);
+}
+
+.badge--free {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-soft);
+  border: 1px solid var(--stroke);
+}
+
+.badge--google {
+  background: rgba(66, 133, 244, 0.14);
+  color: #7ba7f7;
+  border: 1px solid rgba(66, 133, 244, 0.3);
+}
+
+.admin-empty {
+  padding: 30px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+@media (max-width: 720px) {
+  .admin-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------- PLANES Y PAGOS ---------------- */
+.admin-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  margin-bottom: 22px;
+  border-radius: var(--r-lg);
+  background: rgba(232, 197, 71, 0.1);
+  border: 1px solid rgba(232, 197, 71, 0.3);
+  color: var(--gold);
+  font-size: 0.9rem;
+}
+
+.admin-form { padding: 22px; margin-bottom: 26px; }
+.admin-form h3 { font-size: 0.95rem; margin: 18px 0 8px; }
+.admin-form h3:first-child { margin-top: 0; }
+.admin-form__hint { color: var(--text-dim); font-size: 0.84rem; margin-bottom: 12px; }
+
+.admin-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.admin-form label.check { flex-direction: row; align-items: center; gap: 8px; color: #fff; }
+
+.admin-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-lg);
+}
+
+.admin-form legend { padding: 0 6px; font-size: 0.85rem; font-weight: 600; }
+.admin-form .btn { margin-top: 16px; }
+.admin-sub { font-size: 0.95rem; margin: 0 0 10px; }
+form.inline { display: inline; }
+
+.mini {
+  padding: 5px 12px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--stroke-strong);
+  background: var(--glass);
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mini--ok { background: rgba(43, 200, 102, 0.16); border-color: rgba(43, 200, 102, 0.4); color: #63e08f; }
+.mini--no { background: rgba(226, 87, 76, 0.14); border-color: rgba(226, 87, 76, 0.4); color: #ff8b80; }
+
+.badge--pending { background: rgba(232, 197, 71, 0.15); color: var(--gold); border: 1px solid rgba(232, 197, 71, 0.3); }
+.badge--approved { background: rgba(43, 200, 102, 0.14); color: #63e08f; border: 1px solid rgba(43, 200, 102, 0.35); }
+.badge--rejected { background: rgba(226, 87, 76, 0.14); color: #ff8b80; border: 1px solid rgba(226, 87, 76, 0.35); }
+
+/* Campos del formulario de ajustes (form.css no se carga en esta página) */
+.admin-form .input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--r-md);
+  color: #fff;
+  font: inherit;
+  font-size: 0.94rem;
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.admin-form .input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.admin-form .input:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-form .input:focus {
+  outline: none;
+  border-color: var(--purple-light);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 0 0 4px rgba(151, 84, 178, 0.18);
+}
+
+.admin-form input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--purple-light);
+}
+
+.admin-form input[type="number"] {
+  -moz-appearance: textfield;
+}

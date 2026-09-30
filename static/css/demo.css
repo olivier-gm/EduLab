@@ -1,0 +1,94 @@
+/* Elementos propios de la demo: distintivo y aviso flotante */
+.demo-badge {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 9999;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.demo-badge__btn {
+  padding: 9px 16px;
+  border: 1px solid rgba(232, 197, 71, 0.5);
+  border-radius: 999px;
+  background: rgba(20, 20, 48, 0.92);
+  color: #e8c547;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+}
+
+.demo-badge__menu {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 210px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(20, 20, 48, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
+
+.demo-badge.is-open .demo-badge__menu {
+  display: grid;
+  gap: 2px;
+}
+
+.demo-badge__menu p {
+  margin: 4px 8px 8px;
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.demo-badge__menu a {
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+
+.demo-badge__menu a:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.demo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 9999;
+  max-width: min(92vw, 460px);
+  padding: 12px 20px;
+  border-radius: 14px;
+  background: rgba(20, 20, 48, 0.97);
+  border: 1px solid rgba(232, 197, 71, 0.4);
+  color: #fff;
+  font-size: 0.9rem;
+  text-align: center;
+  transform: translate(-50%, 20px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.demo-toast.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+a.is-busy {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* En el formulario móvil hay una barra de acciones fija abajo */
+@media (max-width: 900px) {
+  .demo-badge--raised {
+    bottom: 96px;
+  }
+}

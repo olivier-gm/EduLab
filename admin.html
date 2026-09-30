@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#141430">
+  <meta name="robots" content="noindex">
+  <title>Panel admin · Gullieth</title>
+
+  <link rel="icon" href="static/icono.jpg" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="static/css/base.css">
+  <link rel="stylesheet" href="static/css/admin.css">
+
+  <script defer src="static/js/ui.js"></script>
+<link rel="stylesheet" href="static/css/demo.css">
+</head>
+
+<body>
+
+  <header class="nav" data-nav>
+    <div class="shell nav__inner">
+      <a href="index.html" class="brand">
+        <img class="brand__img" src="static/img/logo.png" alt="Gullieth">
+        <span class="brand__name">Gulli<span>eth</span></span>
+      </a>
+      <nav class="nav__links" data-nav-links>
+        <a class="nav__link" href="index.html">Inicio</a>
+        <a class="nav__link" href="form.html">Crear documento</a>
+      </nav>
+      <div class="nav__actions">
+        <span class="pill btn--nav-cta"><i class="bx bx-shield-quarter"></i> Admin</span>
+        <button class="nav__burger" data-burger type="button" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell admin-page">
+
+    <div class="admin-head">
+      <h1>Panel admin</h1>
+      <p>Usuarios registrados, tokens de Gemini consumidos y documentos generados.</p>
+    </div>
+
+    <div class="admin-stats">
+      <div class="card admin-stat">
+        <div class="admin-stat__num">3</div>
+        <div class="admin-stat__label"><i class="bx bx-group"></i> Usuarios registrados</div>
+      </div>
+      <div class="card admin-stat">
+        <div class="admin-stat__num">21</div>
+        <div class="admin-stat__label"><i class="bx bx-file"></i> Documentos generados</div>
+      </div>
+      <div class="card admin-stat">
+        <div class="admin-stat__num">302,140</div>
+        <div class="admin-stat__label"><i class="bx bx-shape-triangle"></i> Tokens de Gemini usados</div>
+      </div>
+    </div>
+
+    <div class="admin-msg" role="status"><i class="bx bx-info-circle"></i> Esto es una demo: los cambios no se guardan.</div>
+
+    <section class="admin-section" id="planes">
+      <h2 class="admin-section__title"><i class="bx bx-credit-card"></i> Planes y pagos</h2>
+
+      <form method="POST" action="#" class="card admin-form">
+        <h3>Usuarios sin plan</h3>
+        <p class="admin-form__hint">Qué pueden generar quienes no tienen plan activo. Límite vacío = ilimitado; el límite es el total de documentos por usuario. Admins y usuarios con plan no tienen límites.</p>
+        <div class="admin-form__grid">
+          <fieldset>
+            <legend><i class="bx bx-shape-triangle"></i> Documentos con IA</legend>
+            <label class="check"><input type="checkbox" name="free_ai_enabled" checked> Permitir sin plan</label>
+            <label>Máximo por usuario
+              <input class="input" type="number" min="0" name="free_ai_limit" value="" placeholder="Ilimitado">
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend><i class="bx bx-pencil"></i> Documentos manuales</legend>
+            <label class="check"><input type="checkbox" name="free_manual_enabled" checked> Permitir sin plan</label>
+            <label>Máximo por usuario
+              <input class="input" type="number" min="0" name="free_manual_limit" value="" placeholder="Ilimitado">
+            </label>
+          </fieldset>
+        </div>
+
+        <h3>Plan de pago</h3>
+        <div class="admin-form__grid">
+          <label>Nombre <input class="input" name="plan_name" maxlength="60" value="Plan Premium"></label>
+          <label>Precio (USD) <input class="input" name="plan_price_usd" inputmode="decimal" value="5"></label>
+          <label>Duración (días) <input class="input" type="number" min="1" name="plan_days" value="30"></label>
+          <label>Tasa Bs por $ (opcional) <input class="input" name="bs_rate" inputmode="decimal" value="" placeholder="Ej. 40.5"></label>
+        </div>
+
+        <h3>Datos de cobro</h3>
+        <div class="admin-form__grid">
+          <label>Correo de Binance <input class="input" type="email" name="binance_email" maxlength="120" value="demo@ejemplo.com"></label>
+          <label>Banco (Pago Móvil) <input class="input" name="pm_bank" maxlength="80" value="Banco de Venezuela (BDV) · 0102"></label>
+          <label>Teléfono <input class="input" name="pm_phone" maxlength="30" value="0414-0000000" placeholder="0414-0000000"></label>
+          <label>Cédula / RIF <input class="input" name="pm_id" maxlength="30" value="V-00.000.000"></label>
+          <label>Titular <input class="input" name="pm_holder" maxlength="80" value="Titular de ejemplo"></label>
+        </div>
+        <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar ajustes</button>
+      </form>
+
+      <h3 class="admin-sub">Pagos reportados</h3>
+      <div class="table-wrap">
+        
+        <table class="admin-table">
+          <thead>
+            <tr><th>Usuario</th><th>Método</th><th>Referencia</th><th>Monto</th><th>Estado</th><th>Reportado</th><th></th></tr>
+          </thead>
+          <tbody>
+            
+            <tr>
+              <td>Juan García<br><span class="is-dim">juan@ejemplo.com</span></td>
+              <td>Pago Móvil</td>
+              <td><code>0012345678</code></td>
+              <td>$5</td>
+              <td><span class="badge badge--pending">Pendiente</span></td>
+              <td class="is-dim">2026-09-30 08:30:00</td>
+              <td>
+                
+                <form method="POST" action="#" class="inline"><button class="mini mini--ok" type="submit">Aprobar</button></form>
+                <form method="POST" action="#" class="inline"><button class="mini mini--no" type="submit">Rechazar</button></form>
+                
+              </td>
+            </tr>
+            
+            <tr>
+              <td>María Rodríguez<br><span class="is-dim">maria@ejemplo.com</span></td>
+              <td>Binance</td>
+              <td><code>BN99887766</code></td>
+              <td>$5</td>
+              <td><span class="badge badge--approved">Aprobado</span></td>
+              <td class="is-dim">2026-09-28 20:11:00</td>
+              <td>
+                
+              </td>
+            </tr>
+            
+          </tbody>
+        </table>
+        
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <h2 class="admin-section__title"><i class="bx bx-group"></i> Usuarios</h2>
+      <div class="table-wrap">
+        
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Correo</th>
+              <th>Acceso</th>
+              <th>Plan</th>
+              <th>Documentos</th>
+              <th>Tokens usados</th>
+              <th>Registrado</th>
+              <th>Plan manual</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+            <tr>
+              <td>Admin Demo <span class="badge badge--admin"><i class="bx bx-crown"></i> admin</span></td>
+              <td>admin@demo.com</td>
+              <td><span class="badge badge--free">Correo</span></td>
+              <td><span class="badge badge--approved">Premium</span><br><span class="is-dim">hasta 01/01/2027</span></td>
+              <td>12</td>
+              <td>184,230</td>
+              <td class="is-dim">2026-08-01 10:12:00</td>
+              <td>
+                <form method="POST" action="#" class="inline">
+                  <input type="hidden" name="action" value="grant">
+                  <button class="mini mini--ok" type="submit">Extender</button>
+                </form>
+                
+                <form method="POST" action="#" class="inline">
+                  <input type="hidden" name="action" value="revoke">
+                  <button class="mini mini--no" type="submit">Quitar</button>
+                </form>
+                
+              </td>
+            </tr>
+            
+            <tr>
+              <td>María Rodríguez</td>
+              <td>maria@ejemplo.com</td>
+              <td><span class="badge badge--google"><i class="bx bxl-google"></i> Google</span></td>
+              <td><span class="badge badge--approved">Premium</span><br><span class="is-dim">hasta 28/10/2026</span></td>
+              <td>7</td>
+              <td>96,410</td>
+              <td class="is-dim">2026-09-02 15:40:00</td>
+              <td>
+                <form method="POST" action="#" class="inline">
+                  <input type="hidden" name="action" value="grant">
+                  <button class="mini mini--ok" type="submit">Extender</button>
+                </form>
+                
+                <form method="POST" action="#" class="inline">
+                  <input type="hidden" name="action" value="revoke">
+                  <button class="mini mini--no" type="submit">Quitar</button>
+                </form>
+                
+              </td>
+            </tr>
+            
+            <tr>
+              <td>Juan García</td>
+              <td>juan@ejemplo.com</td>
+              <td><span class="badge badge--free">Correo</span></td>
+              <td><span class="badge badge--free">Sin plan</span></td>
+              <td>2</td>
+              <td>21,500</td>
+              <td class="is-dim">2026-09-20 09:05:00</td>
+              <td>
+                <form method="POST" action="#" class="inline">
+                  <input type="hidden" name="action" value="grant">
+                  <button class="mini mini--ok" type="submit">Dar plan</button>
+                </form>
+                
+              </td>
+            </tr>
+            
+          </tbody>
+        </table>
+        
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <h2 class="admin-section__title"><i class="bx bx-file"></i> Documentos recientes</h2>
+      <div class="table-wrap">
+        
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Título</th>
+              <th>Usuario</th>
+              <th>Tipo</th>
+              <th>Tokens</th>
+              <th>Generado</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+            <tr>
+              <td>La Blockchain y sus Capas</td>
+              <td>María Rodríguez</td>
+              <td><span class="badge badge--free">Universitario</span></td>
+              <td>15,230</td>
+              <td class="is-dim">2026-09-29 18:22:00</td>
+            </tr>
+            
+            <tr>
+              <td>Psicología del Trading</td>
+              <td>Juan García</td>
+              <td><span class="badge badge--free">Universitario</span></td>
+              <td>0</td>
+              <td class="is-dim">2026-09-28 11:03:00</td>
+            </tr>
+            
+          </tbody>
+        </table>
+        
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer__bottom" style="border: 0; padding-top: 0;">
+      <span>&copy; 2026 Gullieth. Todos los derechos reservados.</span>
+      <span>Hecho en Venezuela 🇻🇪</span>
+    </div>
+  </footer>
+
+<script src="static/js/demo.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#141430">
+  <meta name="robots" content="noindex">
+  <title>Planes · Gullieth</title>
+
+  <link rel="icon" href="static/icono.jpg" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="static/css/base.css">
+  <link rel="stylesheet" href="static/css/form.css">
+  <link rel="stylesheet" href="static/css/plans.css">
+
+  <script defer src="static/js/ui.js"></script>
+<link rel="stylesheet" href="static/css/demo.css">
+</head>
+
+<body>
+
+  <header class="nav" data-nav>
+    <div class="shell nav__inner">
+      <a href="index.html" class="brand">
+        <img class="brand__img" src="static/img/logo.png" alt="Gullieth">
+        <span class="brand__name">Gulli<span>eth</span></span>
+      </a>
+      <nav class="nav__links" data-nav-links>
+        <a class="nav__link" href="index.html">Inicio</a>
+        <a class="nav__link" href="form.html">Crear documento</a>
+      </nav>
+      <div class="nav__actions">
+        <span class="pill btn--nav-cta"><i class="bx bx-crown"></i> Planes</span>
+        <button class="nav__burger" data-burger type="button" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell plans-page">
+
+    <div class="plans-head">
+      <h1>Elige tu plan</h1>
+      <p>Genera documentos sin límites con un solo pago.</p>
+    </div>
+
+    
+    
+    
+
+    <div class="plans-grid">
+
+      <!-- ---------- El plan ---------- -->
+      <article class="card plan-card">
+        <h2 class="plan-card__name">Plan Premium</h2>
+        <div class="plan-card__price">$5 <small>/ 30 días</small></div>
+        
+        <ul>
+          <li><i class="bx bx-check"></i> Documentos con IA sin límite</li>
+          <li><i class="bx bx-check"></i> Documentos escritos por ti sin límite</li>
+          <li><i class="bx bx-check"></i> Universitario y bachillerato</li>
+          <li><i class="bx bx-check"></i> Descarga en Word y PDF</li>
+        </ul>
+        <div class="plan-card__status">
+          
+          
+            
+          
+            
+          
+          
+        </div>
+      </article>
+
+      <!-- ---------- Pago ---------- -->
+      <section class="card pay-card">
+        <h2>Activar el plan</h2>
+        <p>Paga, luego escribe la referencia del pago. Lo revisamos y se activa el plan.</p>
+
+        
+        <form method="POST" action="#" data-pay>
+          <div class="pay-tabs" role="radiogroup" aria-label="Método de pago">
+            <input type="radio" id="pm-binance" name="method" value="binance" checked>
+            <label for="pm-binance">Binance</label>
+            <input type="radio" id="pm-pm" name="method" value="pago_movil">
+            <label for="pm-pm">Pago Móvil</label>
+          </div>
+
+          <div class="pay-data is-on" data-pay-data="binance">
+            
+            <dl>
+              <dt>Binance Pay</dt><dd>demo@ejemplo.com</dd>
+              <dt>Monto</dt><dd>$5 USDT</dd>
+            </dl>
+            
+          </div>
+
+          <div class="pay-data" data-pay-data="pago_movil">
+            
+            <dl>
+              <dt>Banco</dt><dd>Banco de Venezuela (BDV) · 0102</dd>
+              <dt>Teléfono</dt><dd>0414-0000000</dd>
+              <dt>Cédula/RIF</dt><dd>V-00.000.000</dd>
+              <dt>Titular</dt><dd>Titular de ejemplo</dd>
+              <dt>Monto</dt><dd>$5 al cambio del día</dd>
+            </dl>
+            
+          </div>
+
+          <div class="field">
+            <label for="f-ref">Referencia del pago</label>
+            <input class="input" id="f-ref" name="reference" required minlength="4" maxlength="40"
+              placeholder="Ej. 0012345678" autocomplete="off">
+            <span class="help">En Binance es el ID de la orden; en Pago Móvil, el número de referencia.</span>
+          </div>
+          <button class="btn btn--primary" type="submit"><i class="bx bx-send"></i> Ya pagué</button>
+        </form>
+        
+      </section>
+    </div>
+
+    
+
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer__bottom" style="border: 0; padding-top: 0;">
+      <span>&copy; 2026 Gullieth. Todos los derechos reservados.</span>
+      <span>Hecho en Venezuela 🇻🇪</span>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var form = document.querySelector('[data-pay]');
+      if (!form) return;
+      function sync() {
+        var method = form.querySelector('input[name="method"]:checked').value;
+        form.querySelectorAll('[data-pay-data]').forEach(function (box) {
+          box.classList.toggle('is-on', box.getAttribute('data-pay-data') === method);
+        });
+      }
+      form.querySelectorAll('input[name="method"]').forEach(function (r) {
+        r.addEventListener('change', sync);
+      });
+      sync();
+    })();
+  </script>
+<script src="static/js/demo.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#141430">
+  <title>Crear documento · Gullieth</title>
+
+  <link rel="icon" href="static/icono.jpg" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="static/css/base.css">
+  <link rel="stylesheet" href="static/css/form.css">
+
+  <script defer src="static/js/ui.js"></script>
+  <script defer src="static/js/builder.js"></script>
+<link rel="stylesheet" href="static/css/demo.css">
+</head>
+
+<body>
+
+  <!-- ===================== NAVBAR ===================== -->
+  <header class="nav" data-nav>
+    <div class="shell nav__inner">
+      <a href="index.html" class="brand">
+        <img class="brand__img" src="static/img/logo.png" alt="Gullieth">
+        <span class="brand__name">Gulli<span>eth</span></span>
+      </a>
+
+      <nav class="nav__links" data-nav-links>
+        <a class="nav__link" href="index.html">Inicio</a>
+        <a class="nav__link" href="index.html#como-funciona">Cómo funciona</a>
+        <a class="nav__link" href="index.html#faq">Preguntas</a>
+        
+      </nav>
+
+      <div class="nav__actions">
+        <span class="pill btn--nav-cta"><i class="bx bx-shape-triangle"></i> Gullieth AI</span>
+        
+        <button class="nav__burger" data-burger type="button" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell builder-page">
+
+    
+    
+    
+
+    <div class="builder-head">
+      <div>
+        <h1>Crea tu documento</h1>
+        <p>Completa los datos, mira cómo queda la portada y genera el trabajo completo.</p>
+      </div>
+      <span class="pill"><i class="bx bx-time-five"></i> Toma menos de 2 minutos</span>
+    </div>
+
+    <div class="builder">
+
+      <!-- ============================================================
+           FORMULARIO
+           Los "name" de cada campo son los que espera el backend
+           (/process_form → FormProcessor). No cambiar.
+           ============================================================ -->
+      <form id="docForm" action="download.html" method="POST" novalidate
+        data-universities="static/txt/lista_imagenes.txt"
+        data-logo-base="static/logos">
+
+        <!-- ---------- Indicador de pasos ---------- -->
+        <div class="wizard" role="tablist">
+          <button type="button" class="wizard__step is-active" data-step="1" role="tab">
+            <b><span>1</span></b><span class="wizard__text">Institución</span>
+          </button>
+          <button type="button" class="wizard__step" data-step="2" role="tab">
+            <b><span>2</span></b><span class="wizard__text">Estudiantes</span>
+          </button>
+          <button type="button" class="wizard__step" data-step="3" role="tab">
+            <b><span>3</span></b><span class="wizard__text">Contenido</span>
+          </button>
+        </div>
+
+        <!-- ==================== PASO 1 ==================== -->
+        <section class="panel is-active" data-panel="1">
+          <h2 class="panel__title"><i class="bx bx-buildings"></i> Datos de la portada</h2>
+          <p class="panel__hint">Sólo la institución es obligatoria. Lo demás aparece en la portada si lo llenas.</p>
+
+          <div class="block">
+            <div class="seg-row">
+              <div class="seg-group">
+                <span>Tipo de institución</span>
+                <div class="seg">
+                  <input type="radio" id="inst-uni" name="instituto" value="universidad" checked>
+                  <label for="inst-uni"><i class="bx bx-been-here"></i> Universidad</label>
+                  <input type="radio" id="inst-bach" name="instituto" value="bachiller">
+                  <label for="inst-bach"><i class="bx bx-book"></i> Bachillerato</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <div class="grid grid--2">
+              <div class="field span-2">
+                <label for="f-u"><span id="lbl-u">Universidad o instituto</span></label>
+                <div class="ac-wrap">
+                  <input class="input" type="text" id="f-u" name="u" maxlength="80"
+                    placeholder="Ej. Universidad Central de Venezuela" autocomplete="off">
+                  <div class="ac-list" id="ac-list"></div>
+                </div>
+                <span class="err-msg"></span>
+                <span class="help">Si está en la lista, su escudo se coloca en la portada automáticamente.</span>
+              </div>
+
+              <div class="field" id="wrap-area">
+                <label for="f-area">Área o facultad <span class="opt">· opcional</span></label>
+                <input class="input" type="text" id="f-area" name="area" maxlength="40"
+                  placeholder="Ej. Facultad de Ingeniería">
+              </div>
+
+              <div class="field" id="wrap-carrera">
+                <label for="f-carrera">Carrera <span class="opt">· opcional</span></label>
+                <input class="input" type="text" id="f-carrera" name="carrera" maxlength="40"
+                  placeholder="Ej. Ingeniería Informática">
+              </div>
+
+              <div class="field">
+                <label for="f-teacher">Docente <span class="opt">· opcional</span></label>
+                <input class="input" type="text" id="f-teacher" name="teacher" maxlength="60"
+                  placeholder="Ej. Prof. María Rodríguez">
+              </div>
+
+              <div class="field">
+                <label for="f-asignatura">Asignatura <span class="opt">· opcional</span></label>
+                <input class="input" type="text" id="f-asignatura" name="asignatura" maxlength="60"
+                  placeholder="Ej. Metodología de la Investigación">
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <div class="block__label">Periodo y sección</div>
+            <div class="grid grid--3">
+              <div class="field">
+                <label for="f-periodo">Periodo</label>
+                <select class="select" id="f-periodo" name="periodo">
+                  <option value="">Sin especificar</option>
+                  <option value="1º">1º</option>
+                  <option value="2º">2º</option>
+                  <option value="3º">3º</option>
+                  <option value="4º">4º</option>
+                  <option value="5º">5º</option>
+                  <option value="6º">6º</option>
+                  <option value="7º">7º</option>
+                  <option value="8º">8º</option>
+                  <option value="9º">9º</option>
+                  <option value="10º">10º</option>
+                  <option value="11º">11º</option>
+                  <option value="12º">12º</option>
+                  <option value="13º">13º</option>
+                  <option value="14º">14º</option>
+                  <option value="15º">15º</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="f-academico">Tipo</label>
+                <!-- Las opciones reales las arma builder.js según el tipo de
+                     institución (universidad/bachillerato); esto es sólo el
+                     estado inicial para cuando JS todavía no corrió. -->
+                <select class="select" id="f-academico" name="academico">
+                  <option value="">Sin especificar</option>
+                  <option value="Año">Año</option>
+                  <option value="Semestre">Semestre</option>
+                  <option value="Trimestre">Trimestre</option>
+                  <option value="Trayecto">Trayecto</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="f-seccion">Sección <span class="opt">· opcional</span></label>
+                <input class="input" type="text" id="f-seccion" name="seccion" maxlength="6" placeholder="Ej. A">
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <div class="block__label">Lugar y fecha</div>
+            <div class="grid grid--2">
+              <div class="field">
+                <label for="f-city">Ciudad <span class="opt">· opcional</span></label>
+                <input class="input" type="text" id="f-city" name="city" maxlength="30" placeholder="Ej. Caracas">
+              </div>
+
+              <div class="field">
+                <label for="f-date-picker">Fecha de entrega <span class="opt">· opcional</span></label>
+                <input class="input" type="date" id="f-date-picker">
+                <!-- El backend espera dd/mm/yyyy: se envía en este campo oculto -->
+                <input type="hidden" name="date" id="f-date" value="">
+                <button type="button" class="add-btn" id="date-today" style="align-self: flex-start;">
+                  <i class="bx bx-calendar-check"></i> Usar la fecha de hoy
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== PASO 2 ==================== -->
+        <section class="panel" data-panel="2">
+          <h2 class="panel__title"><i class="bx bx-group"></i> Integrantes</h2>
+          <p class="panel__hint">Agrega hasta 8 estudiantes. Si trabajas solo, deja uno.</p>
+
+          <div class="block">
+            <div class="block__label">Cantidad</div>
+            <div class="stepper">
+              <button type="button" id="stu-minus" aria-label="Quitar un estudiante"><i
+                  class="bx bx-minus"></i></button>
+              <output id="stu-count" aria-live="polite">1</output>
+              <button type="button" id="stu-plus" aria-label="Agregar un estudiante"><i class="bx bx-plus"></i></button>
+            </div>
+            <!-- Campo que realmente viaja al backend -->
+            <input type="hidden" name="gblock-template-canvas-integrantes" id="f-count" value="1">
+          </div>
+
+          <div class="block">
+            <div class="block__label">Nombres y cédulas</div>
+            <div class="students" id="students"></div>
+            <div class="students-empty" id="students-empty" style="display:none;">
+              Sin integrantes: la portada saldrá sin la lista de alumnos.
+            </div>
+          </div>
+
+          <div class="note">
+            <i class="bx bx-info-circle"></i>
+            <span>El nombre aparece en la portada tal cual lo escribas, y la cédula se muestra como
+              <strong>C.I- 12345678</strong>.</span>
+          </div>
+        </section>
+
+        <!-- ==================== PASO 3 ==================== -->
+        <section class="panel" data-panel="3">
+          <h2 class="panel__title"><i class="bx bx-edit-alt"></i> Tema del trabajo</h2>
+          <p class="panel__hint">Esto es lo único que la IA necesita para redactar.</p>
+
+          <div class="block">
+            <div class="field">
+              <label for="f-title">Título del trabajo</label>
+              <input class="input" type="text" id="f-title" name="title" maxlength="300"
+                placeholder="Ej. El impacto de la inteligencia artificial en la educación">
+              <span class="err-msg"></span>
+              <span class="help">Sé específico: mientras más claro el título, mejor queda el desarrollo.</span>
+            </div>
+          </div>
+
+          <div class="block">
+            <div class="seg-row">
+              <div class="seg-group">
+                <span>¿Quién escribe el contenido?</span>
+                <div class="seg">
+                  <input type="radio" id="mode-ia" name="global-mode" value="ia" checked>
+                  <label for="mode-ia"><i class="bx bx-shape-triangle"></i> Gullieth AI</label>
+                  <input type="radio" id="mode-standard" name="global-mode" value="standard" >
+                  <label for="mode-standard"><i class="bx bx-pencil"></i> Lo escribo yo</label>
+                </div>
+                
+              </div>
+
+              <div class="seg-group">
+                <span>Secciones a incluir</span>
+                <div class="seg">
+                  <input type="checkbox" id="f-incluir-intro" name="incluir_introduccion" value="1" checked>
+                  <label for="f-incluir-intro"><i class="bx bx-align-left"></i> Introducción</label>
+                  <input type="checkbox" id="f-incluir-concl" name="incluir_conclusion" value="1" checked>
+                  <label for="f-incluir-concl"><i class="bx bx-flag"></i> Conclusión</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ---- Modo IA: temas específicos (subtitle_1..subtitle_8) ---- -->
+          <div class="block" id="ia-block">
+            <div class="block__label">Temas específicos · opcional</div>
+            <div class="topics" id="topics"></div>
+            <div class="students-empty" id="topics-empty">
+              Sin temas añadidos: la IA organiza el desarrollo por su cuenta.
+            </div>
+            <button type="button" class="add-btn" id="add-topic" style="margin-top: 12px;">
+              <i class="bx bx-plus"></i> Añadir tema
+            </button>
+          </div>
+
+          <!-- ---- Modo manual ----
+               Si el usuario desmarca "Introducción" o "Conclusión" arriba,
+               el campo correspondiente se oculta (ver applySections en
+               builder.js): la introducción/conclusión no se piden ni se
+               incluyen en el documento. -->
+          <div class="block" id="manual-block" style="display:none;">
+            <div class="block__label">Contenido escrito por ti</div>
+            <div class="grid">
+              <div class="field" id="wrap-introduccion">
+                <label for="f-introduccion">Introducción</label>
+                <textarea class="textarea" id="f-introduccion" name="introduccion"
+                  placeholder="Escribe o pega aquí la introducción…"></textarea>
+              </div>
+              <div class="field">
+                <label for="f-body">Desarrollo</label>
+                <textarea class="textarea" id="f-body" name="body" style="min-height: 200px;"
+                  placeholder="Escribe o pega aquí el desarrollo del trabajo…"></textarea>
+              </div>
+              <div class="field" id="wrap-conclusion">
+                <label for="f-conclusion">Conclusión</label>
+                <textarea class="textarea" id="f-conclusion" name="conclusion"
+                  placeholder="Escribe o pega aquí la conclusión…"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="note note--gold" style="margin-top: 20px;">
+            <i class="bx bx-bulb"></i>
+            <span>Al generar, se crean a la vez el <strong>Word</strong> y el <strong>PDF</strong>, con índice y
+              páginas separadas para cada sección.</span>
+          </div>
+        </section>
+
+        <!-- ---------- Navegación ---------- -->
+        <div class="form-nav">
+          <button type="button" class="btn btn--ghost" id="btn-prev" style="visibility: hidden;">
+            <i class="bx bx-chevron-left"></i> Atrás
+          </button>
+          <div class="form-nav__spacer"></div>
+          <button type="button" class="btn btn--primary" id="btn-next">
+            Continuar <i class="bx bx-chevron-right"></i>
+          </button>
+          <button type="submit" class="btn btn--gold" id="btn-submit" style="display: none;">
+            <i class="bx bx-rocket"></i> Generar documento
+          </button>
+        </div>
+      </form>
+
+      <!-- ============================================================
+           VISTA PREVIA DE LA PORTADA
+           ============================================================ -->
+      <aside class="preview" id="preview">
+        <div class="preview__top">
+          <span class="preview__label"><i class="bx bx-file"></i> Vista previa</span>
+          <div class="preview__fonts seg">
+            <input type="radio" id="font-arial" name="fuente" value="arial" checked>
+            <label for="font-arial">Arial</label>
+            <input type="radio" id="font-tnr" name="fuente" value="tnr">
+            <label for="font-tnr">Times</label>
+          </div>
+          <button type="button" class="preview__close" id="preview-close" aria-label="Cerrar vista previa">
+            <i class="bx bx-x"></i>
+          </button>
+        </div>
+
+        <div class="paper-wrap">
+          <div class="paper" id="pv-paper">
+            <div class="paper__head">
+              <p>REPÚBLICA BOLIVARIANA DE VENEZUELA</p>
+              <p id="pv-ministerio">MINISTERIO DEL PODER POPULAR PARA LA EDUCACIÓN UNIVERSITARIA</p>
+              <p id="pv-u">INSTITUCIÓN</p>
+              <p id="pv-area"></p>
+              <p id="pv-carrera"></p>
+              <img class="paper__crest" id="pv-crest" src="" alt="">
+            </div>
+
+            <div class="paper__title" id="pv-title">TÍTULO DEL TRABAJO</div>
+
+            <div class="paper__cols">
+              <div class="paper__col">
+                <div id="pv-teacher-wrap" style="display:none;">
+                  <p><u>DOCENTE:</u></p>
+                  <p id="pv-teacher"></p>
+                </div>
+                <div id="pv-asig-wrap" style="display:none;">
+                  <p><u>MATERIA:</u></p>
+                  <p id="pv-asignatura"></p>
+                </div>
+                <div id="pv-periodo-wrap" style="display:none;">
+                  <p><u id="pv-periodo-label"></u> <span id="pv-periodo"></span></p>
+                </div>
+                <div id="pv-seccion-wrap" style="display:none;">
+                  <p><u>SECCION:</u> <span id="pv-seccion"></span></p>
+                </div>
+              </div>
+
+              <div class="paper__col paper__col--right" style="display:none;">
+                <u id="pv-students-label">ALUMNOS:</u>
+                <div class="paper__students" id="pv-students"></div>
+              </div>
+            </div>
+
+            <div class="paper__foot">
+              <p id="pv-foot"></p>
+            </div>
+          </div>
+        </div>
+
+        <p class="preview__meta"><i class="bx bx-info-circle"></i> Así se verá la primera página de tu trabajo.</p>
+      </aside>
+    </div>
+  </main>
+
+  <!-- Botón flotante de vista previa (sólo móvil) -->
+  <button type="button" class="preview-fab" id="preview-fab">
+    <i class="bx bx-show"></i> Ver portada
+  </button>
+
+  <!-- ============================================================
+       OVERLAY DE PROGRESO
+       ============================================================ -->
+  <div class="loader" id="loader" role="status" aria-live="polite">
+    <div class="loader__box">
+      <div class="loader__ring"><i class="bx bx-shape-triangle"></i></div>
+
+      <h2 class="loader__title">Generando tu documento</h2>
+      <p class="loader__msg" id="loader-msg">Ordenando los datos de tu portada…</p>
+
+      <div class="bar">
+        <div class="bar__fill" id="loader-bar"></div>
+      </div>
+      <span class="bar__pct" id="loader-pct">0%</span>
+
+      <div class="loader__steps">
+        <div class="loader__step" data-lstep="1"><i class="bx bx-circle"></i> Preparando la portada</div>
+        <div class="loader__step" data-lstep="2"><i class="bx bx-circle"></i> Validando el título</div>
+        <div class="loader__step" data-lstep="3"><i class="bx bx-circle"></i> Redactando el desarrollo</div>
+        <div class="loader__step" data-lstep="4"><i class="bx bx-circle"></i> Introducción y conclusión</div>
+        <div class="loader__step" data-lstep="5"><i class="bx bx-circle"></i> Armando el Word y el PDF</div>
+      </div>
+
+      <p class="loader__foot">Esto puede tardar un par de minutos. No cierres ni recargues esta página.</p>
+    </div>
+  </div>
+
+<script src="static/js/demo.js"></script>
+</body>
+
+</html>

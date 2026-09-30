@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#141430">
+  <meta name="robots" content="noindex">
+  <title>Tu documento está listo · Gullieth</title>
+
+  <link rel="icon" href="static/icono.jpg" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="static/css/base.css">
+  <link rel="stylesheet" href="static/css/download.css">
+
+  <script defer src="static/js/ui.js"></script>
+<link rel="stylesheet" href="static/css/demo.css">
+</head>
+
+<body>
+
+  <!-- ===================== NAVBAR ===================== -->
+  <header class="nav" data-nav>
+    <div class="shell nav__inner">
+      <a href="index.html" class="brand">
+        <img class="brand__img" src="static/img/logo.png" alt="Gullieth">
+        <span class="brand__name">Gulli<span>eth</span></span>
+      </a>
+
+      <nav class="nav__links" data-nav-links>
+        <a class="nav__link" href="index.html">Inicio</a>
+        <a class="nav__link" href="form.html">Crear otro documento</a>
+        
+      </nav>
+
+      <div class="nav__actions">
+        <a class="btn btn--ghost btn--sm btn--nav-cta" href="form.html">
+          <i class="bx bx-plus"></i> Nuevo
+        </a>
+        
+        <button class="nav__burger" data-burger type="button" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== CONTENIDO ===================== -->
+  <main class="done">
+    <div class="done__orb done__orb--a"></div>
+    <div class="done__orb done__orb--b"></div>
+
+    <div class="shell done__inner">
+
+      <div class="done__check"><i class="bx bx-check"></i></div>
+
+      <h1 class="done__title">¡Tu documento está listo!</h1>
+      <p class="done__sub">Elige el formato en el que quieres descargarlo. Puedes bajar los dos si lo necesitas.</p>
+
+      
+      
+      
+
+      <span class="file-tag">
+        <i class="bx bx-file-blank"></i> <b>Mi documento</b>
+      </span>
+
+      <!-- ---------- Tarjetas de descarga ---------- -->
+      <div class="dl-grid">
+
+        <article class="dl-card dl-card--word">
+          <img class="dl-card__icon" src="static/image1.png" alt="Microsoft Word">
+          <h2 class="dl-card__name">Word</h2>
+          <p class="dl-card__desc">Formato .docx editable. Ideal si todavía quieres retocar o agregar algo.</p>
+          <a class="btn" href="#" data-dl="docx">
+            <i class="bx bx-download"></i> Descargar Word
+          </a>
+        </article>
+
+        <article class="dl-card dl-card--pdf">
+          <img class="dl-card__icon" src="static/image2.png" alt="PDF">
+          <h2 class="dl-card__name">PDF</h2>
+          <p class="dl-card__desc">Formato .pdf listo para imprimir o subir al aula virtual sin que se mueva nada.</p>
+          <a class="btn" href="#" data-dl="pdf">
+            <i class="bx bx-download"></i> Descargar PDF
+          </a>
+        </article>
+
+      </div>
+
+      <!-- ---------- Compartir por enlace ---------- -->
+      <section class="share" data-share>
+        <h2 class="share__title"><i class="bx bx-share-alt"></i> Compartir el documento</h2>
+        <p class="share__sub">En la demo se comparte el enlace de esta página web.</p>
+
+        <div class="seg share__format" role="radiogroup" aria-label="Formato a compartir">
+          <input type="radio" id="sh-docx" name="share-format" value="docx" checked>
+          <label for="sh-docx"><i class="bx bxs-file-doc"></i> Word</label>
+          <input type="radio" id="sh-pdf" name="share-format" value="pdf">
+          <label for="sh-pdf"><i class="bx bxs-file-pdf"></i> PDF</label>
+        </div>
+
+        <div class="share__btns">
+          <button type="button" class="share-btn share-btn--wa" data-share-wa>
+            <i class="bx bxl-whatsapp"></i> WhatsApp
+          </button>
+          <button type="button" class="share-btn share-btn--gm" data-share-gmail>
+            <i class="bx bx-envelope"></i> Gmail
+          </button>
+          <button type="button" class="share-btn share-btn--any" data-share-any>
+            <i class="bx bx-share-alt"></i> <span data-share-any-label>Compartir</span>
+          </button>
+        </div>
+        <p class="share__toast" data-share-toast role="status" aria-live="polite"></p>
+      </section>
+
+      <!-- ---------- Notas ---------- -->
+      <div class="done__notes">
+        <span class="done__note"><i class="bx bx-time-five"></i> Disponible por unas 2 horas</span>
+        <span class="done__note"><i class="bx bx-list-ol"></i> Índice incluido</span>
+        <span class="done__note"><i class="bx bx-refresh"></i> Actualiza el índice al abrirlo en Word</span>
+      </div>
+
+      <div class="done__actions">
+        <a class="btn btn--primary" href="form.html">
+          <i class="bx bx-plus"></i> Crear otro documento
+        </a>
+        <a class="btn btn--ghost" href="index.html">
+          <i class="bx bx-home-alt"></i> Volver al inicio
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="shell footer__bottom" style="border: 0; padding-top: 0;">
+      <span>&copy; 2026 Gullieth. Todos los derechos reservados.</span>
+      <span>Hecho en Venezuela 🇻🇪</span>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var DEMO_URL = new URL('index.html', location.href).href;
+      var urls = { docx: DEMO_URL, pdf: DEMO_URL };
+      var root = document.querySelector('[data-share]');
+      if (!root) return;
+
+      var toast = root.querySelector('[data-share-toast]');
+      var anyBtn = root.querySelector('[data-share-any]');
+      var toastTimer;
+
+      function format() {
+        return root.querySelector('input[name="share-format"]:checked').value;
+      }
+      function link() { return urls[format()]; }
+      function message() {
+        return 'Te comparto mi documento (' + (format() === 'pdf' ? 'PDF' : 'Word') +
+          '). Prueba la demo de Gullieth para generar informes académicos: ' + link();
+      }
+      function say(text) {
+        toast.textContent = text;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.textContent = ''; }, 3500);
+      }
+      function copy(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          return navigator.clipboard.writeText(text);
+        }
+        return new Promise(function (resolve, reject) {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy') ? resolve() : reject(); }
+          catch (e) { reject(e); }
+          document.body.removeChild(ta);
+        });
+      }
+
+      root.querySelector('[data-share-wa]').addEventListener('click', function () {
+        window.open('https://wa.me/?text=' + encodeURIComponent(message()), '_blank', 'noopener');
+      });
+
+      root.querySelector('[data-share-gmail]').addEventListener('click', function () {
+        window.open(
+          'https://mail.google.com/mail/?view=cm&fs=1&su=' +
+          encodeURIComponent('Mi documento de Gullieth') +
+          '&body=' + encodeURIComponent(message()),
+          '_blank', 'noopener'
+        );
+      });
+
+      // Con hoja de compartir nativa (móvil, Safari, Edge) se abre esa; si el
+      // navegador no la tiene, el botón pasa a copiar el enlace.
+      var native = !!navigator.share;
+      if (!native) root.querySelector('[data-share-any-label]').textContent = 'Copiar enlace';
+
+      anyBtn.addEventListener('click', function () {
+        if (native) {
+          navigator.share({ title: 'Mi documento de Gullieth', text: message() })
+            .catch(function () { /* el usuario cerró el diálogo */ });
+          return;
+        }
+        copy(link()).then(
+          function () { say('Enlace copiado al portapapeles'); },
+          function () { say('No se pudo copiar: ' + link()); }
+        );
+      });
+    })();
+  </script>
+
+<script src="static/vendor/docx.min.js"></script>
+<script src="static/vendor/jspdf.umd.min.js"></script>
+<script src="static/js/demo.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#141430">
+  <title>Iniciar sesión · Gullieth</title>
+
+  <link rel="icon" href="static/icono.jpg" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="static/css/base.css">
+  <link rel="stylesheet" href="static/css/form.css">
+  <link rel="stylesheet" href="static/css/auth.css">
+
+  <script defer src="static/js/ui.js"></script>
+<link rel="stylesheet" href="static/css/demo.css">
+</head>
+
+<body>
+
+  <header class="nav" data-nav>
+    <div class="shell nav__inner">
+      <a href="index.html" class="brand">
+        <img class="brand__img" src="static/img/logo.png" alt="Gullieth">
+        <span class="brand__name">Gulli<span>eth</span></span>
+      </a>
+      <nav class="nav__links" data-nav-links>
+        <a class="nav__link" href="index.html">Inicio</a>
+      </nav>
+      <div class="nav__actions">
+        <a class="btn btn--ghost btn--sm btn--nav-cta" href="register.html">Crear cuenta</a>
+        <button class="nav__burger" data-burger type="button" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="auth">
+    <div class="auth__orb"></div>
+
+    <div class="card auth-card">
+      <div class="auth-card__head">
+        <h1 class="auth-card__title">Bienvenido de nuevo</h1>
+        <p class="auth-card__sub">Inicia sesión para crear tus documentos.</p>
+      </div>
+
+      
+
+      <span class="err-msg"></span>
+
+      <form method="POST" action="login.html" novalidate>
+        <input type="hidden" name="next" value="">
+
+        <div class="field">
+          <label for="f-email">Correo</label>
+          <input class="input" type="email" id="f-email" name="email" required placeholder="tu@correo.com" autocomplete="email">
+        </div>
+
+        <div class="field">
+          <label for="f-password">Contraseña</label>
+          <input class="input" type="password" id="f-password" name="password" required placeholder="••••••••" autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn btn--primary btn--block">
+          <i class="bx bx-log-in"></i> Entrar
+        </button>
+      </form>
+
+      <p class="auth-card__foot">
+        ¿No tienes cuenta? <a href="register.html">Regístrate gratis</a>
+      </p>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer__bottom" style="border: 0; padding-top: 0;">
+      <span>&copy; 2026 Gullieth. Todos los derechos reservados.</span>
+      <span>Hecho en Venezuela 🇻🇪</span>
+    </div>
+  </footer>
+
+<script src="static/js/demo.js"></script>
+</body>
+
+</html>

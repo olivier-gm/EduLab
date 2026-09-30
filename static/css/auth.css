@@ -1,0 +1,110 @@
+/* ============================================================
+   GULLIETH · Registro / inicio de sesión
+   Reutiliza .field/.input/.err-msg/.help de form.css y .btn/.card
+   de base.css; aquí sólo va el layout propio de estas páginas.
+   ============================================================ */
+
+.auth {
+  min-height: calc(100vh - var(--nav-h));
+  display: grid;
+  place-items: center;
+  padding: 46px 0 70px;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+  z-index: 0;
+  width: 460px;
+  height: 460px;
+  top: -160px;
+  right: -140px;
+  background: rgba(120, 60, 180, 0.16);
+}
+
+.auth-card {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 100%);
+  padding: 34px 30px;
+}
+
+.auth-card__head {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-card__title {
+  font-size: 1.5rem;
+  letter-spacing: -0.6px;
+  margin-bottom: 6px;
+}
+
+.auth-card__sub {
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-card .err-msg.is-on {
+  display: block;
+  text-align: center;
+  background: rgba(226, 87, 76, 0.1);
+  border: 1px solid rgba(226, 87, 76, 0.28);
+  border-radius: var(--r-md);
+  padding: 9px 12px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--stroke);
+}
+
+.btn--google {
+  width: 100%;
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.btn--google:hover {
+  filter: brightness(0.97);
+}
+
+.btn--google i {
+  font-size: 1.2em;
+  color: #4285f4;
+}
+
+.auth-card__foot {
+  text-align: center;
+  margin-top: 22px;
+  font-size: 0.88rem;
+  color: var(--text-soft);
+}
+
+.auth-card__foot a {
+  color: var(--gold);
+  font-weight: 600;
+}
