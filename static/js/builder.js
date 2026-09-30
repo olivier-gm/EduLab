@@ -241,9 +241,83 @@
      ========================================================== */
   function applyMode() {
     var mode = ($('input[name="global-mode"]:checked') || {}).value || 'ia';
-    show($('#ia-block'), mode === 'ia');
-    show($('#manual-block'), mode === 'standard');
+    var glossary = isGlossary();
+    show($('#ia-block'), !glossary && mode === 'ia');
+    show($('#manual-block'), !glossary && mode === 'standard');
+    show($('#writer-options'), !glossary);
+    show($('#glossary-block'), glossary);
+    $('#f-incluir-intro').disabled = glossary;
+    $('#f-incluir-concl').disabled = glossary;
+    $('#f-incluir-intro').hidden = glossary;
+    $('#f-incluir-concl').hidden = glossary;
+    show($('label[for="f-incluir-intro"]'), !glossary);
+    show($('label[for="f-incluir-concl"]'), !glossary);
+    setText($('#title-label'), glossary ? 'Título o tema del glosario' : 'Título del trabajo');
+    setText($('#title-help'), glossary ? 'Indica el tema que da contexto a las definiciones, por ejemplo: Biología celular.'
+      : 'Sé específico: mientras más claro el título, mejor queda el desarrollo.');
+    setText($('#bibliography-help'), glossary
+      ? 'Opcional: cada término llevará su propia fuente, sin una página de bibliografía al final.'
+      : 'Opcional: la bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.');
+    setText($('#document-note'), glossary
+      ? 'Recibirás Word y PDF con portada y glosario en orden alfabético, sin introducción ni conclusión.'
+      : 'Recibirás Word y PDF con índice y páginas separadas para cada sección.');
+    applySections();
+    applyGlossarySource();
   }
+
+  function isGlossary() {
+    return ($('input[name="document_kind"]:checked') || {}).value === 'glossary';
+  }
+
+  $$('input[name="document_kind"]').forEach(function (r) {
+    r.addEventListener('change', applyMode);
+  });
+
+  function applyGlossarySource() {
+    var list = ($('#glossary-list') || {}).checked;
+    show($('#glossary-count-wrap'), !list);
+    show($('#glossary-list-wrap'), list);
+  }
+
+  $$('input[name="glossary_source"]').forEach(function (r) {
+    r.addEventListener('change', applyGlossarySource);
+  });
+
+  function termLines() {
+    return $('#f-glossary-terms').value.split(/\r?\n/).filter(function (line) { return line.trim(); });
+  }
+
+  $('#f-glossary-terms').addEventListener('input', function () {
+    setText($('#terms-count'), termLines().length + ' de 100 términos');
+  });
+
+  var extractingTerms = false;
+  $('#extract-terms').addEventListener('click', async function () {
+    var file = $('#f-terms-file').files[0];
+    var status = $('#terms-status');
+    if (!file) { status.textContent = 'Selecciona primero un archivo.'; return; }
+    if (file.size > 10 * 1024 * 1024) { status.textContent = 'El archivo supera 10 MB.'; return; }
+    if (extractingTerms) return;
+    extractingTerms = true;
+    this.disabled = true;
+    status.textContent = 'Leyendo la lista de términos…';
+    var data = new FormData();
+    data.append('terms_file', file);
+    try {
+      var response = await fetch(form.dataset.termsUrl, { method: 'POST', body: data });
+      if (response.redirected) { throw new Error('Tu sesión venció. Inicia sesión de nuevo.'); }
+      var result = await response.json();
+      if (!response.ok) { throw new Error(result.error || 'No se pudo leer el archivo.'); }
+      $('#f-glossary-terms').value = result.terms.join('\n');
+      $('#f-glossary-terms').dispatchEvent(new Event('input'));
+      status.textContent = 'Se leyeron ' + result.count + ' términos. Revisa la lista antes de generar.';
+    } catch (error) {
+      status.textContent = error.message || 'No se pudo leer el archivo. Pega la lista manualmente.';
+    } finally {
+      extractingTerms = false;
+      this.disabled = false;
+    }
+  });
 
   $$('input[name="global-mode"]').forEach(function (r) {
     r.addEventListener('change', applyMode);
@@ -260,10 +334,12 @@
   function applySections() {
     show($('#wrap-introduccion'), chkIntro.checked);
     show($('#wrap-conclusion'), chkConcl.checked);
+    show($('#wrap-bibliografia'), $('#f-incluir-bib').checked);
   }
 
   chkIntro.addEventListener('change', applySections);
   chkConcl.addEventListener('change', applySections);
+  $('#f-incluir-bib').addEventListener('change', applySections);
 
   /* ==========================================================
      4. TIPOGRAFÍA DE LA VISTA PREVIA
@@ -639,6 +715,19 @@
         return false;
       }
       fieldError('#f-title', false);
+      if (isGlossary()) {
+        if (extractingTerms) { setText($('#terms-status'), 'Espera a que termine la lectura del archivo.'); return false; }
+        if ($('#glossary-list').checked) {
+          var count = termLines().length;
+          fieldError('#f-glossary-terms', count < 1 || count > 100, 'Revisa o pega entre 1 y 100 términos, uno por línea.');
+          if (count < 1 || count > 100) return false;
+        } else {
+          var amount = Number($('#f-glossary-count').value);
+          var invalid = !Number.isInteger(amount) || amount < 1 || amount > 100;
+          fieldError('#f-glossary-count', invalid, 'Elige una cantidad entera entre 1 y 100.');
+          if (invalid) return false;
+        }
+      }
     }
     return true;
   }
@@ -686,10 +775,19 @@
     { at: 93, step: 5, text: 'Ya casi listo, dando los toques finales…' }
   ];
 
+  var GLOSSARY_PHASES = [
+    { at: 0, step: 1, text: 'Preparando la portada del glosario…' },
+    { at: 10, step: 2, text: 'Revisando la lista y la cantidad de términos…' },
+    { at: 26, step: 3, text: 'Redactando definiciones breves para cada término…' },
+    { at: 72, step: 4, text: 'Comprobando la cantidad y el orden alfabético…' },
+    { at: 84, step: 5, text: 'Armando el glosario en Word y PDF…' }
+  ];
+
   function paintPhase() {
-    var current = PHASES[0];
-    for (var i = 0; i < PHASES.length; i++) {
-      if (progress >= PHASES[i].at) { current = PHASES[i]; }
+    var phases = isGlossary() ? GLOSSARY_PHASES : PHASES;
+    var current = phases[0];
+    for (var i = 0; i < phases.length; i++) {
+      if (progress >= phases[i].at) { current = phases[i]; }
     }
     if (msg.textContent !== current.text) { msg.textContent = current.text; }
 
@@ -706,6 +804,13 @@
   }
 
   function startLoader() {
+    if (isGlossary()) {
+      ['Preparando la portada', 'Revisando los términos', 'Definiendo los términos',
+        'Comprobando el glosario', 'Armando el Word y el PDF'].forEach(function (label, i) {
+        var item = $('[data-lstep="' + (i + 1) + '"]');
+        item.innerHTML = '<i class="bx bx-circle"></i> ' + label;
+      });
+    }
     loader.classList.add('is-on');
     document.body.style.overflow = 'hidden';
     progress = 0;

@@ -963,9 +963,30 @@ class Document_process:
     # ── Main orchestration ─────────────────────────────────────────────
 
     @staticmethod
+    def add_glossary(document, entries):
+        """Término y definición juntos; la fuente opcional va debajo de cada uno."""
+        document.add_page_break()
+        heading = document.add_paragraph('Glosario', style='Heading 1')
+        heading.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        for entry in entries:
+            paragraph = document.add_paragraph()
+            paragraph.paragraph_format.line_spacing = Pt(21)
+            paragraph.paragraph_format.space_after = Pt(8)
+            paragraph.paragraph_format.keep_together = True
+            paragraph.add_run(entry['term'] + ': ').bold = True
+            paragraph.add_run(entry['definition'])
+            if entry.get('reference'):
+                paragraph.paragraph_format.keep_with_next = True
+                source = document.add_paragraph('Fuente: ' + entry['reference'])
+                source.paragraph_format.space_after = Pt(12)
+                source.paragraph_format.keep_together = True
+                for run in source.runs:
+                    run.font.size = Pt(10)
+
+    @staticmethod
     def fill_placeholders(docx_output, template_path, template_path2, replacements,
                            introduction, essay_content, conclusion, head_title, id,
-                           university_name='', detect_subtitles=True):
+                           university_name='', detect_subtitles=True, bibliography='', glossary_entries=None):
         if id == 'bach':
             words = ['DOCENTE:', 'ALUMNOS:', 'ALUMNO:', 'MATERIA:']
         else:
@@ -1049,9 +1070,9 @@ class Document_process:
         else:
             logger.warning('No se pudo ubicar/anclar la línea de fecha en la portada')
 
-        has_content = essay_content != '' or introduction != '' or conclusion != ''
+        has_content = essay_content != '' or introduction != '' or conclusion != '' or bibliography != ''
 
-        if has_content:
+        if has_content and glossary_entries is None:
             # Insertar página de Tabla de Contenido
             Document_process.add_toc_page(document)
 
@@ -1063,9 +1084,16 @@ class Document_process:
         if conclusion != '':
             flage = True
 
-        Document_process.parrafos(introduction, document, 'Introducción', flagi, detect_subtitles)
-        Document_process.parrafos(essay_content, document, head_title, flage, detect_subtitles)
-        Document_process.parrafos(conclusion, document, 'Conclusión', False, detect_subtitles)
+        if glossary_entries is not None:
+            Document_process.add_glossary(document, glossary_entries)
+        else:
+            Document_process.parrafos(introduction, document, 'Introducción', flagi, detect_subtitles)
+            Document_process.parrafos(essay_content, document, head_title, flage, detect_subtitles)
+            Document_process.parrafos(conclusion, document, 'Conclusión', False, detect_subtitles)
+            if bibliography:
+                if introduction or essay_content or conclusion:
+                    document.add_page_break()
+                Document_process.parrafos(bibliography, document, 'Bibliografía', False, False)
 
         # Forzar actualización de campos (TOC) al abrir
         if has_content:

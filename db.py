@@ -92,11 +92,15 @@ SETTING_DEFAULTS = {
     'plan_days': '30',
     # Datos de cobro (se completan desde el panel admin)
     'binance_email': '',
-    'pm_bank': 'Banco de Venezuela (BDV) · 0102',
+    'pm_bank': 'BDV · 0102',
     'pm_phone': '',
     'pm_id': '',
     'pm_holder': '',
     'bs_rate': '',   # Bs por dólar, opcional: muestra el monto en Bs
+    # Origen de la última bibliografía automática completada (no editable).
+    'bibliography_source': '',
+    'bibliography_reason': '',
+    'bibliography_updated_at': '',
 }
 
 

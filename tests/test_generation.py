@@ -43,6 +43,7 @@ def fake_api(monkeypatch):
 
     monkeypatch.setattr(IA, 'client', SimpleNamespace(models=SimpleNamespace(generate_content=generate_content)))
     monkeypatch.setattr(IA, 'CACHE_ENABLED', False)
+    monkeypatch.setattr(IA, 'SEARCH_ENABLED', True)
     monkeypatch.setattr(IA, '_search_blocked_until', 0.0)
     monkeypatch.setattr(IA.time, 'sleep', lambda s: None)
     return state
@@ -298,3 +299,38 @@ def test_archivo_expirado_se_avisa(client):
 def test_safe_filename(title, expected):
     assert app_module.safe_filename(title) == expected
     assert len(app_module.safe_filename('x' * 300)) <= 80
+
+
+def test_glossary_route_enforces_ai_and_ignores_intro_conclusion(client, monkeypatch, fake_document):
+    captured = {}
+    entries = [{'term': 'Átomo', 'definition': 'Unidad de materia.', 'reference': ''}]
+    def generate(title, count, **kwargs):
+        captured.update(count=count, **kwargs)
+        kwargs['usage_sink'].append(25)
+        return entries
+    monkeypatch.setattr(app_module, 'generate_glossary', generate)
+    def unexpected(*a, **k):
+        raise AssertionError('Un glosario no debe generar secciones de un ensayo.')
+    for name in ('generate_introduction', 'generate_conclusion', 'generate_essay_content', 'check_title'):
+        monkeypatch.setattr(app_module, name, unexpected)
+    html = post_form(client, document_kind='glossary', glossary_source='list', glossary_terms='Átomo')
+    assert 'Descargar Word' in html and captured['count'] == 1 and not captured['bibliography']
+    assert 'Glosario en orden alfabético' in html and 'Índice incluido' not in html
+    assert db.get_db().execute('SELECT mode, tokens_used FROM documents').fetchone()['mode'] == 'ai'
+    db.set_settings({'free_ai_enabled': '0'})
+    resp = client.post('/process_form', data={'title': 'Biología', 'document_kind': 'glossary', 'global-mode': 'standard'})
+    assert '/plans' in resp.location
+
+
+def test_glossary_count_rejected_before_api(client, monkeypatch):
+    monkeypatch.setattr(app_module, 'generate_glossary', lambda *a, **k: pytest.fail('No llamar a la IA'))
+    html = post_form(client, document_kind='glossary', glossary_count='101')
+    assert 'entre 1 y 100' in html
+
+
+def test_manual_bibliography_is_optional(client, monkeypatch, fake_document):
+    monkeypatch.setattr(app_module, 'generate_bibliography', lambda *a, **k: pytest.fail('Manual no usa IA'))
+    assert 'Descargar Word' in post_form(client, **{'global-mode': 'standard', 'body': 'Texto.',
+        'incluir_bibliografia': '1', 'bibliografia': 'Autor. Fuente.'})
+    page = client.get('/form').get_data(as_text=True)
+    assert 'id="f-incluir-bib" name="incluir_bibliografia" value="1">' in page

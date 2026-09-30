@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, session, flash
+from flask import Flask, render_template, request, redirect, url_for, send_file, session, flash, jsonify
 from concurrent.futures import ThreadPoolExecutor
 import sys
 import threading
@@ -18,6 +18,7 @@ from form_processor import FormProcessor
 from algorythms import Document_process
 from IA import generate_essay_content, generate_introduction, generate_conclusion, GenerationError
 from title_check import check_title
+from glossary import extract_terms, parse_terms, generate_glossary, generate_bibliography
 
 import db
 from auth import auth_bp, current_user, login_required
@@ -32,6 +33,7 @@ app = Flask(__name__)
 # Lax: el navegador no manda la cookie de sesión en POST desde otros sitios,
 # que es lo que protege las acciones del panel admin de peticiones falsas.
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024
 app.secret_key = os.getenv('SECRET_KEY', '7f8b9a2c3d4e5f608192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8')
 
 # Enlaces para compartir: firmados con la clave de la app y válidos lo mismo que
@@ -127,6 +129,7 @@ def process_form_bach():
     #if body != '':
         #introduccion = generate_introduction(processor.title, body)
     conclusion = processor.conclusion
+    bibliography = form_data.get('bibliografia', '').strip() if 'incluir_bibliografia' in form_data else ''
 
     input_doc='input/plantilla_bach.docx'
     input_doc2='input/plantilla_bachempty.docx'
@@ -143,7 +146,7 @@ def process_form_bach():
     try:
         Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
                                             introduccion, body, conclusion, head_title, 'bach',
-                                            university_name=university_name)
+                                            university_name=university_name, bibliography=bibliography)
     except Exception:
         logging.exception('Error armando el documento "%s"', head_title)
         return form_error('Ocurrió un error armando el documento. Inténtalo de nuevo; '
@@ -151,7 +154,7 @@ def process_form_bach():
 
     if not os.path.isfile(docx_output):
         return form_error('El documento no se pudo guardar. Inténtalo de nuevo.', 'show_form_bach')
-    if not (body.strip() or introduccion.strip() or conclusion.strip()):
+    if not (body.strip() or introduccion.strip() or conclusion.strip() or bibliography.strip()):
         flash('El documento tiene solo la portada porque dejaste el contenido en blanco.', 'warning')
     if not os.path.isfile(docx_output[:-5] + '.pdf'):
         flash('No se pudo generar el PDF; solo está disponible la versión Word.', 'warning')
@@ -159,6 +162,7 @@ def process_form_bach():
     db.record_document(user['id'], head_title, 'bach', tokens_used=0, mode='manual',
                        file_stem=file_stem + random_code)
     session['file_generated'] = True
+    session['document_kind'] = 'report'
 
     # Redirect to a new page or indicate success
     return redirect(url_for('choose_file', filename=file_stem + random_code))
@@ -174,13 +178,45 @@ def show_form():
         return plans.redirect_to_plans(access['ai']['reason'])
     return render_template('universitario.html', access=access)
 
+
+@app.route('/glossary/terms', methods=['POST'])
+@login_required
+def glossary_terms():
+    allowed, _ = plans.generation_access(current_user(), 'ai')
+    if not allowed:
+        return jsonify(error='Necesitas acceso a Gullieth AI para leer la lista. Consulta los planes.'), 403
+    upload = request.files.get('terms_file')
+    if upload is None or not upload.filename:
+        return jsonify(error='Selecciona una imagen o documento con los términos.'), 400
+    usage = []
+    try:
+        terms = extract_terms(upload, usage_sink=usage)
+        return jsonify(terms=terms, count=len(terms))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    except GenerationError as exc:
+        return jsonify(error=exc.user_message), 502
+    finally:
+        session['glossary_extraction_tokens'] = session.get('glossary_extraction_tokens', 0) + sum(usage)
+
+
+@app.errorhandler(413)
+def upload_too_large(error):
+    if request.path == '/glossary/terms':
+        return jsonify(error='El archivo supera el límite de 10 MB.'), 413
+    return form_error('El archivo o el formulario es demasiado grande (máximo 10 MB por archivo).')
+
 @app.route('/process_form', methods=['POST'])
 @login_required
 def process_form():
     user = current_user()
 
     form_data = request.form
-    manual_mode = form_data.get('global-mode') == 'standard'
+    document_kind = form_data.get('document_kind', 'report')
+    if document_kind not in ('report', 'glossary'):
+        return form_error('Elige trabajo normal o glosario.')
+    is_glossary = document_kind == 'glossary'
+    manual_mode = not is_glossary and form_data.get('global-mode') == 'standard'
 
     # Se valida ANTES de llamar a Gemini: un usuario sin permiso no debe
     # gastar tokens. Con IA y manual hay reglas distintas (ver plans.py).
@@ -201,11 +237,14 @@ def process_form():
     # 'Lo escribo yo': el usuario redacta el contenido a mano en vez de
     # pedírselo a la IA. Estos checkboxes controlan, en ambos modos, si la
     # introducción y la conclusión se incluyen en el documento o no.
-    incluir_introduccion = 'incluir_introduccion' in form_data
-    incluir_conclusion = 'incluir_conclusion' in form_data
+    incluir_introduccion = not is_glossary and 'incluir_introduccion' in form_data
+    incluir_conclusion = not is_glossary and 'incluir_conclusion' in form_data
+    incluir_bibliografia = 'incluir_bibliografia' in form_data
 
     introduccion = ''
     conclusion = ''
+    bibliography = ''
+    glossary_entries = None
     # Lista compartida donde cada llamada a Gemini anota sus tokens
     # (ver IA._record_usage); se suma al final para guardarla en la BD.
     usage_sink = []
@@ -213,13 +252,36 @@ def process_form():
     # saber (se muestran en la pantalla de descarga).
     warnings = []
 
-    if manual_mode:
+    if is_glossary:
+        try:
+            source = form_data.get('glossary_source', 'topic')
+            if source == 'list':
+                terms = parse_terms(form_data.get('glossary_terms', ''))
+                count = len(terms)
+            elif source == 'topic':
+                terms = None
+                count = int(form_data.get('glossary_count', '20'))
+                if not 1 <= count <= 100:
+                    raise ValueError('El glosario debe tener entre 1 y 100 términos.')
+            else:
+                raise ValueError('Elige el tema o una lista de términos para el glosario.')
+            usage_sink.append(session.pop('glossary_extraction_tokens', 0))
+            glossary_entries = generate_glossary(processor.title, count, terms=terms,
+                bibliography=incluir_bibliografia, usage_sink=usage_sink)
+            body = ''
+        except ValueError as exc:
+            return form_error(str(exc))
+        except GenerationError as exc:
+            return form_error(f'No se pudo generar el glosario. {exc.user_message}')
+    elif manual_mode:
         body = processor.body
         if incluir_introduccion:
             introduccion = processor.introduccion
         if incluir_conclusion:
             conclusion = processor.conclusion
-        if not (body.strip() or introduccion.strip() or conclusion.strip()):
+        if incluir_bibliografia:
+            bibliography = form_data.get('bibliografia', '').strip()
+        if not (body.strip() or introduccion.strip() or conclusion.strip() or bibliography.strip()):
             # Portada sola: permitido en modo manual con todo en blanco.
             warnings.append('El documento tiene solo la portada porque dejaste el contenido en blanco.')
     else:
@@ -262,6 +324,12 @@ def process_form():
             introduccion = results.get('introducción', '')
             conclusion = results.get('conclusión', '')
 
+        if incluir_bibliografia:
+            try:
+                bibliography = generate_bibliography(processor.title, body, usage_sink=usage_sink)
+            except GenerationError as exc:
+                warnings.append(f'No se incluyó la bibliografía. {exc.user_message}')
+
     input_doc='input/plantilla.docx'
     input_doc2='input/plantillaempty.docx'
     # Check if the file exists
@@ -276,7 +344,9 @@ def process_form():
         Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
                                             introduccion, body, conclusion, head_title, 'uni',
                                             university_name=university_name,
-                                            detect_subtitles=not manual_mode)
+                                            detect_subtitles=not manual_mode,
+                                            bibliography=bibliography,
+                                            glossary_entries=glossary_entries)
     except Exception:
         logging.exception('Error armando el documento "%s"', head_title)
         return form_error('Ocurrió un error armando el documento. Inténtalo de nuevo; '
@@ -291,6 +361,7 @@ def process_form():
                        mode='manual' if manual_mode else 'ai',
                        file_stem=file_stem + random_code)
     session['file_generated'] = True
+    session['document_kind'] = document_kind
     for text in warnings:
         flash(text, 'warning')
 
@@ -320,7 +391,8 @@ def choose_file(filename):
         filetype: url_for('shared_file', token=token, filetype=filetype, _external=True)
         for filetype in SHARE_FILETYPES
     }
-    return render_template('download.html', filename=filename, share_urls=share_urls)
+    return render_template('download.html', filename=filename, share_urls=share_urls,
+                           document_kind=session.get('document_kind', 'report'))
 
 @app.route('/download_file/<filename>/<filetype>')
 @login_required

@@ -20,6 +20,9 @@
 </head>
 
 <body>
+  {% macro copy_value(label, value, display=none) %}
+    <dt>{{ label }}</dt><dd><span>{{ display if display is not none else value }}</span><button class="pay-copy" type="button" data-copy="{{ value }}" aria-label="Copiar {{ label }}" title="Copiar {{ label }}"><i class="bx bx-copy" aria-hidden="true"></i></button></dd>
+  {% endmacro %}
 
   <header class="nav" data-nav>
     <div class="shell nav__inner">
@@ -64,7 +67,6 @@
       <article class="card plan-card">
         <h2 class="plan-card__name">{{ settings['plan_name'] }}</h2>
         <div class="plan-card__price">${{ '%g'|format(price) }} <small>/ {{ settings['plan_days'] }} días</small></div>
-        {% if price_bs %}<div class="plan-card__bs">≈ Bs. {{ '{:,.2f}'.format(price_bs) }}</div>{% endif %}
         <ul>
           <li><i class="bx bx-check"></i> Documentos con IA sin límite</li>
           <li><i class="bx bx-check"></i> Documentos escritos por ti sin límite</li>
@@ -95,16 +97,22 @@
         <form method="POST" action="{{ url_for('plans.pay') }}" data-pay>
           <div class="pay-tabs" role="radiogroup" aria-label="Método de pago">
             <input type="radio" id="pm-binance" name="method" value="binance" checked>
-            <label for="pm-binance">Binance</label>
+            <label for="pm-binance">
+              {% if payment_logos['binance'] %}<img class="pay-logo" src="{{ url_for('static', filename=payment_logos['binance']) }}" alt="" aria-hidden="true" width="36" height="24">{% endif %}
+              <span>Binance</span>
+            </label>
             <input type="radio" id="pm-pm" name="method" value="pago_movil">
-            <label for="pm-pm">Pago Móvil</label>
+            <label for="pm-pm">
+              {% if payment_logos['pago_movil'] %}<img class="pay-logo" src="{{ url_for('static', filename=payment_logos['pago_movil']) }}" alt="" aria-hidden="true" width="36" height="24">{% endif %}
+              <span>Pago Móvil</span>
+            </label>
           </div>
 
           <div class="pay-data is-on" data-pay-data="binance">
             {% if settings['binance_email'] %}
             <dl>
-              <dt>Binance Pay</dt><dd>{{ settings['binance_email'] }}</dd>
-              <dt>Monto</dt><dd>${{ '%g'|format(price) }} USDT</dd>
+              {{ copy_value('ID de Binance', settings['binance_email']) }}
+              {{ copy_value('Monto', '%g'|format(price), ('$%g USDT'|format(price))) }}
             </dl>
             {% else %}<div class="empty">Los datos de Binance aún no están disponibles.</div>{% endif %}
           </div>
@@ -112,15 +120,18 @@
           <div class="pay-data" data-pay-data="pago_movil">
             {% if settings['pm_phone'] %}
             <dl>
-              <dt>Banco</dt><dd>{{ settings['pm_bank'] }}</dd>
-              <dt>Teléfono</dt><dd>{{ settings['pm_phone'] }}</dd>
-              {% if settings['pm_id'] %}<dt>Cédula/RIF</dt><dd>{{ settings['pm_id'] }}</dd>{% endif %}
-              {% if settings['pm_holder'] %}<dt>Titular</dt><dd>{{ settings['pm_holder'] }}</dd>{% endif %}
-              <dt>Monto</dt><dd>{% if price_bs %}Bs. {{ '{:,.2f}'.format(price_bs) }} (${{ '%g'|format(price) }}){% else %}${{ '%g'|format(price) }} al cambio del día{% endif %}</dd>
+              {{ copy_value('Banco', settings['pm_bank']|replace('Banco de Venezuela (BDV)', 'BDV')) }}
+              {{ copy_value('Teléfono', settings['pm_phone']) }}
+              {% if settings['pm_id'] %}{{ copy_value('Cédula', settings['pm_id']) }}{% endif %}
+              {% if settings['pm_holder'] %}{{ copy_value('Titular', settings['pm_holder']) }}{% endif %}
+              {% if price_bs %}
+              {{ copy_value('Monto', '%.2f'|format(price_bs), 'Bs. {:,.2f} (${:g})'.format(price_bs, price)) }}
+              {% else %}<dt>Monto</dt><dd>Monto en bolívares pendiente de confirmar</dd>{% endif %}
             </dl>
             {% else %}<div class="empty">Los datos de Pago Móvil aún no están disponibles.</div>{% endif %}
           </div>
 
+          <p class="help" data-copy-status role="status" aria-live="polite"></p>
           <div class="field">
             <label for="f-ref">Referencia del pago</label>
             <input class="input" id="f-ref" name="reference" required minlength="4" maxlength="40"
@@ -175,6 +186,17 @@
         r.addEventListener('change', sync);
       });
       sync();
+      form.querySelectorAll('[data-copy]').forEach(function (button) {
+        button.addEventListener('click', async function () {
+          var status = form.querySelector('[data-copy-status]');
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy);
+            status.textContent = button.getAttribute('aria-label').replace('Copiar ', '') + ' copiado.';
+          } catch (error) {
+            status.textContent = 'No se pudo copiar. Selecciona el dato y cópialo manualmente.';
+          }
+        });
+      });
     })();
   </script>
 </body>

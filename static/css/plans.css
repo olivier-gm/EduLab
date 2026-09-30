@@ -37,9 +37,10 @@
 .pay-card h2 { font-size: 1.1rem; margin-bottom: 4px; }
 .pay-card > p { color: var(--text-dim); font-size: 0.86rem; margin-bottom: 16px; }
 
-.pay-tabs { display: inline-flex; padding: 4px; margin-bottom: 16px; border-radius: var(--r-full); background: var(--glass); border: 1px solid var(--stroke); }
+.pay-tabs { display: flex; flex-wrap: wrap; padding: 4px; margin-bottom: 16px; border-radius: var(--r-full); background: var(--glass); border: 1px solid var(--stroke); }
 .pay-tabs input { position: absolute; opacity: 0; pointer-events: none; }
-.pay-tabs label { padding: 8px 18px; border-radius: var(--r-full); font-size: 0.88rem; color: var(--text-soft); cursor: pointer; }
+.pay-tabs label { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 8px; padding: 8px 10px; border-radius: var(--r-full); font-size: 0.88rem; color: var(--text-soft); cursor: pointer; white-space: nowrap; }
+.pay-logo { width: 36px; height: 24px; object-fit: contain; flex-shrink: 0; }
 .pay-tabs input:checked + label { background: var(--glass-strong); color: #fff; }
 .pay-tabs input:focus-visible + label { outline: 2px solid var(--gold); outline-offset: 2px; }
 
@@ -47,7 +48,10 @@
 .pay-data.is-on { display: block; }
 .pay-data dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 0.9rem; }
 .pay-data dt { color: var(--text-dim); }
-.pay-data dd { margin: 0; color: #fff; word-break: break-all; }
+.pay-data dd { margin: 0; color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.pay-data dd span { overflow-wrap: anywhere; }
+.pay-copy { flex-shrink: 0; padding: 4px 8px; border: 1px solid var(--stroke); border-radius: var(--r-full); background: var(--glass); color: var(--text-soft); font: inherit; font-size: 0.75rem; cursor: pointer; }
+.pay-copy:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .pay-data .empty { color: var(--text-dim); font-size: 0.88rem; }
 
 .pay-card .field { margin-bottom: 14px; text-align: left; }

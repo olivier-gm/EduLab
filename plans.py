@@ -14,8 +14,14 @@ referencia y un admin la aprueba en /admin, lo que activa el plan.
 """
 
 import re
+import time
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from functools import lru_cache
+from pathlib import Path
 
-from flask import Blueprint, render_template, request, redirect, url_for
+import requests
+from flask import Blueprint, current_app, render_template, request, redirect, url_for
 
 import db
 from auth import login_required, current_user
@@ -27,6 +33,56 @@ MODE_LABELS = {'ai': 'con IA', 'manual': 'manuales'}
 PAY_METHODS = {'binance': 'Binance Pay', 'pago_movil': 'Pago Móvil'}
 
 REFERENCE_RE = re.compile(r'^[A-Za-z0-9\-_.]{4,40}$')
+
+
+@lru_cache(maxsize=1)
+def _bcv_rate(bucket):
+    """Consulta acotada; guarda éxitos y fallos durante cinco minutos."""
+    try:
+        response = requests.get('https://ve.dolarapi.com/v1/dolares/oficial', timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict) or data.get('moneda') != 'USD' or data.get('fuente') != 'oficial':
+            return None
+        rate = Decimal(str(data['promedio']))
+        effective = datetime.fromisoformat(data['fechaActualizacion']).date()
+        today = datetime.now(timezone(timedelta(hours=-4))).date()
+        if (rate.is_finite() and rate > 0 and effective is not None
+                and 0 <= (today - effective).days <= 4):
+            return rate, effective
+    except (requests.RequestException, KeyError, TypeError, ValueError, InvalidOperation):
+        pass
+    return None
+
+
+def _bolivar_quote(settings):
+    quote = _bcv_rate(int(time.time() // 300))
+    if quote:
+        rate, effective = quote
+        label = f'Tasa BCV: Bs. {rate:,.4f} por USD · Actualización: {effective:%d/%m/%Y} · DolarAPI'
+    else:
+        try:
+            rate = Decimal(settings['bs_rate'] or '0')
+        except InvalidOperation:
+            return None, 'Tasa BCV no disponible. Consulta el monto antes de pagar.'
+        if not rate.is_finite() or rate <= 0:
+            return None, 'Tasa BCV no disponible. Consulta el monto antes de pagar.'
+        label = f'Tasa manual de respaldo: Bs. {rate:,.4f} por USD (BCV no disponible)'
+    amount = (Decimal(settings['plan_price_usd'] or '0') * rate).quantize(
+        Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return amount, label
+
+
+def _payment_logos():
+    """Logos locales opcionales, en orden SVG, PNG y WebP."""
+    logos = {}
+    for method, name in (('binance', 'binance'), ('pago_movil', 'bdv')):
+        logos[method] = next(
+            (f'img/payments/{name}.{ext}' for ext in ('svg', 'png', 'webp')
+             if (Path(current_app.static_folder) / f'img/payments/{name}.{ext}').is_file()),
+            None,
+        )
+    return logos
 
 
 def parse_limit(raw):
@@ -105,24 +161,22 @@ def plans():
     summary = access_summary(user, settings)
 
     price = float(settings['plan_price_usd'] or 0)
-    rate = 0.0
-    try:
-        rate = float(settings['bs_rate'] or 0)
-    except ValueError:
-        pass
+    price_bs, rate_label = _bolivar_quote(settings)
 
     payments = db.get_user_payments(user['id'])
     return render_template(
         'plans.html',
         settings=settings,
         price=price,
-        price_bs=(price * rate) if rate > 0 else None,
+        price_bs=price_bs,
+        rate_label=rate_label,
         active=db.has_active_plan(user),
         expires_at=db.plan_expiry(user),
         summary=summary,
         payments=payments,
         has_pending=any(p['status'] == 'pending' for p in payments),
         pay_methods=PAY_METHODS,
+        payment_logos=_payment_logos(),
         reason_message=_reason_message(request.args.get('reason'), summary),
         sent=request.args.get('sent') == '1',
         error=request.args.get('error'),

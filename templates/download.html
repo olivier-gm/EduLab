@@ -131,8 +131,12 @@
       <!-- ---------- Notas ---------- -->
       <div class="done__notes">
         <span class="done__note"><i class="bx bx-time-five"></i> Disponible por {{ retention_hours }} horas · <a href="{{ url_for('my_documents') }}" class="inline-link">Ver mis informes</a></span>
+        {% if document_kind == 'glossary' %}
+        <span class="done__note"><i class="bx bx-sort-a-z"></i> Glosario en orden alfabético</span>
+        {% else %}
         <span class="done__note"><i class="bx bx-list-ol"></i> Índice incluido</span>
         <span class="done__note"><i class="bx bx-refresh"></i> Actualiza el índice al abrirlo en Word</span>
+        {% endif %}
       </div>
 
       <div class="done__actions">

@@ -6,14 +6,86 @@ import pytest
 
 import db
 import plans
+from decimal import Decimal
+from datetime import datetime, timezone
+from requests import RequestException
 
 app_module = pytest.importorskip('app')
+
+
+def test_dolarapi_cache_and_invalid_data(monkeypatch):
+    today = datetime.now(timezone(timedelta(hours=-4))).date()
+    calls = []
+
+    data = {'moneda': 'USD', 'fuente': 'oficial', 'promedio': 50.123,
+            'fechaActualizacion': f'{today}T00:00:00-04:00'}
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return data
+
+    def get(url, timeout):
+        assert url == 'https://ve.dolarapi.com/v1/dolares/oficial'
+        assert timeout == 5
+        calls.append(1)
+        return Response()
+
+    monkeypatch.setattr(plans.requests, 'get', get)
+    plans._bcv_rate.cache_clear()
+    try:
+        assert plans._bcv_rate(1) == (Decimal('50.123'), today)
+        assert plans._bcv_rate(1) == (Decimal('50.123'), today)
+        assert len(calls) == 1
+        data['promedio'] = 'nan'
+        assert plans._bcv_rate(2) is None
+        data.update(promedio=50, fechaActualizacion='2020-01-01T00:00:00-04:00')
+        assert plans._bcv_rate(3) is None
+
+        data.update(fechaActualizacion=f'{today}T00:00:00-04:00', fuente='paralelo')
+        assert plans._bcv_rate(4) is None
+        data.clear()
+        assert plans._bcv_rate(5) is None
+
+        def unavailable(*args, **kwargs):
+            raise RequestException('BCV no disponible')
+
+        monkeypatch.setattr(plans.requests, 'get', unavailable)
+        assert plans._bcv_rate(6) is None
+    finally:
+        plans._bcv_rate.cache_clear()
+
+
+def test_bcv_amount_on_payment_page(client, monkeypatch):
+    login(client, make_user())
+    db.set_settings({'pm_phone': '04120000000', 'bs_rate': '40',
+                     'binance_email': '12345678', 'pm_id': 'V1234567',
+                     'pm_holder': 'Titular', 'pm_bank': 'Banco de Venezuela (BDV) · 0102'})
+    today = datetime.now(timezone(timedelta(hours=-4))).date()
+    monkeypatch.setattr(plans, '_bcv_rate', lambda bucket: (Decimal('50.123'), today))
+    page = client.get('/plans').get_data(as_text=True)
+    assert page.count('Bs. 250.62') == 1
+    assert 'Tasa BCV:' not in page
+    assert '<dt>Tasa</dt>' not in page and 'Cédula/RIF' not in page
+    assert 'Banco de Venezuela (BDV)' not in page and 'BDV · 0102' in page
+    assert '<dt>ID de Binance</dt>' in page
+    assert page.count('class="pay-copy"') == 7
+    assert 'data-copy="250.62"' in page and 'data-copy="12345678"' in page
+    monkeypatch.setattr(plans, '_bcv_rate', lambda bucket: None)
+    page = client.get('/plans').get_data(as_text=True)
+    assert 'Bs. 200.00' in page and 'Tasa manual de respaldo:' not in page
+    db.set_settings({'bs_rate': ''})
+    page = client.get('/plans').get_data(as_text=True)
+    assert 'Monto en bolívares pendiente de confirmar' in page
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     """Cliente Flask con una base de datos vacía y aislada."""
     monkeypatch.setattr(db, 'DB_PATH', str(tmp_path / 'test.db'))
+    monkeypatch.setattr(plans, '_bcv_rate', lambda bucket: None)
     db.init_db()
     app_module.app.config['TESTING'] = True
     # Contexto de aplicación abierto durante todo el test: los helpers de
@@ -185,6 +257,36 @@ def test_pagina_de_planes_muestra_el_motivo(client):
     assert 'disponibles solo con el plan' in html
 
 
+def test_logos_de_pago_son_opcionales_y_prefieren_svg(client, tmp_path, monkeypatch):
+    login(client, make_user())
+    monkeypatch.setattr(app_module.app, 'static_folder', str(tmp_path))
+    logos = tmp_path / 'img' / 'payments'
+    logos.mkdir(parents=True)
+
+    html = client.get('/plans').get_data(as_text=True)
+    assert 'pay-logo' not in html
+    assert 'Binance' in html and 'Pago Móvil' in html
+
+    for name in ('binance', 'bdv'):
+        (logos / f'{name}.webp').write_bytes(b'')
+    html = client.get('/plans').get_data(as_text=True)
+    assert '/static/img/payments/binance.webp' in html
+    assert '/static/img/payments/bdv.webp' in html
+
+    for name in ('binance', 'bdv'):
+        (logos / f'{name}.png').write_bytes(b'')
+    html = client.get('/plans').get_data(as_text=True)
+    assert '/static/img/payments/binance.png' in html
+    assert '/static/img/payments/bdv.png' in html
+    assert '.webp' not in html
+
+    (logos / 'binance.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    html = client.get('/plans').get_data(as_text=True)
+    assert '/static/img/payments/binance.svg' in html
+    assert '/static/img/payments/binance.png' not in html
+    assert '/static/img/payments/bdv.png' in html
+
+
 def test_reportar_pago_valida_y_evita_duplicados(client):
     uid = make_user()
     login(client, uid)
@@ -204,6 +306,33 @@ def test_admin_routes_requieren_admin(client):
     assert not db.has_active_plan(user(uid))
 
 
+def test_admin_shows_persistent_bibliography_origin(client, monkeypatch):
+    import glossary
+    import IA
+    login(client, make_user(admin=True))
+    page = client.get('/admin/').get_data(as_text=True)
+    assert 'Todavía no se ha generado una bibliografía automática' in page
+    monkeypatch.setattr(IA, '_search_blocked_until', 0)
+    monkeypatch.setattr(IA, 'SEARCH_ENABLED', False)
+    monkeypatch.setattr(glossary, '_research_sources', lambda *a: (
+        [{'title': 'Fuente encontrada', 'url': 'https://example.org/fuente'}], 'Investigación'))
+    monkeypatch.setattr(glossary, '_json_generate', lambda *a: pytest.fail('Google Search funcionó'))
+    assert 'example.org' in glossary.generate_bibliography('Biología', 'Células')
+    assert db.get_settings()['bibliography_source'] == 'google_search'
+    page = client.get('/admin/').get_data(as_text=True)
+    assert 'badge--approved">Google Search' in page and '(hora de Venezuela)' in page
+    def unavailable(*args):
+        raise IA.GenerationError('unavailable', 'Sin respuesta <script>')
+    monkeypatch.setattr(glossary, '_research_sources', unavailable)
+    monkeypatch.setattr(glossary, '_json_generate', lambda *a: ['OpenStax. Biology 2e.'])
+    assert glossary.generate_bibliography('Biología', 'Células') == 'OpenStax. Biology 2e.'
+    db.close_db()  # El estado sobrevive al cierre de la conexión.
+    assert db.get_settings()['bibliography_source'] == 'ai'
+    page = client.get('/admin/').get_data(as_text=True)
+    assert 'IA · sin verificación en internet' in page
+    assert 'Sin respuesta &lt;script&gt;' in page
+
+
 def test_admin_guarda_ajustes_y_aprueba(client):
     admin = make_user('adm@x.com', admin=True)
     uid = make_user()
@@ -214,7 +343,7 @@ def test_admin_guarda_ajustes_y_aprueba(client):
 
     client.post('/admin/settings', data={
         'free_ai_limit': '3', 'free_manual_enabled': 'on', 'free_manual_limit': '',
-        'plan_price_usd': '5', 'plan_days': '30', 'binance_email': 'pay@x.com',
+        'plan_price_usd': '5', 'plan_days': '30', 'binance_email': '12345678',
     })
     client.post(f'/admin/payments/{pid}/approve')
 
@@ -223,7 +352,7 @@ def test_admin_guarda_ajustes_y_aprueba(client):
         assert s['free_ai_enabled'] == '0'      # checkbox sin marcar
         assert s['free_ai_limit'] == '3'
         assert s['free_manual_enabled'] == '1'
-        assert s['binance_email'] == 'pay@x.com'
+        assert s['binance_email'] == '12345678'
         assert db.has_active_plan(user(uid))
 
 

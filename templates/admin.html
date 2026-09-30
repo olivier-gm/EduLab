@@ -63,6 +63,26 @@
 
     {% if msg %}<div class="admin-msg" role="status"><i class="bx bx-info-circle"></i> {{ msg }}</div>{% endif %}
 
+    <section class="admin-section" id="bibliografia">
+      <h2 class="admin-section__title"><i class="bx bx-book"></i> Bibliografía automática</h2>
+      <div class="card admin-stat" role="status">
+        <p>Se intenta primero con Google Search. Si falla o no devuelve fuentes, se genera con IA.</p>
+        {% if settings['bibliography_source'] %}
+        <p><strong>Última bibliografía generada:</strong>
+          {% if settings['bibliography_source'] == 'google_search' %}
+          <span class="badge badge--approved">Google Search</span>
+          {% else %}
+          <span class="badge badge--pending">IA · sin verificación en internet</span>
+          {% endif %}
+        </p>
+        <p class="is-dim">{{ settings['bibliography_updated_at'] }} (hora de Venezuela)</p>
+        {% if settings['bibliography_reason'] %}<p>{{ settings['bibliography_reason'] }}</p>{% endif %}
+        {% else %}
+        <p class="is-dim">Todavía no se ha generado una bibliografía automática con seguimiento.</p>
+        {% endif %}
+      </div>
+    </section>
+
     <section class="admin-section" id="planes">
       <h2 class="admin-section__title"><i class="bx bx-credit-card"></i> Planes y pagos</h2>
 
@@ -91,15 +111,15 @@
           <label>Nombre <input class="input" name="plan_name" maxlength="60" value="{{ settings['plan_name'] }}"></label>
           <label>Precio (USD) <input class="input" name="plan_price_usd" inputmode="decimal" value="{{ settings['plan_price_usd'] }}"></label>
           <label>Duración (días) <input class="input" type="number" min="1" name="plan_days" value="{{ settings['plan_days'] }}"></label>
-          <label>Tasa Bs por $ (opcional) <input class="input" name="bs_rate" inputmode="decimal" value="{{ settings['bs_rate'] }}" placeholder="Ej. 40.5"></label>
+          <label>Tasa manual de respaldo Bs por USD (si BCV falla) <input class="input" name="bs_rate" inputmode="decimal" value="{{ settings['bs_rate'] }}" placeholder="Opcional"></label>
         </div>
 
         <h3>Datos de cobro</h3>
         <div class="admin-form__grid">
-          <label>Correo de Binance <input class="input" type="email" name="binance_email" maxlength="120" value="{{ settings['binance_email'] }}"></label>
+          <label>ID de Binance <input class="input" name="binance_email" maxlength="120" value="{{ settings['binance_email'] }}" placeholder="ID de Binance"></label>
           <label>Banco (Pago Móvil) <input class="input" name="pm_bank" maxlength="80" value="{{ settings['pm_bank'] }}"></label>
           <label>Teléfono <input class="input" name="pm_phone" maxlength="30" value="{{ settings['pm_phone'] }}" placeholder="0414-0000000"></label>
-          <label>Cédula / RIF <input class="input" name="pm_id" maxlength="30" value="{{ settings['pm_id'] }}"></label>
+          <label>Cédula <input class="input" name="pm_id" maxlength="30" value="{{ settings['pm_id'] }}"></label>
           <label>Titular <input class="input" name="pm_holder" maxlength="80" value="{{ settings['pm_holder'] }}"></label>
         </div>
         <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar ajustes</button>
