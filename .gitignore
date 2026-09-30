@@ -1,0 +1,13 @@
+# La rama demo es un sitio estatico publico: nunca debe llevar secretos ni datos locales.
+.env
+.env.*
+*.db
+*.db-journal
+output/
+.lo_profile/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.bak
+tests/
