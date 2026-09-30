@@ -16,8 +16,8 @@ load_dotenv()
 
 from form_processor import FormProcessor
 from algorythms import Document_process
-from IA import (generate_essay_content, generate_introduction, generate_conclusion,
-                check_title, GenerationError)
+from IA import generate_essay_content, generate_introduction, generate_conclusion, GenerationError
+from title_check import check_title
 
 import db
 from auth import auth_bp, current_user, login_required
@@ -227,10 +227,9 @@ def process_form():
         #    de "no se pudo consultar al modelo": lo segundo NO es culpa del
         #    título y antes se trataba igual (volvía al inicio sin decir nada).
         try:
-            if not check_title(processor.formatted_title, usage_sink=usage_sink):
-                return form_error(
-                    f'La IA no reconoce «{processor.title}» como un tema que pueda investigar '
-                    '(parece texto sin sentido o letras al azar). Escríbelo con palabras claras.')
+            verdict = check_title(processor.formatted_title, usage_sink=usage_sink)
+            if not verdict.valid:
+                return form_error(verdict.message(processor.title))
         except GenerationError as e:
             return form_error(f'No se pudo validar el título. {e.user_message}')
 

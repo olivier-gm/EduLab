@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 import db
+from title_check import TitleVerdict
 
 IA = pytest.importorskip('IA')
 app_module = pytest.importorskip('app')
@@ -216,7 +217,8 @@ def test_titulo_solo_numeros_se_rechaza(client):
 
 
 def test_titulo_rechazado_por_la_ia_dice_por_que(client, monkeypatch):
-    monkeypatch.setattr(app_module, 'check_title', lambda *a, **k: False)
+    monkeypatch.setattr(app_module, 'check_title',
+                        lambda *a, **k: TitleVerdict(False, 'gibberish'))
     html = post_form(client, title='asdkjh qwe')
     assert 'no reconoce' in html and 'letras al azar' in html
 
@@ -231,7 +233,7 @@ def test_error_de_api_al_validar_no_se_culpa_al_titulo(client, monkeypatch):
 
 
 def test_ensayo_fallido_no_entrega_portada_sola(client, monkeypatch, fake_document):
-    monkeypatch.setattr(app_module, 'check_title', lambda *a, **k: True)
+    monkeypatch.setattr(app_module, 'check_title', lambda *a, **k: TitleVerdict(True))
 
     def boom(*a, **k):
         raise IA.GenerationError('quota', 'La IA alcanzó su límite de uso en este momento.')
@@ -243,7 +245,7 @@ def test_ensayo_fallido_no_entrega_portada_sola(client, monkeypatch, fake_docume
 
 
 def test_intro_fallida_entrega_el_documento_con_aviso(client, monkeypatch, fake_document):
-    monkeypatch.setattr(app_module, 'check_title', lambda *a, **k: True)
+    monkeypatch.setattr(app_module, 'check_title', lambda *a, **k: TitleVerdict(True))
     monkeypatch.setattr(app_module, 'generate_essay_content',
                         lambda *a, warnings=None, **k: warnings.append('sin búsqueda actualizada') or 'Cuerpo')
 
