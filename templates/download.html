@@ -31,6 +31,7 @@
       <nav class="nav__links" data-nav-links>
         <a class="nav__link" href="{{ url_for('welcome') }}">Inicio</a>
         <a class="nav__link" href="{{ url_for('show_form') }}">Crear otro documento</a>
+        <a class="nav__link" href="{{ url_for('my_documents') }}">Mis informes</a>
         {% if current_user and current_user.is_admin %}
         <a class="nav__link" href="{{ url_for('admin.dashboard') }}">Admin</a>
         {% endif %}
@@ -104,7 +105,7 @@
       <!-- ---------- Compartir por enlace ---------- -->
       <section class="share" data-share>
         <h2 class="share__title"><i class="bx bx-share-alt"></i> Compartir el documento</h2>
-        <p class="share__sub">Se envía un enlace de descarga que funciona sin iniciar sesión y vence en 2 horas.</p>
+        <p class="share__sub">Se envía un enlace de descarga que funciona sin iniciar sesión y vence en {{ retention_hours }} horas.</p>
 
         <div class="seg share__format" role="radiogroup" aria-label="Formato a compartir">
           <input type="radio" id="sh-docx" name="share-format" value="docx" checked>
@@ -129,7 +130,7 @@
 
       <!-- ---------- Notas ---------- -->
       <div class="done__notes">
-        <span class="done__note"><i class="bx bx-time-five"></i> Disponible por unas 2 horas</span>
+        <span class="done__note"><i class="bx bx-time-five"></i> Disponible por {{ retention_hours }} horas · <a href="{{ url_for('my_documents') }}" class="inline-link">Ver mis informes</a></span>
         <span class="done__note"><i class="bx bx-list-ol"></i> Índice incluido</span>
         <span class="done__note"><i class="bx bx-refresh"></i> Actualiza el índice al abrirlo en Word</span>
       </div>
@@ -170,7 +171,7 @@
       function link() { return urls[format()]; }
       function message() {
         return 'Te comparto mi documento (' + (format() === 'pdf' ? 'PDF' : 'Word') +
-          '). Descárgalo aquí, el enlace vence en 2 horas: ' + link();
+          '). Descárgalo aquí, el enlace vence en {{ retention_hours }} horas: ' + link();
       }
       function say(text) {
         toast.textContent = text;

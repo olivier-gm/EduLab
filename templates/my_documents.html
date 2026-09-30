@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#141430">
+  <meta name="robots" content="noindex">
+  <title>Mis informes · Gullieth</title>
+
+  <link rel="icon" href="{{ url_for('static', filename='icono.jpg') }}" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/form.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/documents.css') }}">
+
+  <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
+</head>
+
+<body>
+
+  <header class="nav" data-nav>
+    <div class="shell nav__inner">
+      <a href="{{ url_for('welcome') }}" class="brand">
+        <img class="brand__img" src="{{ url_for('static', filename='img/logo.png') }}" alt="Gullieth">
+        <span class="brand__name">Gulli<span>eth</span></span>
+      </a>
+      <nav class="nav__links" data-nav-links>
+        <a class="nav__link" href="{{ url_for('welcome') }}">Inicio</a>
+        <a class="nav__link" href="{{ url_for('show_form') }}">Crear documento</a>
+        <a class="nav__link" href="{{ url_for('plans.plans') }}">Planes</a>
+      </nav>
+      <div class="nav__actions">
+        <span class="pill btn--nav-cta"><i class="bx bx-folder-open"></i> Mis informes</span>
+        <button class="nav__burger" data-burger type="button" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell docs-page">
+
+    <div class="docs-head">
+      <h1>Mis informes</h1>
+      <p>Aquí están los documentos que generaste. Se eliminan automáticamente {{ retention_hours }} horas después de crearse, así que descárgalos a tiempo.</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, text in messages %}
+    <div class="flash flash--{{ category }}" role="alert"><i class="bx bx-error-circle"></i><span>{{ text }}</span></div>
+    {% endfor %}
+    {% endwith %}
+
+    {% if documents %}
+    <div class="docs-list">
+      {% for d in documents %}
+      <article class="card doc-item{{ ' is-urgent' if d.urgent }}" data-expires="{{ d.expires_iso }}">
+        <div class="doc-item__main">
+          <h2 class="doc-item__title">{{ d.title }}</h2>
+          <div class="doc-item__meta">
+            <span><i class="bx bx-{{ 'shape-triangle' if d.mode == 'ai' else 'pencil' }}"></i> {{ 'Con IA' if d.mode == 'ai' else 'Escrito por ti' }}</span>
+            <span><i class="bx bx-{{ 'been-here' if d.doc_type == 'uni' else 'book' }}"></i> {{ 'Universitario' if d.doc_type == 'uni' else 'Bachillerato' }}</span>
+            <span><i class="bx bx-calendar"></i> {{ d.created_at }} UTC</span>
+          </div>
+          <div class="doc-item__time">
+            <div class="doc-item__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+              aria-valuenow="{{ (d.fraction * 100)|round|int }}" aria-label="Tiempo restante">
+              <span style="width: {{ (d.fraction * 100)|round(1) }}%"></span>
+            </div>
+            <span class="doc-item__left"><i class="bx bx-time-five"></i> Vence en <b data-left>{{ d.time_left }}</b></span>
+          </div>
+        </div>
+        <div class="doc-item__actions">
+          <a class="btn btn--word" href="{{ url_for('my_document_download', doc_id=d.id, filetype='docx') }}"><i class="bx bx-download"></i> Word</a>
+          {% if d.has_pdf %}
+          <a class="btn btn--pdf" href="{{ url_for('my_document_download', doc_id=d.id, filetype='pdf') }}"><i class="bx bx-download"></i> PDF</a>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card docs-empty">
+      <i class="bx bx-folder-open"></i>
+      <h2>Todavía no tienes informes guardados</h2>
+      <p>Los documentos que generes aparecerán aquí durante {{ retention_hours }} horas.</p>
+      <a class="btn btn--primary" href="{{ url_for('show_form') }}"><i class="bx bx-plus"></i> Crear un documento</a>
+    </div>
+    {% endif %}
+
+  </main>
+
+  <footer class="footer">
+    <div class="shell footer__bottom" style="border: 0; padding-top: 0;">
+      <span>&copy; 2026 Gullieth. Todos los derechos reservados.</span>
+      <span>Hecho en Venezuela 🇻🇪</span>
+    </div>
+  </footer>
+
+  <script>
+    // Mantiene "Vence en …" al día sin recargar la página (se revisa cada minuto).
+    (function () {
+      var TOTAL_MS = {{ retention_hours }} * 3600 * 1000;
+
+      // Mismo criterio que db.time_left(): por horas, redondeando hacia abajo.
+      function formatTimeLeft(ms) {
+        var hours = Math.floor(ms / 3600000);
+        if (hours >= 2) { return hours + ' horas'; }
+        if (hours === 1) { return '1 hora'; }
+        return 'menos de una hora';
+      }
+
+      function tick() {
+        document.querySelectorAll('.doc-item[data-expires]').forEach(function (item) {
+          var ms = new Date(item.getAttribute('data-expires')).getTime() - Date.now();
+          if (ms <= 0) {
+            item.remove();
+            if (!document.querySelector('.doc-item')) { location.reload(); }
+            return;
+          }
+          var fraction = Math.min(1, ms / TOTAL_MS);
+          item.querySelector('[data-left]').textContent = formatTimeLeft(ms);
+          item.querySelector('.doc-item__bar span').style.width = (fraction * 100).toFixed(1) + '%';
+          item.classList.toggle('is-urgent', fraction < 0.1);
+        });
+      }
+
+      tick();
+      setInterval(tick, 60000);
+    })();
+  </script>
+
+</body>
+
+</html>

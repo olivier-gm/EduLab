@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, send_file, session, flash
 from concurrent.futures import ThreadPoolExecutor
+import sys
 import threading
 import os
 import logging
@@ -22,6 +23,7 @@ import db
 from auth import auth_bp, current_user, login_required
 from admin import admin_bp
 import plans
+import retention
 from plans import plans_bp
 
 logging.basicConfig(level=logging.INFO)
@@ -32,9 +34,10 @@ app = Flask(__name__)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.secret_key = os.getenv('SECRET_KEY', '7f8b9a2c3d4e5f608192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8')
 
-# Enlaces para compartir: firmados con la clave de la app y válidos 2 h (los
-# archivos se borran a los ~130 min, así que el enlace no sobrevive al archivo).
-SHARE_MAX_AGE = 7200
+# Enlaces para compartir: firmados con la clave de la app y válidos lo mismo que
+# se conserva el archivo (db.FILE_RETENTION_HOURS), así el enlace no sobrevive
+# al archivo.
+SHARE_MAX_AGE = db.FILE_RETENTION_HOURS * 3600
 SHARE_FILETYPES = ('docx', 'pdf')
 
 
@@ -50,7 +53,7 @@ app.register_blueprint(plans_bp)
 
 @app.context_processor
 def inject_current_user():
-    return {'current_user': current_user()}
+    return {'current_user': current_user(), 'retention_hours': db.FILE_RETENTION_HOURS}
 
 
 # ── Validaciones de la generación ─────────────────────────────────────
@@ -153,7 +156,8 @@ def process_form_bach():
     if not os.path.isfile(docx_output[:-5] + '.pdf'):
         flash('No se pudo generar el PDF; solo está disponible la versión Word.', 'warning')
 
-    db.record_document(user['id'], head_title, 'bach', tokens_used=0, mode='manual')
+    db.record_document(user['id'], head_title, 'bach', tokens_used=0, mode='manual',
+                       file_stem=file_stem + random_code)
     session['file_generated'] = True
 
     # Redirect to a new page or indicate success
@@ -285,7 +289,8 @@ def process_form():
         warnings.append('No se pudo generar el PDF; solo está disponible la versión Word.')
 
     db.record_document(user['id'], head_title, 'uni', tokens_used=sum(usage_sink),
-                       mode='manual' if manual_mode else 'ai')
+                       mode='manual' if manual_mode else 'ai',
+                       file_stem=file_stem + random_code)
     session['file_generated'] = True
     for text in warnings:
         flash(text, 'warning')
@@ -304,12 +309,9 @@ def choose_file(filename):
                           'Genera el documento de nuevo.')
     file_path = f'output/{filename}.docx'
     if not os.path.isfile(file_path):
-        # Los archivos se borran a las ~2 h; sin esto se mostraba la pantalla
-        # de descarga con enlaces que llevaban a un 404.
-        return form_error('El documento ya no existe (los archivos se conservan unas 2 horas). '
-                          'Genera el documento de nuevo.')
-    # Schedule the file removal after a delay
-    threading.Timer(7800, Document_process.remove_file, args=[file_path]).start()
+        # Sin esto se mostraba la pantalla de descarga con enlaces que llevaban a un 404.
+        return form_error(f'El documento ya no existe (los archivos se conservan '
+                          f'{db.FILE_RETENTION_HOURS} horas). Genera el documento de nuevo.')
 
     # Enlaces públicos temporales para compartir (WhatsApp / Gmail / otros).
     # Van firmados y con caducidad: el destinatario no tiene sesión, así que
@@ -337,9 +339,44 @@ def download_file(filename, filetype):
         return render_template('404.html')
 
 
+@app.route('/my_documents')
+@login_required
+def my_documents():
+    """Informes generados por el usuario que todavía se conservan."""
+    documents = []
+    for doc in db.list_user_documents(current_user()['id']):
+        if not os.path.isfile(f"output/{doc['file_stem']}.docx"):
+            continue        # el archivo ya no está (borrado a mano, etc.)
+        label, fraction = db.time_left(doc['expires_at'])
+        documents.append({
+            'id': doc['id'], 'title': doc['title'], 'doc_type': doc['doc_type'],
+            'mode': doc['mode'], 'created_at': doc['created_at'],
+            'time_left': label, 'fraction': fraction,
+            'expires_iso': doc['expires_at'].replace(' ', 'T') + 'Z',
+            'urgent': fraction < 0.1,
+            'has_pdf': os.path.isfile(f"output/{doc['file_stem']}.pdf"),
+        })
+    return render_template('my_documents.html', documents=documents)
+
+
+@app.route('/my_documents/<int:doc_id>/<filetype>')
+@login_required
+def my_document_download(doc_id, filetype):
+    """Descarga de un informe propio. Comprueba que sea del usuario y siga vigente."""
+    doc = db.get_user_document(current_user()['id'], doc_id)
+    if filetype not in SHARE_FILETYPES or doc is None:
+        flash('Ese informe ya no está disponible.', 'error')
+        return redirect(url_for('my_documents'))
+    path = f"output/{doc['file_stem']}.{filetype}"
+    if not os.path.isfile(path):
+        flash('Ese archivo ya no está disponible.', 'error')
+        return redirect(url_for('my_documents'))
+    return send_file(path, as_attachment=True, download_name=f"{safe_filename(doc['title'])}.{filetype}")
+
+
 @app.route('/s/<token>/<filetype>')
 def shared_file(token, filetype):
-    """Descarga pública mediante enlace firmado (sin login, caduca a las 2 h)."""
+    """Descarga pública mediante enlace firmado (sin login, caduca junto con el archivo)."""
     if filetype not in SHARE_FILETYPES:
         return render_template('404.html'), 404
     try:
@@ -358,6 +395,13 @@ def shared_file(token, filetype):
 def page_not_found(e):
     # note that we set the 404 status explicitly
     return render_template('404.html')
+
+
+
+# Limpieza automática de archivos vencidos (ver retention.py). No arranca bajo
+# pytest para que las pruebas no borren nada de output/.
+if 'pytest' not in sys.modules:
+    retention.start_background_cleanup()
 
 
 if __name__ == '__main__':

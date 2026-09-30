@@ -13,7 +13,7 @@ El sistema no solo genera el contenido académico (Introducción, Desarrollo y C
 - **Formateo Automatizado de Portadas**: Generación dinámica de la portada con datos institucionales (Universidad/Colegio, Carrera, Asignatura, Docente, Fecha y hasta 8 estudiantes con sus C.I./ID).
 - **Procesamiento de Documentos (.docx)**: Uso de plantillas base de Microsoft Word (`python-docx`) con maquetación automática (fuente Arial 12pt, texto justificado, espaciado de línea Pt 21, saltos de página y subtítulos).
 - **Conversión de Alta Fidelidad a PDF**: Integración directa con LibreOffice en modo *headless* para realizar conversiones directas de DOCX a PDF manteniendo el diseño original intacto.
-- **Descargas Programadas y Limpieza Automática**: Rutina en segundo plano basada en hilos (`threading.Timer`) para eliminar archivos temporales del servidor después de un tiempo prudencial (2 horas y 10 minutos) para proteger el almacenamiento.
+- **Mis informes y limpieza automática**: cada usuario ve sus documentos generados en `/my_documents` con el tiempo que les queda. Los archivos se conservan 24 horas (`FILE_RETENTION_HOURS`, por defecto 24) y un hilo en segundo plano (`retention.py`) borra los vencidos cada 15 minutos.
 
 ---
 

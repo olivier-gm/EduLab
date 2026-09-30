@@ -37,6 +37,7 @@
         <a class="nav__link" href="#faq">Preguntas</a>
         <a class="nav__link" href="{{ url_for('show_form') }}">Crear documento</a>
         <a class="nav__link" href="{{ url_for('plans.plans') }}">Planes</a>
+        <a class="nav__link" href="{{ url_for('my_documents') }}">Mis informes</a>
         {% if current_user and current_user.is_admin %}
         <a class="nav__link" href="{{ url_for('admin.dashboard') }}">Admin</a>
         {% endif %}

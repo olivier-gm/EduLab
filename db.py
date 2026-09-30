@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get('DATABASE_PATH', 'gullieth.db')
 
+# Horas que se conservan los archivos generados (.docx/.pdf) antes de borrarse.
+# Es la única fuente de este número: los enlaces para compartir, los avisos y la
+# limpieza automática lo leen de aquí.
+FILE_RETENTION_HOURS = int(os.environ.get('FILE_RETENTION_HOURS', '24'))
+
 # Correos que se marcan como administradores automáticamente al registrarse
 # o iniciar sesión (no hay UI para promover usuarios a admin: se resuelve
 # por variable de entorno). Formato: "correo1@x.com,correo2@y.com".
@@ -124,6 +129,12 @@ def _migrate(conn):
         conn.execute("ALTER TABLE documents ADD COLUMN mode TEXT NOT NULL DEFAULT 'manual'")
         conn.execute("UPDATE documents SET mode = 'ai' WHERE tokens_used > 0")
 
+    if 'file_stem' not in columns('documents'):
+        # Nombre del archivo en output/ (sin extensión) y cuándo se borra. Los
+        # documentos anteriores no lo guardaban: quedan sin archivo asociado.
+        conn.execute('ALTER TABLE documents ADD COLUMN file_stem TEXT')
+        conn.execute('ALTER TABLE documents ADD COLUMN expires_at TEXT')
+
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -191,13 +202,60 @@ def touch_admin_status(user):
         _sync_admin_flag(get_db(), user['id'], user['email'])
 
 
-def record_document(user_id, title, doc_type, tokens_used, mode='manual'):
+def record_document(user_id, title, doc_type, tokens_used, mode='manual', file_stem=None):
+    """Registra un documento generado. Con `file_stem` (nombre del archivo en
+    output/, sin extensión) queda además disponible en "Mis informes" hasta
+    que vence FILE_RETENTION_HOURS."""
+    expires_at = None
+    if file_stem:
+        expires_at = (_utcnow() + timedelta(hours=FILE_RETENTION_HOURS)).strftime(DATETIME_FMT)
     db = get_db()
     db.execute(
-        'INSERT INTO documents (user_id, title, doc_type, tokens_used, mode) VALUES (?, ?, ?, ?, ?)',
-        (user_id, title, doc_type, tokens_used, mode),
+        'INSERT INTO documents (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at),
     )
     db.commit()
+
+
+def list_user_documents(user_id, limit=100):
+    """Informes del usuario cuyos archivos todavía no vencen, el más nuevo primero."""
+    return get_db().execute(
+        'SELECT * FROM documents WHERE user_id = ? AND file_stem IS NOT NULL '
+        'AND expires_at > ? ORDER BY id DESC LIMIT ?',
+        (user_id, _utcnow().strftime(DATETIME_FMT), limit),
+    ).fetchall()
+
+
+def get_user_document(user_id, doc_id):
+    """Un informe del usuario (o None si no existe, no es suyo o ya venció)."""
+    return get_db().execute(
+        'SELECT * FROM documents WHERE id = ? AND user_id = ? AND file_stem IS NOT NULL '
+        'AND expires_at > ?',
+        (doc_id, user_id, _utcnow().strftime(DATETIME_FMT)),
+    ).fetchone()
+
+
+def time_left(expires_at):
+    """(texto, fracción_restante) de un vencimiento, por horas y sin más detalle.
+    Ej.: ('3 horas', 0.13), ('1 hora', 0.05), ('menos de una hora', 0.01).
+    Las horas se redondean hacia abajo. Debe coincidir con formatTimeLeft() de
+    my_documents.html, que lo mantiene al día sin recargar la página."""
+    try:
+        expiry = datetime.strptime(expires_at, DATETIME_FMT)
+    except (TypeError, ValueError):
+        return 'vencido', 0.0
+    seconds = max(0, int((expiry - _utcnow()).total_seconds()))
+    hours = seconds // 3600
+    if seconds <= 0:
+        text = 'vencido'
+    elif hours >= 2:
+        text = f'{hours} horas'
+    elif hours == 1:
+        text = '1 hora'
+    else:
+        text = 'menos de una hora'
+    return text, min(1.0, seconds / (FILE_RETENTION_HOURS * 3600))
 
 
 def count_user_documents(user_id, mode):

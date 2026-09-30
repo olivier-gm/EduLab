@@ -429,3 +429,8 @@
   margin-top: 1px;
   flex-shrink: 0;
 }
+
+.inline-link {
+  color: var(--gold);
+  text-decoration: underline;
+}

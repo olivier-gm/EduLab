@@ -32,6 +32,7 @@
         <a class="nav__link" href="{{ url_for('welcome') }}">Inicio</a>
         <a class="nav__link" href="{{ url_for('welcome') }}#como-funciona">Cómo funciona</a>
         <a class="nav__link" href="{{ url_for('welcome') }}#faq">Preguntas</a>
+        <a class="nav__link" href="{{ url_for('my_documents') }}">Mis informes</a>
         {% if current_user and current_user.is_admin %}
         <a class="nav__link" href="{{ url_for('admin.dashboard') }}">Admin</a>
         {% endif %}
