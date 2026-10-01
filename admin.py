@@ -151,13 +151,21 @@ def save_ai_settings():
                 return back('No se pudo guardar la clave API. Revisa los permisos del servidor.')
         elif request.form.get(f'clear_{prefix}_key'):
             values[f'{prefix}_api_key'] = ''
+    values['fallback_enabled'] = '1' if request.form.get('fallback_enabled') else '0'
+    for prefix in ('gemini', 'openrouter'):
+        values[f'{prefix}_search_enabled'] = '1' if request.form.get(f'{prefix}_search_enabled') else '0'
     proposed = {**db.get_settings(), **values}
     try:
         _, _, active_key = ai_provider.configuration(values=proposed)
+        if values['fallback_enabled'] == '1':
+            _, _, other_key = ai_provider.configuration(values=proposed, provider=ai_provider._other_provider(proposed))
     except IA.GenerationError as exc:
         return back(exc.user_message)
     if not active_key:
         return back('Añade la clave API del proveedor que quieres activar antes de guardar.')
+    if values['fallback_enabled'] == '1' and not other_key:
+        return back('Para activar el fallback necesitas la clave API de los dos proveedores. '
+                    'Añade la del otro proveedor o desactiva el fallback.')
     db.set_settings(values)
     IA._search_blocked_until = 0.0
     return back('Configuración de IA guardada. Se aplicará a las siguientes generaciones.')

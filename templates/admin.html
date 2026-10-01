@@ -91,6 +91,11 @@
             <option value="openrouter" {% if settings['ai_provider'] == 'openrouter' %}selected{% endif %}>OpenRouter · Gemini</option>
           </select>
         </label>
+        <label class="check">
+          <input type="checkbox" name="fallback_enabled" {% if settings['fallback_enabled'] == '1' %}checked{% endif %}>
+          Activar fallback: si el proveedor activo falla, reintentar con el otro
+        </label>
+        <p class="admin-form__hint">Solo para cuota agotada, servicio caído o error desconocido (no para claves inválidas ni contenido bloqueado). Necesita la clave de los dos proveedores. Cada vez que se usa queda un aviso en el registro del servidor.</p>
         <div class="admin-form__grid">
           <fieldset>
             <legend>Gemini directo</legend>
@@ -102,6 +107,7 @@
             </label>
             <p class="admin-form__hint">{{ key_status['gemini'] }}. La clave completa no se muestra.</p>
             <label class="check"><input type="checkbox" name="clear_gemini_key"> Quitar la clave del panel y usar la del servidor</label>
+            <label class="check"><input type="checkbox" name="gemini_search_enabled" {% if settings['gemini_search_enabled'] == '1' %}checked{% endif %}> Usar Google Search (información actual)</label>
           </fieldset>
           <fieldset>
             <legend>OpenRouter</legend>
@@ -113,9 +119,10 @@
             </label>
             <p class="admin-form__hint">{{ key_status['openrouter'] }}. La clave completa no se muestra.</p>
             <label class="check"><input type="checkbox" name="clear_openrouter_key"> Quitar la clave del panel y usar la del servidor</label>
+            <label class="check"><input type="checkbox" name="openrouter_search_enabled" {% if settings['openrouter_search_enabled'] == '1' %}checked{% endif %}> Usar búsqueda web (información actual)</label>
           </fieldset>
         </div>
-        <p class="admin-form__hint">La bibliografía intenta usar Google Search en ambos proveedores y recurre a IA si falla. En OpenRouter se solicita búsqueda nativa; la búsqueda se cobra aparte del texto generado.</p>
+        <p class="admin-form__hint">Con la búsqueda activada, el desarrollo y la bibliografía usan información actual de internet. Si la búsqueda falla (por ejemplo, sin cuota) se genera igual sin ella: el desarrollo avisa al usuario y la bibliografía usa referencias de IA; en ambos casos queda un aviso en el registro del servidor. En OpenRouter se solicita búsqueda nativa; la búsqueda se cobra aparte del texto generado.</p>
         <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar configuración de IA</button>
       </form>
     </section>

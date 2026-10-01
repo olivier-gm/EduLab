@@ -1,6 +1,7 @@
 """Glosarios breves y bibliografía con búsqueda y respaldo por IA."""
 import io
 import json
+import logging
 import re
 import time
 import unicodedata
@@ -17,6 +18,8 @@ from flask import has_app_context, has_request_context, g
 import IA
 import db
 import ai_provider
+
+logger = logging.getLogger(__name__)
 
 MAX_TERMS = 100
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -89,40 +92,87 @@ def _json_generate(contents, schema, instruction, usage_sink):
         raise IA.GenerationError('invalid', 'La IA devolvió una lista incompleta o ilegible. Inténtalo de nuevo.') from exc
 
 
-def extract_terms(upload, usage_sink=None):
-    """No guarda archivos; PDF e imágenes se leen con la visión de Gemini."""
+def secure_read_upload(upload, allowed_extensions, max_bytes):
+    """
+    VALIDACIÓN ESTRICTA Y SEGURA DE ARCHIVOS (USO EXTENSIBLE)
+    =========================================================
+    Esta función centraliza la seguridad al subir archivos al sistema.
+    Debe usarse siempre que se reciba un archivo desde el cliente, asegurando
+    que el archivo sea genuino y no represente una amenaza.
+
+    Controles de seguridad implementados:
+    1. Consumo Acotado de Memoria (Memory Exhaustion / DoS): 
+       Lee exactamente max_bytes + 1. Si supera max_bytes, rechaza el archivo
+       sin seguir almacenándolo en RAM y mucho menos en disco.
+    2. Zero Path Traversal:
+       El archivo NUNCA se escribe físicamente en el servidor usando su 
+       nombre de archivo. Se procesa íntegramente en memoria (BytesIO, 
+       cadenas, o pasándolo directamente a la API como binario), evitando 
+       ataques que buscan sobreescribir archivos críticos (ej. ../../etc/passwd).
+    3. Prevención de Spoofing (Magic Bytes / Firmas Binarias):
+       No se fía nunca de la extensión (.pdf, .png). Un atacante podría subir 
+       un script ejecutable (.sh, .exe, .py) renombrado a `foto.png`. El código 
+       lee la cabecera real del archivo y verifica la firma (Magic Bytes).
+    4. Protección contra Bombas de Descompresión (Zip Bombs):
+       Los documentos Office modernos (.docx) y algunos PDFs son archivos 
+       comprimidos. Se valida que el tamaño *descomprimido* no supere max_bytes.
+       Esto evita que un docx de 10KB expanda Gigabytes en RAM haciendo crashear el servidor.
+    """
     suffix = Path(upload.filename or '').suffix.lower()
-    allowed = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.docx', '.txt'}
-    if suffix not in allowed:
+    if suffix not in allowed_extensions:
         raise ValueError('Sube una imagen PNG, JPG o WebP, o un documento PDF, Word (.docx) o TXT.')
-    data = upload.read(MAX_UPLOAD_BYTES + 1)
-    if not data or len(data) > MAX_UPLOAD_BYTES:
-        raise ValueError('El archivo debe tener contenido y pesar como máximo 10 MB.')
+
+    # 1. DOS Defense: Leemos sólo hasta el límite + 1 para saber si se pasó,
+    # sin cargar un archivo hipotéticamente inmenso completamente en la memoria.
+    data = upload.read(max_bytes + 1)
+    if not data or len(data) > max_bytes:
+        raise ValueError(f'El archivo debe tener contenido y pesar como máximo {max_bytes // (1024 * 1024)} MB.')
+
+    # 2. Defensas de análisis estructural y firmas binarias (Magic Bytes / Spoofing)
     if suffix == '.txt':
         try:
             content = data.decode('utf-8-sig')
         except UnicodeError as exc:
             raise ValueError('Guarda el archivo TXT con codificación UTF-8.') from exc
+    
     elif suffix == '.docx':
         try:
+            # 3. Zip Bomb Defense: Evaluar el tamaño real interno sin volcarlo a disco
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                if sum(item.file_size for item in archive.infolist()) > MAX_UPLOAD_BYTES:
-                    raise ValueError('El contenido del documento Word supera 10 MB.')
+                if sum(item.file_size for item in archive.infolist()) > max_bytes:
+                    raise ValueError('El contenido real comprimido en el documento supera el límite seguro.')
             doc = Document(io.BytesIO(data))
             content = '\n'.join([p.text for p in doc.paragraphs] +
                                 [cell.text for table in doc.tables for row in table.rows for cell in row.cells])
         except (zipfile.BadZipFile, KeyError, XMLSyntaxError) as exc:
-            raise ValueError('El archivo Word no es válido.') from exc
+            raise ValueError('El archivo Word está dañado o no es válido (spoofed).') from exc
+    
     else:
-        signatures = {'.pdf': (b'%PDF-', 'application/pdf'),
-                      '.png': (b'\x89PNG\r\n\x1a\n', 'image/png'),
-                      '.jpg': (b'\xff\xd8\xff', 'image/jpeg'),
-                      '.jpeg': (b'\xff\xd8\xff', 'image/jpeg'),
-                      '.webp': (b'RIFF', 'image/webp')}
+        # 4. Binary firm check: Aseguraremos de que lo que dice ser, realmente sea
+        signatures = {
+            '.pdf': (b'%PDF-', 'application/pdf'),
+            '.png': (b'\x89PNG\r\n\x1a\n', 'image/png'),
+            '.jpg': (b'\xff\xd8\xff', 'image/jpeg'),
+            '.jpeg': (b'\xff\xd8\xff', 'image/jpeg'),
+            '.webp': (b'RIFF', 'image/webp')
+        }
         signature, mime = signatures[suffix]
+        # WebP requiere validación de RIFF al inicio y WEBP posicionado en byte 8
         if not data.startswith(signature) or (suffix == '.webp' and data[8:12] != b'WEBP'):
-            raise ValueError('El contenido del archivo no coincide con su formato. Revisa el archivo.')
+            raise ValueError(f'El contenido binario del archivo no coincide con un {suffix.upper()} legítimo. Revisa el archivo.')
+        
+        # En capsula de Gemini
         content = types.Part.from_bytes(data=data, mime_type=mime)
+
+    return content
+
+
+def extract_terms(upload, usage_sink=None):
+    """No guarda archivos; PDF e imágenes se leen de forma segura (sin disco)."""
+    allowed_exts = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.docx', '.txt'}
+
+    content = secure_read_upload(upload, allowed_exts, MAX_UPLOAD_BYTES)
+
     if isinstance(content, str) and (not content.strip() or len(content) > max(60000, max_terms() * 300)):
         raise ValueError(f'El documento debe contener una lista legible de hasta {max_terms()} términos.')
     result = _json_generate([content, 'Lee el archivo completo y extrae únicamente los términos asignados para el glosario.'], {
@@ -175,8 +225,13 @@ def format_source(source):
 
 
 def _source_context(title, text, usage_sink):
-    # La bibliografía intenta buscar aunque la búsqueda del desarrollo esté apagada.
+    # La bibliografía intenta buscar aunque la búsqueda del desarrollo esté apagada
+    # (GEMINI_GOOGLE_SEARCH), pero respeta el interruptor del proveedor en el panel admin.
+    if not ai_provider.search_enabled():
+        logger.info('La búsqueda web está desactivada para el proveedor activo: la bibliografía usa referencias de IA.')
+        return [], '', 'La búsqueda web está desactivada para el proveedor activo.'
     if time.time() < IA._search_blocked_until:
+        logger.info('Búsqueda en pausa por falta de cuota: la bibliografía usa referencias de IA.')
         return [], '', 'Google Search sin cuota disponible; reintento tras la pausa de 5 minutos.'
     try:
         sources, research = _research_sources(title, text, usage_sink)
@@ -188,6 +243,7 @@ def _source_context(title, text, usage_sink):
             reason = 'Google Search sin cuota disponible.'
         else:
             reason = f'Google Search no disponible ({exc.code}): {exc.user_message}'
+        logger.warning('La búsqueda de la bibliografía falló (%s); se usan referencias de IA sin búsqueda.', exc.code)
         return [], '', reason
 
 

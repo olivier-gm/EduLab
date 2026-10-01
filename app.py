@@ -109,14 +109,23 @@ def validate_document_title():
 
 TITLE_MIN_LEN = 5      # igual que la validación del formulario (builder.js)
 TITLE_MAX_LEN = 300    # maxlength del campo título
-_FILENAME_BAD = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+_FILENAME_BAD = re.compile(r'[\\/:*?"<>|.#%~{}&\x00-\x1f]+')
+
+
+# Nombres que Windows no permite como archivo (con cualquier extensión).
+_RESERVED_NAMES = {'CON', 'PRN', 'AUX', 'NUL',
+                   *(f'COM{i}' for i in range(1, 10)), *(f'LPT{i}' for i in range(1, 10))}
 
 
 def safe_filename(name):
     """Nombre de archivo seguro a partir del título: sin barras, dos puntos,
     comillas ni otros caracteres que rompían la ruta de salida o creaban
-    subcarpetas, y de largo acotado."""
+    subcarpetas; sin puntos ni guiones bajos en los extremos; sin nombres
+    reservados de Windows (CON, NUL, COM1…); y de largo acotado. Es la última
+    capa de validación antes de crear el archivo."""
     cleaned = _FILENAME_BAD.sub('_', name).strip(' ._')[:80].strip(' ._')
+    if cleaned.upper() in _RESERVED_NAMES:
+        cleaned += '_doc'
     return cleaned or 'documento'
 
 

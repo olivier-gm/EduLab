@@ -388,6 +388,16 @@ def test_archivo_expirado_se_avisa(client):
 @pytest.mark.parametrize('title,expected', [
     ('Qué es: el ¿amor? a/b', 'Qué es_ el ¿amor_ a_b'),
     ('///', 'documento'),
+    ('Análisis.exe', 'Análisis_exe'),
+    ('Informe #3: 50% completado', 'Informe _3_ 50_ completado'),
+    ('Título con ~tilde~ y {llaves}', 'Título con _tilde_ y _llaves'),
+    (r'a/b\c:d*e?f"g<h>i|j', 'a_b_c_d_e_f_g_h_i_j'),
+    ('Dos   espacios y\ttab\nsalto', 'Dos   espacios y_tab_salto'),
+    ('CON', 'CON_doc'),
+    ('nul', 'nul_doc'),
+    ('com1', 'com1_doc'),
+    ('Consola', 'Consola'),
+    ('...puntos...', 'puntos'),
 ])
 def test_safe_filename(title, expected):
     assert app_module.safe_filename(title) == expected

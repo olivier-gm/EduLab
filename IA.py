@@ -282,8 +282,8 @@ class _FewShotPrompt:
                 'llamada): %s', self.display_name, e,
             )
 
-    def _config(self, temperature, max_output_tokens):
-        if self._cache_name:
+    def _config(self, temperature, max_output_tokens, use_cache=True):
+        if self._cache_name and use_cache:
             return types.GenerateContentConfig(
                 cached_content=self._cache_name,
                 temperature=temperature,
@@ -340,7 +340,10 @@ class _FewShotPrompt:
         `warnings` (lista opcional) para que el usuario lo sepa.
         """
         global _search_blocked_until
-        if use_search and SEARCH_ENABLED:
+        if use_search and SEARCH_ENABLED and not ai_provider.search_enabled():
+            logger.info('La búsqueda web está desactivada para el proveedor activo: '
+                        '"%s" se genera sin búsqueda.', self.display_name)
+        elif use_search and SEARCH_ENABLED:
             if time.time() < _search_blocked_until:
                 if warnings is not None:
                     warnings.append(SEARCH_UNAVAILABLE_WARNING)
@@ -368,10 +371,19 @@ class _FewShotPrompt:
         self._ensure_cache()
 
         def _call():
+            extra = {}
+            if self._cache_name:
+                # Con el caché de Gemini la petición va SIN instrucciones ni ejemplos
+                # (están en el caché). Si el fallback pasa a otro proveedor, que reciba
+                # la petición completa.
+                extra = {'fallback_config': self._config(temperature, max_output_tokens, use_cache=False),
+                         'fallback_contents': self.example_contents + [
+                             types.Content(role='user', parts=[types.Part(text=user_text)])]}
             return ai_provider.generate_content(
                 model=self.model,
                 config=self._config(temperature, max_output_tokens),
                 contents=self._contents(user_text),
+                **extra,
             )
 
         try:

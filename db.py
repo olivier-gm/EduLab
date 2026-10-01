@@ -115,6 +115,13 @@ SETTING_DEFAULTS = {
     'bibliography_provider': '',
     'bibliography_model': '',
     'ai_provider': 'gemini',
+    # Si el proveedor activo falla (cuota, caída, error desconocido), reintenta
+    # con el otro. Necesita la clave de los dos proveedores.
+    'fallback_enabled': '0',
+    # Google Search / búsqueda web de cada proveedor para el desarrollo y la
+    # bibliografía. Si la búsqueda falla se genera igual sin ella.
+    'gemini_search_enabled': '1',
+    'openrouter_search_enabled': '1',
     'gemini_model': '',  # Vacío conserva el modelo del entorno actual.
     'openrouter_model': 'google/gemini-3.8-flash',
     'gemini_api_key': '',  # Cifradas; nunca se rellenan en el HTML.

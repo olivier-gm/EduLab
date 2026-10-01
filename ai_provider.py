@@ -1,5 +1,7 @@
 """Configuración de IA y adaptación de OpenRouter al flujo existente de Gemini."""
 import base64
+import copy
+import logging
 import os
 from contextvars import ContextVar
 from functools import lru_cache
@@ -13,7 +15,14 @@ from google import genai
 
 import db
 
+logger = logging.getLogger(__name__)
+
 request_settings = ContextVar('ai_settings', default=None)
+
+# Errores (según IA.classify_error) que justifican probar con el otro proveedor.
+# Los de autenticación, petición inválida o contenido bloqueado no: repetirlos en
+# otro motor no los arregla (o, en el caso de un bloqueo, es repetir el contenido).
+FALLBACK_CODES = ('quota', 'unavailable', 'unknown')
 
 
 def settings():
@@ -38,10 +47,11 @@ def encrypt_key(value):
     return _cipher().encrypt(value.encode()).decode()
 
 
-def configuration(default_model='gemini-3.5-flash-lite', values=None):
+def configuration(default_model='gemini-3.5-flash-lite', values=None, provider=None):
+    """(proveedor, modelo, clave) del proveedor activo o, con `provider`, del indicado."""
     import IA
     values = settings() if values is None else values
-    provider = values['ai_provider']
+    provider = provider or values['ai_provider']
     prefix = 'openrouter' if provider == 'openrouter' else 'gemini'
     model = values[f'{prefix}_model'] or default_model
     encrypted = values[f'{prefix}_api_key']
@@ -68,14 +78,87 @@ def direct_client(key):
     return google_client(key)
 
 
-def generate_content(*, model, config, contents):
+def search_enabled(provider=None, values=None):
+    """¿La búsqueda web (Google Search / OpenRouter web search) está activada para ese
+    proveedor? Sin `provider`, el activo. Se configura en el panel admin."""
+    values = settings() if values is None else values
+    provider = provider or values['ai_provider']
+    return values.get(f'{provider}_search_enabled', '1') == '1'
+
+
+def _other_provider(values):
+    return 'openrouter' if values['ai_provider'] == 'gemini' else 'gemini'
+
+
+def _fallback_configuration(default_model='gemini-3.5-flash-lite', values=None):
+    """(proveedor, modelo, clave) del OTRO proveedor, o None si el fallback está
+    apagado o ese proveedor no tiene clave."""
+    values = settings() if values is None else values
+    if values.get('fallback_enabled') != '1':
+        return None
+    try:
+        provider, model, key = configuration(default_model, values, provider=_other_provider(values))
+    except Exception:           # clave guardada ilegible: sin fallback, no se rompe el flujo principal
+        return None
+    return (provider, model, key) if key else None
+
+
+def _without_tools(config):
+    """Copia de la configuración sin herramientas (sin búsqueda web)."""
+    if not getattr(config, 'tools', None):
+        return config
+    try:
+        return config.model_copy(update={'tools': None})
+    except AttributeError:
+        clone = copy.copy(config)
+        clone.tools = None
+        return clone
+
+
+def _call(provider, model, key, config, contents, values):
+    if getattr(config, 'tools', None) and not search_enabled(provider, values):
+        logger.info('La búsqueda web está desactivada para %s: se genera sin búsqueda.', provider)
+        config = _without_tools(config)
+    if provider == 'gemini':
+        return direct_client(key).models.generate_content(model=model, config=config, contents=contents)
+    return _openrouter(model, key, config, contents)
+
+
+def generate_content(*, model, config, contents, fallback_config=None, fallback_contents=None):
+    """Genera con el proveedor activo; si falla y el fallback está activado, con el otro.
+
+    fallback_config / fallback_contents: versión de la petición para el otro
+    proveedor cuando la principal depende de algo propio del primero (por ejemplo,
+    el caché de contexto de Gemini, que no existe en OpenRouter y dejaría sin
+    instrucciones ni ejemplos a la petición). Si no se pasan, se reusa la misma.
+    """
     import IA
-    provider, selected_model, key = configuration(model)
+    values = settings()
+    provider, selected_model, key = configuration(model, values)
     if not key:
         raise IA.GenerationError('auth', 'Falta la clave API del proveedor seleccionado. Configúrala desde el panel admin.')
-    if provider == 'gemini':
-        return direct_client(key).models.generate_content(model=selected_model, config=config, contents=contents)
-    return _openrouter(selected_model, key, config, contents)
+    try:
+        return _call(provider, selected_model, key, config, contents, values)
+    except Exception as primary_error:
+        fallback = _fallback_configuration(model, values)
+        if fallback is None:
+            raise
+        error = IA.classify_error(primary_error)
+        if error.code not in FALLBACK_CODES:
+            logger.info('%s falló (%s): ese tipo de error no se reintenta con el otro proveedor.',
+                        provider, error.code)
+            raise
+        fb_provider, fb_model, fb_key = fallback
+        logger.warning('Proveedor de IA %s falló (%s): %s. Fallback automático a %s.',
+                       provider, error.code, str(primary_error)[:200], fb_provider)
+        try:
+            response = _call(fb_provider, fb_model, fb_key, fallback_config or config,
+                             fallback_contents or contents, values)
+        except Exception as fallback_error:
+            logger.error('El fallback a %s también falló: %s', fb_provider, str(fallback_error)[:200])
+            raise primary_error
+        logger.warning('El fallback a %s respondió correctamente (el principal era %s).', fb_provider, provider)
+        return response
 
 
 def _parts(parts):
