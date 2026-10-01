@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get('DATABASE_PATH', 'gullieth.db')
 
 # Horas que se conservan los archivos generados (.docx/.pdf) antes de borrarse.
-# Es la única fuente de este número: los enlaces para compartir, los avisos y la
-# limpieza automática lo leen de aquí.
+# Valor inicial y plazo para archivos huérfanos. El panel cambia el plazo de
+# documentos nuevos; cada documento registrado conserva su propio expires_at.
 FILE_RETENTION_HOURS = int(os.environ.get('FILE_RETENTION_HOURS', '24'))
 
 # Correos que se marcan como administradores automáticamente al registrarse
@@ -80,6 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
 
 # Valores por defecto de los ajustes. Vacío en un límite = sin límite.
 SETTING_DEFAULTS = {
+    'file_retention_hours': str(FILE_RETENTION_HOURS),
     # Usuarios SIN plan activo: por cada modo, si pueden generar y cuántos
     # documentos en total por usuario.
     'free_ai_enabled': '1',
@@ -216,15 +217,16 @@ def touch_admin_status(user):
 def record_document(user_id, title, doc_type, tokens_used, mode='manual', file_stem=None):
     """Registra un documento generado. Con `file_stem` (nombre del archivo en
     output/, sin extensión) queda además disponible en "Mis informes" hasta
-    que vence FILE_RETENTION_HOURS."""
+    que vence el plazo configurado al crearlo."""
+    created_at = _utcnow()
     expires_at = None
     if file_stem:
-        expires_at = (_utcnow() + timedelta(hours=FILE_RETENTION_HOURS)).strftime(DATETIME_FMT)
+        expires_at = (created_at + timedelta(hours=get_retention_hours())).strftime(DATETIME_FMT)
     db = get_db()
     db.execute(
-        'INSERT INTO documents (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?)',
-        (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at),
+        'INSERT INTO documents (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at.strftime(DATETIME_FMT)),
     )
     db.commit()
 
@@ -247,9 +249,29 @@ def get_user_document(user_id, doc_id):
     ).fetchone()
 
 
-def time_left(expires_at):
-    """(texto, fracción_restante) de un vencimiento, por horas y sin más detalle.
-    Ej.: ('3 horas', 0.13), ('1 hora', 0.05), ('menos de una hora', 0.01).
+def format_duration(hours):
+    days, hours = divmod(max(0, int(hours)), 24)
+    parts = []
+    if days:
+        parts.append(f'{days} día' + ('s' if days != 1 else ''))
+    if hours:
+        parts.append(f'{hours} hora' + ('s' if hours != 1 else ''))
+    return ' y '.join(parts) or 'menos de una hora'
+
+
+def get_retention_hours():
+    return int(get_settings()['file_retention_hours'])
+
+
+def get_document_by_filename(filename):
+    return get_db().execute(
+        'SELECT * FROM documents WHERE file_stem = ? ORDER BY id DESC LIMIT 1',
+        (filename,),
+    ).fetchone()
+
+
+def time_left(expires_at, created_at=None):
+    """Texto en días y horas y fracción del plazo original de cada documento.
     Las horas se redondean hacia abajo. Debe coincidir con formatTimeLeft() de
     my_documents.html, que lo mantiene al día sin recargar la página."""
     try:
@@ -257,16 +279,11 @@ def time_left(expires_at):
     except (TypeError, ValueError):
         return 'vencido', 0.0
     seconds = max(0, int((expiry - _utcnow()).total_seconds()))
-    hours = seconds // 3600
-    if seconds <= 0:
-        text = 'vencido'
-    elif hours >= 2:
-        text = f'{hours} horas'
-    elif hours == 1:
-        text = '1 hora'
-    else:
-        text = 'menos de una hora'
-    return text, min(1.0, seconds / (FILE_RETENTION_HOURS * 3600))
+    total = FILE_RETENTION_HOURS * 3600
+    if created_at:
+        total = max(1, (expiry - datetime.strptime(created_at, DATETIME_FMT)).total_seconds())
+    text = format_duration(seconds // 3600) if seconds else 'vencido'
+    return text, min(1.0, seconds / total)
 
 
 def count_user_documents(user_id, mode):
@@ -448,3 +465,38 @@ def get_stats():
             (SELECT COUNT(*) FROM documents)                    AS total_documents,
             (SELECT COALESCE(SUM(tokens_used), 0) FROM documents) AS total_tokens
     """).fetchone()
+
+
+def get_dashboard_stats(days=30):
+    """Series diarias en hora de Venezuela, incluyendo días sin actividad."""
+    today = (_utcnow() - timedelta(hours=4)).date()
+    start = today - timedelta(days=days - 1)
+    cutoff = datetime.combine(start, datetime.min.time()) + timedelta(hours=4)
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT date(created_at, '-4 hours') AS day, COUNT(*) AS documents,
+               SUM(mode = 'ai') AS ai, SUM(mode = 'manual') AS manual,
+               COALESCE(SUM(tokens_used), 0) AS tokens
+        FROM documents WHERE created_at >= ? AND created_at <= ? GROUP BY day
+    """, (cutoff.strftime(DATETIME_FMT), _utcnow().strftime(DATETIME_FMT))).fetchall()
+    by_day = {row['day']: dict(row) for row in rows}
+    daily = [by_day.get((start + timedelta(days=i)).isoformat(),
+                       {'day': (start + timedelta(days=i)).isoformat(),
+                        'documents': 0, 'ai': 0, 'manual': 0, 'tokens': 0}) for i in range(days)]
+    totals = dict(get_stats())
+    totals.update(dict(conn.execute("""
+        SELECT
+        (SELECT COUNT(*) FROM users WHERE plan = 'premium' AND plan_expires_at > ?) AS premium,
+        (SELECT COUNT(*) FROM payments WHERE status = 'pending') AS pending,
+        (SELECT COALESCE(SUM(amount_usd), 0) FROM payments WHERE status = 'approved') AS revenue,
+        (SELECT COUNT(*) FROM documents WHERE file_stem IS NOT NULL AND expires_at > ?) AS available,
+        (SELECT COUNT(DISTINCT user_id) FROM documents WHERE created_at >= ?) AS active_users,
+        (SELECT COUNT(*) FROM users WHERE created_at >= ?) AS new_users
+    """, (_utcnow().strftime(DATETIME_FMT), _utcnow().strftime(DATETIME_FMT),
+          cutoff.strftime(DATETIME_FMT), cutoff.strftime(DATETIME_FMT))).fetchone()))
+    totals['period_documents'] = sum(row['documents'] for row in daily)
+    totals['period_tokens'] = sum(row['tokens'] for row in daily)
+    totals['period_ai'] = sum(row['ai'] for row in daily)
+    totals['period_manual'] = sum(row['manual'] for row in daily)
+    totals['average_tokens'] = round(totals['period_tokens'] / totals['period_ai']) if totals['period_ai'] else 0
+    return totals, daily

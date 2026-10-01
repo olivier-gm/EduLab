@@ -4,11 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#141430">
   <meta name="robots" content="noindex">
   <title>Tu documento está listo · Gullieth</title>
 
-  <link rel="icon" href="{{ url_for('static', filename='icono.jpg') }}" type="image/x-icon">
+  {% include "app_icons.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
@@ -24,7 +23,7 @@
   <header class="nav" data-nav>
     <div class="shell nav__inner">
       <a href="{{ url_for('welcome') }}" class="brand">
-        <img class="brand__img" src="{{ url_for('static', filename='img/logo.png') }}" alt="Gullieth">
+        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="Gullieth">
         <span class="brand__name">Gulli<span>eth</span></span>
       </a>
 
@@ -105,7 +104,7 @@
       <!-- ---------- Compartir por enlace ---------- -->
       <section class="share" data-share>
         <h2 class="share__title"><i class="bx bx-share-alt"></i> Compartir el documento</h2>
-        <p class="share__sub">Se envía un enlace de descarga que funciona sin iniciar sesión y vence en {{ retention_hours }} horas.</p>
+        <p class="share__sub">Se envía un enlace de descarga que funciona sin iniciar sesión y vence junto con el documento. Tiempo restante: {{ expiry_text }}.</p>
 
         <div class="seg share__format" role="radiogroup" aria-label="Formato a compartir">
           <input type="radio" id="sh-docx" name="share-format" value="docx" checked>
@@ -130,7 +129,7 @@
 
       <!-- ---------- Notas ---------- -->
       <div class="done__notes">
-        <span class="done__note"><i class="bx bx-time-five"></i> Disponible por {{ retention_hours }} horas · <a href="{{ url_for('my_documents') }}" class="inline-link">Ver mis informes</a></span>
+        <span class="done__note"><i class="bx bx-time-five"></i> Vence en {{ expiry_text }} · <a href="{{ url_for('my_documents') }}" class="inline-link">Ver mis informes</a></span>
         {% if document_kind == 'glossary' %}
         <span class="done__note"><i class="bx bx-sort-a-z"></i> Glosario en orden alfabético</span>
         {% else %}
@@ -175,7 +174,7 @@
       function link() { return urls[format()]; }
       function message() {
         return 'Te comparto mi documento (' + (format() === 'pdf' ? 'PDF' : 'Word') +
-          '). Descárgalo aquí, el enlace vence en {{ retention_hours }} horas: ' + link();
+          '). Descárgalo aquí, el enlace vence en ' + {{ expiry_text | tojson }} + ': ' + link();
       }
       function say(text) {
         toast.textContent = text;

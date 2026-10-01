@@ -46,6 +46,10 @@ def _limit_field(raw):
 @admin_required
 def dashboard():
     values = db.get_settings()
+    days = request.args.get('days', 30, type=int)
+    if days not in (7, 30, 90):
+        days = 30
+    stats, daily = db.get_dashboard_stats(days)
     key_status = {
         prefix: 'Guardada en el panel' if values[f'{prefix}_api_key'] else (
             'Configurada en el servidor' if os.environ.get(env_name) else 'Sin configurar')
@@ -53,7 +57,9 @@ def dashboard():
     }
     return render_template(
         'admin.html',
-        stats=db.get_stats(),
+        stats=stats, daily=daily, days=days,
+        chart_max_documents=max(1, max(row['documents'] for row in daily)),
+        chart_max_tokens=max(1, max(row['tokens'] for row in daily)),
         users=db.list_users(),
         documents=db.list_documents(limit=100),
         settings=values,
@@ -65,6 +71,21 @@ def dashboard():
         plan_expiry=db.plan_expiry,
         msg=request.args.get('msg'),
     )
+
+
+@admin_bp.route('/retention-settings', methods=['POST'])
+@admin_required
+def save_retention_settings():
+    token = session.get('ai_csrf_token')
+    message = 'La sesión del formulario venció. Recarga el panel.'
+    if token and hmac.compare_digest(token, request.form.get('csrf_token', '')):
+        raw = request.form.get('file_retention_hours', '').strip()
+        if len(raw) <= 4 and raw.isascii() and raw.isdigit() and 1 <= int(raw) <= 8760:
+            db.set_settings({'file_retention_hours': str(int(raw))})
+            message = 'Conservación actualizada. Solo afecta a los documentos creados a partir de ahora.'
+        else:
+            message = 'Indica un número entero entre 1 y 8760 horas (un año).'
+    return redirect(url_for('admin.dashboard', msg=message) + '#retencion')
 
 
 @admin_bp.route('/ai-settings', methods=['POST'])

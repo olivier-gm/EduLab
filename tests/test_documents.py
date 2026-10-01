@@ -53,7 +53,7 @@ def set_expiry(delta):
 
 def test_el_plazo_de_conservacion_es_24_horas():
     assert db.FILE_RETENTION_HOURS == 24
-    assert app_module.SHARE_MAX_AGE == 24 * 3600
+    assert db.SETTING_DEFAULTS['file_retention_hours'] == '24'
 
 
 def test_documento_nuevo_vence_en_24_horas(client):
@@ -71,6 +71,8 @@ def test_documento_nuevo_vence_en_24_horas(client):
     (timedelta(hours=1, minutes=30), '1 hora'),
     (timedelta(minutes=59), 'menos de una hora'),
     (timedelta(minutes=2), 'menos de una hora'),
+    (timedelta(hours=49), '2 días y 1 hora'),
+    (timedelta(hours=24), '1 día'),
 ])
 def test_time_left_se_expresa_por_horas(delta, expected):
     stamp = (db._utcnow() + delta + timedelta(seconds=30)).strftime(db.DATETIME_FMT)
@@ -220,3 +222,76 @@ def test_limpieza_no_toca_archivos_vigentes_aunque_sean_viejos_en_disco(client):
 def test_la_limpieza_no_arranca_bajo_pytest():
     # app.py no debe lanzar el hilo durante las pruebas (borraría output/).
     assert retention._started is False
+
+
+def test_admin_retention_preserves_old_expiry_and_shared_links(client, monkeypatch):
+    from datetime import datetime
+    now = datetime(2026, 10, 1, 12)
+    monkeypatch.setattr(db, '_utcnow', lambda: now)
+    uid = make_user()
+    login(client, uid)
+    assert client.post('/admin/retention-settings').status_code in (302, 403)
+    db.get_db().execute('UPDATE users SET is_admin = 1 WHERE id = ?', (uid,))
+    db.get_db().commit()
+    db.record_document(uid, 'Antes', 'uni', 0, file_stem=STEM)
+    old_expiry = db.get_document_by_filename(STEM)['expires_at']
+    client.get('/admin/')
+    with client.session_transaction() as sess:
+        csrf = sess['ai_csrf_token']
+        sess['file_generated'] = True
+    assert client.post('/admin/retention-settings', data={
+        'csrf_token': 'incorrecto', 'file_retention_hours': '72'}).status_code == 302
+    assert db.get_retention_hours() == 24
+    for value in ('0', '-1', '1.5', '8761', 'no'):
+        client.post('/admin/retention-settings', data={'csrf_token': csrf, 'file_retention_hours': value})
+        assert db.get_retention_hours() == 24
+    client.post('/admin/retention-settings', data={'csrf_token': csrf, 'file_retention_hours': '72'})
+    assert db.get_retention_hours() == 72
+    assert db.get_document_by_filename(STEM)['expires_at'] == old_expiry
+    db.record_document(uid, 'Después', 'uni', 0, file_stem=STEM + '_nuevo')
+    doc = db.get_document_by_filename(STEM + '_nuevo')
+    assert doc['expires_at'] == '2026-10-04 12:00:00'
+    db.get_db().execute('UPDATE documents SET created_at = ?', (now.strftime(db.DATETIME_FMT),))
+    db.get_db().commit()
+    make_files(STEM)
+    make_files(STEM + '_nuevo')
+    old_token = app_module._share_serializer().dumps(STEM)
+    new_token = app_module._share_serializer().dumps(STEM + '_nuevo')
+    now += timedelta(hours=25)
+    client.post('/admin/retention-settings', data={'csrf_token': csrf, 'file_retention_hours': '1'})
+    assert client.get(f'/s/{old_token}/docx').status_code == 410
+    assert client.get(f'/s/{new_token}/docx').status_code == 200
+    html = client.get('/my_documents').get_data(as_text=True)
+    assert '1 día y 23 horas' in html and 'data-created=' in html
+    assert abs(db.time_left(doc['expires_at'], '2026-10-01 12:00:00')[1] - 47 / 72) < .001
+    assert '1 día y 23 horas' in client.get('/choose_file/' + STEM + '_nuevo').get_data(as_text=True)
+    now += timedelta(hours=48)
+    assert client.get(f'/s/{new_token}/docx').status_code == 410
+
+
+def test_dashboard_stats_zero_days_timezone_and_approved_revenue(client, monkeypatch):
+    from datetime import datetime
+    monkeypatch.setattr(db, '_utcnow', lambda: datetime(2026, 10, 1, 12))
+    stats, daily = db.get_dashboard_stats(7)
+    assert len(daily) == 7 and stats['period_documents'] == 0
+    uid = make_user()
+    db.record_document(uid, 'IA', 'uni', 1200, mode='ai')
+    db.record_document(uid, 'Manual', 'uni', 0)
+    conn = db.get_db()
+    conn.execute("UPDATE documents SET created_at = '2026-10-01 02:00:00'")
+    conn.execute("UPDATE users SET created_at = '2026-09-29 12:00:00'")
+    conn.execute('UPDATE users SET is_admin = 1 WHERE id = ?', (uid,))
+    conn.commit()
+    approved = db.create_payment(uid, 'binance', 'ok', 5)
+    db.create_payment(uid, 'binance', 'pending', 9)
+    db.review_payment(approved, True, uid, 30)
+    stats, daily = db.get_dashboard_stats(7)
+    assert daily[-2]['documents'] == 2 and daily[-1]['documents'] == 0
+    assert stats['period_tokens'] == stats['average_tokens'] == 1200
+    assert stats['period_ai'] == stats['period_manual'] == stats['active_users'] == 1
+    assert stats['premium'] == stats['pending'] == stats['new_users'] == 1
+    assert stats['revenue'] == 5
+    login(client, uid)
+    html = client.get('/admin/?days=7').get_data(as_text=True)
+    assert 'Tokens por día' in html and 'Documentos por día' in html and 'mode-donut' in html
+    assert 'Últimos 7 días' in html and 'csrf_token' in html

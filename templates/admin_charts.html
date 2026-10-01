@@ -1,0 +1,59 @@
+<section class="admin-section" id="estadisticas">
+  <div class="analytics-head">
+    <h2 class="admin-section__title">Actividad de los últimos {{ days }} días</h2>
+    <form method="GET" class="period-filter">
+      <label for="stats-days">Período</label>
+      <select id="stats-days" name="days">
+        {% for n in [7, 30, 90] %}<option value="{{ n }}" {{ 'selected' if days == n }}>Últimos {{ n }} días</option>{% endfor %}
+      </select>
+      <button class="mini" type="submit">Ver</button>
+    </form>
+  </div>
+  <p class="admin-form__hint">Fechas en hora de Venezuela. Incluye hoy y los días sin actividad. Los tokens corresponden a generaciones registradas; no equivalen a la factura del proveedor.</p>
+  <div class="period-metrics">
+    <div><strong>{{ stats.period_documents }}</strong><span>Documentos</span></div>
+    <div><strong>{{ '{:,}'.format(stats.period_tokens) }}</strong><span>Tokens registrados</span></div>
+    <div><strong>{{ stats.active_users }}</strong><span>Usuarios que generaron</span></div>
+    <div><strong>{{ stats.new_users }}</strong><span>Nuevos usuarios</span></div>
+    <div><strong>{{ '{:,}'.format(stats.average_tokens) }}</strong><span>Tokens por documento con IA</span></div>
+    <div><strong>{{ stats.available }}</strong><span>Documentos vigentes · ahora</span></div>
+  </div>
+  <div class="analytics-grid">
+    {% for metric, title, maximum in [('documents', 'Documentos por día', chart_max_documents), ('tokens', 'Tokens por día', chart_max_tokens)] %}
+    <article class="card chart-card">
+      <h3>{{ title }}</h3>
+      <p class="chart-scale">Máximo diario: {{ '{:,}'.format(maximum if maximum > 1 or stats['period_' + metric] else 0) }}</p>
+      <svg class="activity-chart" viewBox="0 0 600 180" role="img" aria-labelledby="chart-{{ metric }}-title">
+        <title id="chart-{{ metric }}-title">{{ title }}. Consulta la tabla diaria debajo de las gráficas para los valores exactos.</title>
+        <line x1="0" y1="165" x2="600" y2="165" class="chart-gridline" />
+        <line x1="0" y1="85" x2="600" y2="85" class="chart-gridline" />
+        {% for row in daily %}
+        {% set width = 600 / days %}
+        {% set height = row[metric] / maximum * 150 %}
+        <rect x="{{ loop.index0 * width + 1 }}" y="{{ 165 - height }}" width="{{ width - 2 }}" height="{{ height }}" rx="2" class="chart-bar chart-bar--{{ metric }}">
+          <title>{{ row.day }}: {{ row[metric] }} {{ 'documentos' if metric == 'documents' else 'tokens' }}</title>
+        </rect>
+        {% endfor %}
+      </svg>
+      <div class="chart-dates"><span>{{ daily[0].day }}</span><span>{{ daily[-1].day }}</span></div>
+      {% if not stats['period_' + metric] %}<p class="chart-empty">Sin actividad en este período.</p>{% endif %}
+    </article>
+    {% endfor %}
+    <article class="card chart-card chart-card--modes">
+      <h3>Cómo se crean los documentos</h3>
+      {% set ai_percent = stats.period_ai * 100 / stats.period_documents if stats.period_documents else 0 %}
+      <div class="mode-donut {{ 'mode-donut--empty' if not stats.period_documents }}" style="--ai-percent: {{ ai_percent }}%" role="img" aria-label="{{ stats.period_ai }} documentos con IA y {{ stats.period_manual }} manuales">
+        <span><strong>{{ stats.period_documents }}</strong>documentos</span>
+      </div>
+      <div class="chart-legend"><span><i class="legend-dot"></i> Con IA <b>{{ stats.period_ai }}</b></span><span><i class="legend-dot legend-dot--manual"></i> Manuales <b>{{ stats.period_manual }}</b></span></div>
+    </article>
+  </div>
+  <details class="daily-details">
+    <summary>Ver cifras diarias</summary>
+    <div class="table-wrap"><table class="admin-table">
+      <caption class="admin-form__hint">Actividad diaria · hora de Venezuela</caption>
+      <thead><tr><th scope="col">Fecha</th><th scope="col">Documentos</th><th scope="col">Con IA</th><th scope="col">Manuales</th><th scope="col">Tokens</th></tr></thead>
+      <tbody>{% for row in daily|reverse %}<tr><th scope="row">{{ row.day }}</th><td>{{ row.documents }}</td><td>{{ row.ai }}</td><td>{{ row.manual }}</td><td>{{ '{:,}'.format(row.tokens) }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+</section>

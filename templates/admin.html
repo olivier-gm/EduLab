@@ -4,11 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#141430">
   <meta name="robots" content="noindex">
   <title>Panel admin · Gullieth</title>
 
-  <link rel="icon" href="{{ url_for('static', filename='icono.jpg') }}" type="image/x-icon">
+  {% include "app_icons.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
@@ -23,7 +22,7 @@
   <header class="nav" data-nav>
     <div class="shell nav__inner">
       <a href="{{ url_for('welcome') }}" class="brand">
-        <img class="brand__img" src="{{ url_for('static', filename='img/logo.png') }}" alt="Gullieth">
+        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="Gullieth">
         <span class="brand__name">Gulli<span>eth</span></span>
       </a>
       <nav class="nav__links" data-nav-links>
@@ -43,7 +42,7 @@
 
     <div class="admin-head">
       <h1>Panel admin</h1>
-      <p>Usuarios registrados, tokens de Gemini consumidos y documentos generados.</p>
+      <p>Actividad, consumo de IA y gestión de tu aplicación.</p>
     </div>
 
     <div class="admin-stats">
@@ -57,11 +56,29 @@
       </div>
       <div class="card admin-stat">
         <div class="admin-stat__num">{{ '{:,}'.format(stats['total_tokens']) }}</div>
-        <div class="admin-stat__label"><i class="bx bx-shape-triangle"></i> Tokens de Gemini usados</div>
+        <div class="admin-stat__label"><i class="bx bx-shape-triangle"></i> Tokens registrados · todos los proveedores</div>
       </div>
+      <div class="card admin-stat"><div class="admin-stat__num">{{ stats.premium }}</div><div class="admin-stat__label">Planes Premium activos</div></div>
+      <div class="card admin-stat"><div class="admin-stat__num">{{ stats.pending }}</div><div class="admin-stat__label">Pagos pendientes de revisión</div></div>
+      <div class="card admin-stat"><div class="admin-stat__num">${{ '%.2f'|format(stats.revenue) }}</div><div class="admin-stat__label">Monto de pagos aprobados · histórico</div></div>
     </div>
 
+    {% include 'admin_charts.html' %}
+
     {% if msg %}<div class="admin-msg" role="status"><i class="bx bx-info-circle"></i> {{ msg }}</div>{% endif %}
+
+    <section class="admin-section" id="retencion">
+      <h2 class="admin-section__title"><i class="bx bx-time-five"></i> Conservación de documentos</h2>
+      <form method="POST" action="{{ url_for('admin.save_retention_settings') }}" class="card admin-form">
+        <input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}">
+        <p class="admin-form__hint">Solo afecta a documentos nuevos. Los ya creados mantienen su vencimiento original, incluso si aumentas o reduces este plazo.</p>
+        <label>Horas antes de eliminar un documento
+          <input class="input" type="number" name="file_retention_hours" min="1" max="8760" step="1" value="{{ settings.file_retention_hours }}" required>
+        </label>
+        <p class="admin-form__hint">Plazo actual: {{ retention_text }}. Los enlaces compartidos vencen con el documento. La limpieza de archivos vencidos se ejecuta cada 15 minutos.</p>
+        <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar conservación</button>
+      </form>
+    </section>
 
     <section class="admin-section" id="ia">
       <h2 class="admin-section__title"><i class="bx bx-brain"></i> Proveedor y modelo de IA</h2>

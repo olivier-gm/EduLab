@@ -6,6 +6,11 @@
 (function () {
   'use strict';
 
+  var retry = document.querySelector('[data-retry]');
+  if (retry) {
+    retry.addEventListener('click', function () { window.location.reload(); });
+  }
+
   /* ---- Menú móvil ---- */
   var burger = document.querySelector('[data-burger]');
   var links = document.querySelector('[data-nav-links]');

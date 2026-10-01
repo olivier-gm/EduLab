@@ -68,7 +68,7 @@ def _generate(contents, config, usage_sink):
 
 def _json_generate(contents, schema, instruction, usage_sink):
     _, text = _generate(contents, types.GenerateContentConfig(
-        system_instruction=instruction, temperature=0.2, max_output_tokens=16000,
+        system_instruction=instruction + '\n' + IA.EDUCATIONAL_CONTEXT, temperature=0.2, max_output_tokens=16000,
         response_mime_type='application/json', response_json_schema=schema,
         safety_settings=IA.SAFETY_SETTINGS), usage_sink)
     try:

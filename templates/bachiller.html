@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css" integrity="sha512-MV7K8+y+gLIBoVD59lQIYicR65iaqukzvf/nwasF0nqhPay5w/9lJmVM2hMDcnK1OnMGCdVK+iQrJ7lzPJQd1w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <link rel="stylesheet" href="static\css\header2.css">
   <link rel="stylesheet" href="static\css\menu_body2.css">
-  <link rel="icon" href="logos/logico_black.png" type="image/x-icon">
+  {% include "app_icons.html" %}
   <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -34,15 +34,15 @@
   <header class="header">
     <div class="bottom-bar">
       <div class="bottom-bar__content">
-        <a href="#" class="logo">
-          <img class="logo__img" src="static\img\logo.png" alt="logo">
+        <a href="#" class="logo" aria-label="Gullieth">
+          <img class="logo__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="Gullieth">
 
         </a>
     
         <nav class="nav">
           <ul class="nav__list">
             <li class="nav__item">
-              <a class="nav__link ai" href="#">Gullieth AI <i class='bx bx-shape-triangle larger-icon' style="color: rgb(210, 184, 14);"></i></a>
+              <a class="nav__link ai" href="#">Gullieth AI <i class='bx bx-shape-triangle larger-icon' style="color: #20e4da;"></i></a>
             </li>
           
           

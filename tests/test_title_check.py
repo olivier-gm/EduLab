@@ -148,3 +148,55 @@ def test_si_fallan_las_dos_vias_se_lanza_error(jev, gemini):
     gemini.result = IA.GenerationError('quota', 'La IA alcanzó su límite.')
     with pytest.raises(IA.GenerationError):
         title_check.check_title('La célula')
+
+
+@pytest.mark.parametrize('invalid_key', [None, 'title', 'term_99'])
+def test_glossary_batches_individual_verdicts_and_accepts_medical_context(monkeypatch, invalid_key):
+    terms = ['Pene', 'Vulva', 'Necrosis', 'Hemorragia', 'ITS'] + [f'Concepto {i}' for i in range(95)]
+    if invalid_key == 'term_99':
+        terms[-1] = 'asdfghjkl'
+    calls = []
+    monkeypatch.setenv('JEV', 'test-key')
+    def post(url, headers, json, timeout):
+        calls.append(json)
+        assert len(json['questions']) == 101
+        assert json['state']['items']['term_0'] == 'Pene'
+        assert '`items.term_99`' in json['questions']['term_99']['instructions']
+        assert 'Anatomía genital' in json['questions']['title']['instructions']
+        return FakeResponse(body={'answers': {key: jev_payload(
+            'gibberish' if key == invalid_key else 'valid')['answers']['title_validity']
+            for key in json['questions']}})
+    monkeypatch.setattr(title_check.requests, 'post', post)
+    if invalid_key:
+        with pytest.raises(ValueError, match='título' if invalid_key == 'title' else 'asdfghjkl'):
+            title_check.check_glossary('Anatomía clínica', terms)
+    else:
+        title_check.check_glossary('Anatomía clínica', terms)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('failure', [FakeResponse(429), FakeResponse(body={'answers': {}})])
+def test_glossary_fallback_checks_every_item_and_rejects_incomplete_results(jev, monkeypatch, failure):
+    import glossary
+    jev.responses = [failure]
+    result = {'title': 'valid', 'term_0': 'valid', 'term_1': 'gibberish'}
+    calls = []
+    def generate(contents, schema, instruction, usage):
+        calls.append(schema)
+        assert schema['required'] == ['title', 'term_0', 'term_1']
+        return result
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    with pytest.raises(ValueError, match='asdfghjkl'):
+        title_check.check_glossary('Anatomía clínica', ['Pene', 'asdfghjkl'])
+    assert len(calls) == 1
+    result.pop('term_1')
+    with pytest.raises(IA.GenerationError, match='lista completa'):
+        title_check.check_glossary('Anatomía clínica', ['Pene', 'asdfghjkl'])
+
+
+def test_glossary_without_jev_accepts_clinical_terms_using_ai(monkeypatch):
+    import glossary
+    monkeypatch.delenv('JEV', raising=False)
+    monkeypatch.delenv('TYPESAFE_API_KEY', raising=False)
+    monkeypatch.setattr(glossary, '_json_generate', lambda *a: {'term_0': 'valid', 'term_1': 'valid'})
+    title_check.check_glossary('Anatomía clínica', ['Vulva', 'Necrosis'], include_title=False)

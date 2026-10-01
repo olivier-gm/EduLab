@@ -16,6 +16,7 @@ Documentación: https://docs.typesafe.ai/primitives/choice
 
 import logging
 import os
+import json
 from dataclasses import dataclass
 from typing import Optional
 
@@ -38,13 +39,14 @@ QUESTIONS = {
         'type': 'choice',
         'instructions': (
             'Is this text a real topic that a student could research and write an '
-            'academic report about?'
+            'academic report about? ' + IA.EDUCATIONAL_CONTEXT
         ),
         'criteria': {
             'valid': (
                 'A real subject, concept, person, event, work or question that can be '
                 'researched, even if it is badly written, has typos, or is very short '
-                'or informal.'
+                'or informal. Medical terms and acronyms, including anatomy, sexual '
+                'health, injuries and pathology, are valid academic subjects.'
             ),
             'gibberish': (
                 'Random letters, keyboard mashing, repeated characters or text with no '
@@ -87,7 +89,7 @@ def jev_available():
     return bool(_api_key())
 
 
-def _call_jev(state):
+def _call_jev(state, questions=None):
     """Una consulta a JEV. Lanza requests.RequestException o RuntimeError."""
     last = None
     for attempt in range(JEV_ATTEMPTS):
@@ -95,7 +97,7 @@ def _call_jev(state):
             response = requests.post(
                 JEV_URL,
                 headers={'Authorization': 'Bearer ' + _api_key()},
-                json={'state': state, 'model': JEV_MODEL, 'questions': QUESTIONS},
+                json={'state': state, 'model': JEV_MODEL, 'questions': QUESTIONS if questions is None else questions},
                 timeout=JEV_TIMEOUT,
             )
         except (requests.Timeout, requests.ConnectionError) as e:
@@ -106,13 +108,13 @@ def _call_jev(state):
             continue
         if response.status_code != 200:
             # 4xx: clave inválida, cuota, petición mal formada… reintentar no ayuda.
-            raise RuntimeError(f'JEV respondió {response.status_code}: {response.text[:200]}')
+            raise RuntimeError(f'JEV respondió {response.status_code}')
         return response.json()
     raise last
 
 
-def _parse(payload):
-    answer = payload['answers'][QUESTION_ID]
+def _parse(payload, question_id=QUESTION_ID):
+    answer = payload['answers'][question_id]
     probabilities = answer.get('probabilities') or {}
     p_valid = float(probabilities.get('valid', 1.0 if answer.get('choice') == 'valid' else 0.0))
     if p_valid >= VALID_THRESHOLD:
@@ -141,3 +143,53 @@ def check_title(title, usage_sink=None):
 
     valid = IA.check_title(title, usage_sink=usage_sink)      # puede lanzar GenerationError
     return TitleVerdict(valid, None if valid else 'invalid', 'gemini')
+
+
+def check_glossary(title, terms=None, usage_sink=None, *, include_title=True):
+    """Evalúa cada entrada por separado en una consulta; no elimina términos rechazados."""
+    items = {'title': title} if include_title else {}
+    items.update({f'term_{i}': term for i, term in enumerate(terms or [])})
+    if not items:
+        return
+    state = {'topic': title, 'items': items}
+    criteria = QUESTIONS[QUESTION_ID]['criteria']
+    verdicts = None
+    if jev_available():
+        questions = {key: {
+            'type': 'choice', 'criteria': criteria,
+            'instructions': (
+                f'Is only `items.{key}` a real academic subject or glossary concept? '
+                'Use `topic` as context. Evaluate this item independently: other valid '
+                'items must not make meaningless text valid. ' + IA.EDUCATIONAL_CONTEXT
+            )} for key in items}
+        try:
+            payload = _call_jev(state, questions)
+            verdicts = {key: _parse(payload, key) for key in items}
+            logger.info('Glosario evaluado con JEV: %s entradas.', len(items))
+        except Exception as exc:
+            logger.warning('JEV no pudo evaluar el glosario (%s). Se usa Gemini como respaldo.',
+                           type(exc).__name__)
+    if verdicts is None:
+        # Reutiliza la generación JSON y el proveedor configurado en el admin.
+        from glossary import _json_generate
+        result = _json_generate([json.dumps(state, ensure_ascii=False)], {
+            'type': 'object', 'properties': {key: {'type': 'string', 'enum': list(criteria)}
+                for key in items}, 'required': list(items), 'additionalProperties': False},
+            'Evalúa cada campo de items de forma independiente como título o término de un '
+            'glosario académico, usando topic como contexto. Clasifica cada uno con estas '
+            'opciones: ' + json.dumps(criteria, ensure_ascii=False) + '. '
+            'No declares válido un texto sin sentido porque otros términos sí sean válidos. '
+            'No modifiques ni omitas entradas.', usage_sink)
+        if not isinstance(result, dict) or set(result) != set(items) or any(
+                not isinstance(value, str) or value not in criteria for value in result.values()):
+            raise IA.GenerationError('invalid', 'No se pudo validar la lista completa del glosario. Inténtalo de nuevo.')
+        verdicts = {key: TitleVerdict(value == 'valid', value, 'gemini') for key, value in result.items()}
+    if 'title' in verdicts and not verdicts['title'].valid:
+        why = _REASON_MESSAGES.get(verdicts['title'].reason, 'no parece un tema académico')
+        raise ValueError(f'Revisa el título del glosario «{title}»: {why}.')
+    invalid = [text for key, text in items.items() if key != 'title' and not verdicts[key].valid]
+    if invalid:
+        examples = ', '.join(f'«{term}»' for term in invalid[:5])
+        extra = f' y {len(invalid) - 5} más' if len(invalid) > 5 else ''
+        raise ValueError(f'Revisa estos términos del glosario: {examples}{extra}. '
+                         'No se reconocen como conceptos académicos; corrige la lista antes de generar.')

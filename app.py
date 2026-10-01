@@ -19,7 +19,7 @@ load_dotenv()
 from form_processor import FormProcessor
 from algorythms import Document_process
 from IA import generate_essay_content, generate_introduction, generate_conclusion, GenerationError
-from title_check import check_title
+from title_check import check_title, check_glossary
 from glossary import extract_terms, parse_terms, generate_glossary, generate_bibliography
 
 import db
@@ -39,10 +39,7 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024
 app.secret_key = os.getenv('SECRET_KEY', '7f8b9a2c3d4e5f608192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8')
 
-# Enlaces para compartir: firmados con la clave de la app y válidos lo mismo que
-# se conserva el archivo (db.FILE_RETENTION_HOURS), así el enlace no sobrevive
-# al archivo.
-SHARE_MAX_AGE = db.FILE_RETENTION_HOURS * 3600
+# Enlaces firmados: el vencimiento se comprueba contra el documento guardado.
 SHARE_FILETYPES = ('docx', 'pdf')
 
 
@@ -70,7 +67,9 @@ def clear_ai_settings(_error):
 
 @app.context_processor
 def inject_current_user():
-    return {'current_user': current_user(), 'retention_hours': db.FILE_RETENTION_HOURS}
+    hours = db.get_retention_hours()
+    return {'current_user': current_user(), 'retention_hours': hours,
+            'retention_text': db.format_duration(hours)}
 
 
 # ── Validaciones de la generación ─────────────────────────────────────
@@ -281,8 +280,12 @@ def process_form():
             else:
                 raise ValueError('Elige el tema o una lista de términos para el glosario.')
             usage_sink.append(session.pop('glossary_extraction_tokens', 0))
+            check_glossary(processor.title, terms, usage_sink=usage_sink)
             glossary_entries = generate_glossary(processor.title, count, terms=terms,
                 bibliography=incluir_bibliografia, usage_sink=usage_sink)
+            if terms is None:
+                check_glossary(processor.title, [entry['term'] for entry in glossary_entries],
+                               usage_sink=usage_sink, include_title=False)
             body = ''
         except ValueError as exc:
             return form_error(str(exc))
@@ -393,10 +396,11 @@ def choose_file(filename):
         return form_error('Esa descarga ya no está disponible en tu sesión. '
                           'Genera el documento de nuevo.')
     file_path = f'output/{filename}.docx'
-    if not os.path.isfile(file_path):
+    doc = db.get_document_by_filename(filename)
+    if (doc is None or doc['user_id'] != current_user()['id']
+            or db.time_left(doc['expires_at'])[1] <= 0 or not os.path.isfile(file_path)):
         # Sin esto se mostraba la pantalla de descarga con enlaces que llevaban a un 404.
-        return form_error(f'El documento ya no existe (los archivos se conservan '
-                          f'{db.FILE_RETENTION_HOURS} horas). Genera el documento de nuevo.')
+        return form_error('El documento ya no existe o no está disponible. Genera el documento de nuevo.')
 
     # Enlaces públicos temporales para compartir (WhatsApp / Gmail / otros).
     # Van firmados y con caducidad: el destinatario no tiene sesión, así que
@@ -407,6 +411,7 @@ def choose_file(filename):
         for filetype in SHARE_FILETYPES
     }
     return render_template('download.html', filename=filename, share_urls=share_urls,
+                           expiry_text=db.time_left(doc['expires_at'])[0],
                            document_kind=session.get('document_kind', 'report'))
 
 @app.route('/download_file/<filename>/<filetype>')
@@ -417,12 +422,16 @@ def download_file(filename, filetype):
                           'Genera el documento de nuevo.')
     if filetype not in SHARE_FILETYPES:
         return render_template('404.html'), 404
+    doc = db.get_document_by_filename(filename)
+    if (doc is None or doc['user_id'] != current_user()['id']
+            or db.time_left(doc['expires_at'])[1] <= 0):
+        return render_template('404.html'), 410
     file_path = f'output/{os.path.basename(filename)}.{filetype}'
     try:
         return send_file(file_path, as_attachment=True)
     except Exception as e:
         logging.error('Error descargando archivo: %s', e)
-        return render_template('404.html')
+        return render_template('404.html'), 404
 
 
 @app.route('/my_documents')
@@ -433,12 +442,13 @@ def my_documents():
     for doc in db.list_user_documents(current_user()['id']):
         if not os.path.isfile(f"output/{doc['file_stem']}.docx"):
             continue        # el archivo ya no está (borrado a mano, etc.)
-        label, fraction = db.time_left(doc['expires_at'])
+        label, fraction = db.time_left(doc['expires_at'], doc['created_at'])
         documents.append({
             'id': doc['id'], 'title': doc['title'], 'doc_type': doc['doc_type'],
             'mode': doc['mode'], 'created_at': doc['created_at'],
             'time_left': label, 'fraction': fraction,
             'expires_iso': doc['expires_at'].replace(' ', 'T') + 'Z',
+            'created_iso': doc['created_at'].replace(' ', 'T') + 'Z',
             'urgent': fraction < 0.1,
             'has_pdf': os.path.isfile(f"output/{doc['file_stem']}.pdf"),
         })
@@ -466,8 +476,13 @@ def shared_file(token, filetype):
     if filetype not in SHARE_FILETYPES:
         return render_template('404.html'), 404
     try:
-        filename = _share_serializer().loads(token, max_age=SHARE_MAX_AGE)
+        filename = _share_serializer().loads(token)
     except (SignatureExpired, BadSignature):
+        return render_template('404.html'), 410
+    if not isinstance(filename, str):
+        return render_template('404.html'), 410
+    doc = db.get_document_by_filename(filename)
+    if doc is None or db.time_left(doc['expires_at'])[1] <= 0:
         return render_template('404.html'), 410
     file_path = f'output/{os.path.basename(filename)}.{filetype}'
     try:
@@ -479,8 +494,12 @@ def shared_file(token, filetype):
 
 @app.errorhandler(404)
 def page_not_found(e):
-    # note that we set the 404 status explicitly
-    return render_template('404.html')
+    return render_template('404.html'), 404
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    return render_template('500.html'), 500
 
 
 

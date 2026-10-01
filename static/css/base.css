@@ -21,6 +21,7 @@
   --gold: #e8c547;
   --blue: #007bff;
   --navy: #002a64;
+  --brand-cyan: #20e4da;
 
   /* Superficies claras */
   --surface: #ffffff;
@@ -178,10 +179,14 @@ button {
 
 /* ================= NAVBAR ================= */
 .nav {
+  --gold: var(--brand-cyan);
+  --stroke: rgba(32, 228, 218, 0.16);
+  --grad-brand: linear-gradient(135deg, #20e4da, #08b8c4);
+  --glow: 0 4px 18px rgba(8, 184, 196, 0.18);
   position: sticky;
   top: 0;
   z-index: 900;
-  background: rgba(10, 10, 26, 0.72);
+  background: rgba(5, 14, 18, 0.94);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--stroke);
@@ -189,7 +194,7 @@ button {
 }
 
 .nav.is-stuck {
-  background: rgba(8, 8, 22, 0.92);
+  background: rgba(3, 10, 14, 0.98);
   box-shadow: var(--sh-md);
 }
 
@@ -208,8 +213,11 @@ button {
 }
 
 .brand__img {
-  height: 34px;
-  width: auto;
+  height: 42px;
+  width: 42px;
+  object-fit: contain;
+  border-radius: 10px;
+  flex-shrink: 0;
   transition: transform 0.5s var(--ease);
 }
 
@@ -226,7 +234,7 @@ button {
 }
 
 .brand__name span {
-  color: var(--gold);
+  color: var(--brand-cyan);
 }
 
 .nav__links {
@@ -245,8 +253,27 @@ button {
 }
 
 .nav__link:hover {
-  color: #fff;
-  background: var(--glass);
+  color: var(--brand-cyan);
+  background: rgba(32, 228, 218, 0.08);
+}
+
+.nav :focus-visible {
+  outline-color: var(--brand-cyan);
+}
+
+.nav .btn--primary {
+  color: #031619;
+  border-color: rgba(32, 228, 218, 0.3);
+}
+
+.nav .btn--primary:hover {
+  box-shadow: 0 6px 24px rgba(8, 184, 196, 0.3);
+}
+
+.nav .btn--ghost:hover,
+.nav__burger:hover {
+  border-color: rgba(32, 228, 218, 0.45);
+  background: rgba(32, 228, 218, 0.08);
 }
 
 .nav__actions {
@@ -585,7 +612,7 @@ button {
     align-items: stretch;
     gap: 4px;
     padding: 16px 20px 24px;
-    background: rgba(8, 8, 22, 0.97);
+    background: rgba(5, 14, 18, 0.98);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--stroke);
     transform: translateY(-130%);

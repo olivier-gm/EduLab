@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>{{ error_code }} · {{ error_title }} · Gullieth</title>
+  {% include 'app_icons.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/error.css') }}">
+  <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
+</head>
+<body class="error-page">
+  <header class="nav" data-nav>
+    <div class="shell nav__inner">
+      <a href="{{ url_for('welcome') }}" class="brand" aria-label="Gullieth · Inicio">
+        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="" width="42" height="42">
+        <span class="brand__name">Gulli<span>eth</span></span>
+      </a>
+      <a class="btn btn--ghost btn--sm" href="{{ url_for('show_form') }}">Crear documento</a>
+    </div>
+  </header>
+  <main class="shell error-main">
+    <section class="error-card" aria-labelledby="error-title">
+      <span class="error-label">Gullieth · Informes y glosarios</span>
+      <div class="error-code" aria-hidden="true">{{ error_code }}</div>
+      <h1 id="error-title"><span class="sr-only">Error {{ error_code }}. </span>{{ error_title }}</h1>
+      <p>{{ error_message }}</p>
+      <div class="error-actions">
+        {% if error_code == '500' %}
+        <button class="btn btn--primary" type="button" data-retry>Volver a intentar</button>
+        <a class="btn btn--ghost" href="{{ url_for('welcome') }}">Volver al inicio</a>
+        {% else %}
+        <a class="btn btn--primary" href="{{ url_for('welcome') }}">Volver al inicio</a>
+        <a class="btn btn--ghost" href="{{ url_for('show_form') }}">Crear documento</a>
+        {% endif %}
+      </div>
+      <span class="error-note">Tu siguiente idea empieza con una página en blanco.</span>
+    </section>
+  </main>
+  <footer class="error-footer">Gullieth · Hecho en Venezuela</footer>
+</body>
+</html>

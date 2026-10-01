@@ -6,11 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description"
     content="Crea informes académicos y glosarios de hasta 100 términos con IA, portada al formato venezolano y descarga en Word y PDF. Sube tu lista o elige un tema.">
-  <meta name="theme-color" content="#141430">
 
   <title>Gullieth · Informes y glosarios de términos con IA</title>
 
-  <link rel="icon" href="{{ url_for('static', filename='icono.jpg') }}" type="image/x-icon">
+  {% include "app_icons.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
@@ -26,7 +25,7 @@
   <header class="nav" data-nav>
     <div class="shell nav__inner">
       <a href="{{ url_for('welcome') }}" class="brand">
-        <img class="brand__img" src="{{ url_for('static', filename='img/logo.png') }}" alt="Gullieth">
+        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="Gullieth">
         <span class="brand__name">Gulli<span>eth</span></span>
       </a>
 
@@ -34,8 +33,6 @@
         <a class="nav__link" href="#como-funciona">Cómo funciona</a>
         <a class="nav__link" href="#funciones">Funciones</a>
         <a class="nav__link" href="#instituciones">Instituciones</a>
-        <a class="nav__link" href="#faq">Preguntas</a>
-        <a class="nav__link" href="{{ url_for('show_form') }}">Crear documento</a>
         <a class="nav__link" href="{{ url_for('plans.plans') }}">Planes</a>
         <a class="nav__link" href="{{ url_for('my_documents') }}">Mis informes</a>
         {% if current_user and current_user.is_admin %}
@@ -191,7 +188,8 @@
       <div class="shell">
         <div class="section__head reveal">
           <h2 class="section__title">Todo lo que hace por ti</h2>
-          <p class="section__sub">Informes, trabajos escritos y glosarios de términos con el formato académico venezolano.</p>
+          <p class="section__sub">Informes, trabajos escritos y glosarios de términos con el formato académico
+            venezolano.</p>
         </div>
 
         <div class="bento">
@@ -288,9 +286,11 @@
           </details>
 
           <details class="faq__item">
-            <summary class="faq__q">¿Sirve para bachillerato y no solo para universidad? <i class="bx bx-plus"></i></summary>
+            <summary class="faq__q">¿Sirve para bachillerato y no solo para universidad? <i class="bx bx-plus"></i>
+            </summary>
             <p class="faq__a">Sí. En el formulario puedes cambiar entre <strong>Universidad</strong> y
-              <strong>Bachillerato</strong>: la portada se ajusta al membrete que corresponde en cada caso.</p>
+              <strong>Bachillerato</strong>: la portada se ajusta al membrete que corresponde en cada caso.
+            </p>
           </details>
 
           <details class="faq__item">
@@ -301,21 +301,16 @@
 
           <details class="faq__item">
             <summary class="faq__q">¿Puedo editar el documento después? <i class="bx bx-plus"></i></summary>
-            <p class="faq__a">Claro. Descarga la versión <strong>.docx</strong> y ábrela en Word, Google Docs o
-              LibreOffice para cambiar lo que quieras antes de entregar.</p>
+            <p class="faq__a">Claro. Descarga la versión <strong>.docx</strong> y ábrela en Word o Google Docs para
+              cambiar lo que quieras antes de entregar.</p>
           </details>
 
           <details class="faq__item">
             <summary class="faq__q">¿Por cuánto tiempo puedo descargarlo? <i class="bx bx-plus"></i></summary>
-            <p class="faq__a">El archivo queda disponible unas dos horas después de generarse. Pasado ese tiempo se
+            <p class="faq__a">El archivo queda disponible unas horas después de generarse. Pasado ese tiempo se
               elimina del servidor, así que descárgalo apenas esté listo.</p>
           </details>
 
-          <details class="faq__item">
-            <summary class="faq__q">¿Necesito crear una cuenta? <i class="bx bx-plus"></i></summary>
-            <p class="faq__a">Sí, una cuenta gratuita: con tu correo o con un clic usando "Continuar con Google".
-              Una vez adentro, puedes crear informes y glosarios según el acceso disponible en tu plan.</p>
-          </details>
         </div>
       </div>
     </section>
@@ -339,10 +334,11 @@
       <div class="footer__grid">
         <div>
           <a href="{{ url_for('welcome') }}" class="brand">
-            <img class="brand__img" src="{{ url_for('static', filename='img/logo.png') }}" alt="Gullieth">
+            <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="Gullieth">
             <span class="brand__name">Gulli<span>eth</span></span>
           </a>
-          <p class="footer__about">Generador de informes, trabajos escritos y glosarios de términos para estudiantes universitarios y de
+          <p class="footer__about">Generador de informes, trabajos escritos y glosarios de términos para estudiantes
+            universitarios y de
             bachillerato en Venezuela.</p>
         </div>
 

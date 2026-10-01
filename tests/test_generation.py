@@ -322,6 +322,8 @@ def test_safe_filename(title, expected):
 
 def test_glossary_route_enforces_ai_and_ignores_intro_conclusion(client, monkeypatch, fake_document):
     captured = {}
+    validated = []
+    monkeypatch.setattr(app_module, 'check_glossary', lambda title, terms, **kw: validated.append((title, terms)))
     entries = [{'term': 'Átomo', 'definition': 'Unidad de materia.', 'reference': ''}]
     def generate(title, count, **kwargs):
         captured.update(count=count, **kwargs)
@@ -334,6 +336,7 @@ def test_glossary_route_enforces_ai_and_ignores_intro_conclusion(client, monkeyp
         monkeypatch.setattr(app_module, name, unexpected)
     html = post_form(client, document_kind='glossary', glossary_source='list', glossary_terms='Átomo')
     assert 'Descargar Word' in html and captured['count'] == 1 and not captured['bibliography']
+    assert validated == [('LA INTELIGENCIA ARTIFICIAL', ['Átomo'])]
     assert 'Glosario en orden alfabético' in html and 'Índice incluido' not in html
     assert db.get_db().execute('SELECT mode, tokens_used FROM documents').fetchone()['mode'] == 'ai'
     db.set_settings({'free_ai_enabled': '0'})
@@ -343,8 +346,42 @@ def test_glossary_route_enforces_ai_and_ignores_intro_conclusion(client, monkeyp
 
 def test_glossary_count_rejected_before_api(client, monkeypatch):
     monkeypatch.setattr(app_module, 'generate_glossary', lambda *a, **k: pytest.fail('No llamar a la IA'))
+    monkeypatch.setattr(app_module, 'check_glossary', lambda *a, **k: pytest.fail('No validar por API'))
     html = post_form(client, document_kind='glossary', glossary_count='101')
     assert 'entre 1 y 100' in html
+
+
+def test_glossary_invalid_items_stop_generation(client, monkeypatch):
+    def reject(title, terms, **kwargs):
+        raise ValueError('Revisa estos términos del glosario: «asdfghjkl».')
+    monkeypatch.setattr(app_module, 'check_glossary', reject)
+    monkeypatch.setattr(app_module, 'generate_glossary', lambda *a, **k: pytest.fail('No generar términos inválidos'))
+    html = post_form(client, document_kind='glossary', glossary_source='list', glossary_terms='asdfghjkl')
+    assert 'Revisa estos términos' in html and 'Descargar Word' not in html
+    assert db.get_stats()['total_documents'] == 0
+
+
+def test_topic_glossary_validates_generated_terms_before_delivery(client, monkeypatch, fake_document):
+    validated = []
+    def check(title, terms, **kwargs):
+        validated.append((title, terms, kwargs.get('include_title', True)))
+    monkeypatch.setattr(app_module, 'check_glossary', check)
+    monkeypatch.setattr(app_module, 'generate_glossary', lambda *a, **k: [
+        {'term': 'Necrosis', 'definition': 'Muerte de las células de un tejido.', 'reference': ''}])
+    html = post_form(client, title='Patología clínica', document_kind='glossary', glossary_count='1')
+    assert 'Descargar Word' in html
+    assert validated == [('PATOLOGÍA CLÍNICA', None, True), ('PATOLOGÍA CLÍNICA', ['Necrosis'], False)]
+
+
+def test_medical_context_is_sent_to_title_and_report_models(fake_api, monkeypatch):
+    captured = []
+    def generate_content(model, config, contents):
+        captured.append(config.system_instruction)
+        return response('TRUE')
+    monkeypatch.setattr(IA.client.models, 'generate_content', generate_content)
+    assert IA.check_title('Anatomía genital y necrosis')
+    IA.generate_essay_content('Anatomía genital y necrosis', [])
+    assert all('Anatomía genital' in instruction and 'educativo' in instruction for instruction in captured)
 
 
 def test_manual_bibliography_is_optional(client, monkeypatch, fake_document):

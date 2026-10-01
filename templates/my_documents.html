@@ -4,11 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#141430">
   <meta name="robots" content="noindex">
   <title>Mis informes · Gullieth</title>
 
-  <link rel="icon" href="{{ url_for('static', filename='icono.jpg') }}" type="image/x-icon">
+  {% include "app_icons.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
@@ -24,7 +23,7 @@
   <header class="nav" data-nav>
     <div class="shell nav__inner">
       <a href="{{ url_for('welcome') }}" class="brand">
-        <img class="brand__img" src="{{ url_for('static', filename='img/logo.png') }}" alt="Gullieth">
+        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="Gullieth">
         <span class="brand__name">Gulli<span>eth</span></span>
       </a>
       <nav class="nav__links" data-nav-links>
@@ -45,7 +44,7 @@
 
     <div class="docs-head">
       <h1>Mis informes</h1>
-      <p>Aquí están los documentos que generaste. Se eliminan automáticamente {{ retention_hours }} horas después de crearse, así que descárgalos a tiempo.</p>
+      <p>Los documentos nuevos se conservan {{ retention_text }}. Cada documento mantiene su fecha de vencimiento original: revisa su contador y descárgalo a tiempo.</p>
     </div>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -57,7 +56,7 @@
     {% if documents %}
     <div class="docs-list">
       {% for d in documents %}
-      <article class="card doc-item{{ ' is-urgent' if d.urgent }}" data-expires="{{ d.expires_iso }}">
+      <article class="card doc-item{{ ' is-urgent' if d.urgent }}" data-expires="{{ d.expires_iso }}" data-created="{{ d.created_iso }}">
         <div class="doc-item__main">
           <h2 class="doc-item__title">{{ d.title }}</h2>
           <div class="doc-item__meta">
@@ -86,7 +85,7 @@
     <div class="card docs-empty">
       <i class="bx bx-folder-open"></i>
       <h2>Todavía no tienes informes guardados</h2>
-      <p>Los documentos que generes aparecerán aquí durante {{ retention_hours }} horas.</p>
+      <p>Los documentos que generes aparecerán aquí durante {{ retention_text }}.</p>
       <a class="btn btn--primary" href="{{ url_for('show_form') }}"><i class="bx bx-plus"></i> Crear un documento</a>
     </div>
     {% endif %}
@@ -103,11 +102,16 @@
   <script>
     // Mantiene "Vence en …" al día sin recargar la página (se revisa cada minuto).
     (function () {
-      var TOTAL_MS = {{ retention_hours }} * 3600 * 1000;
 
       // Mismo criterio que db.time_left(): por horas, redondeando hacia abajo.
       function formatTimeLeft(ms) {
         var hours = Math.floor(ms / 3600000);
+        var days = Math.floor(hours / 24);
+        hours %= 24;
+        if (days) {
+          return days + (days === 1 ? ' día' : ' días') +
+            (hours ? ' y ' + hours + (hours === 1 ? ' hora' : ' horas') : '');
+        }
         if (hours >= 2) { return hours + ' horas'; }
         if (hours === 1) { return '1 hora'; }
         return 'menos de una hora';
@@ -121,9 +125,11 @@
             if (!document.querySelector('.doc-item')) { location.reload(); }
             return;
           }
-          var fraction = Math.min(1, ms / TOTAL_MS);
+          var total = new Date(item.dataset.expires) - new Date(item.dataset.created);
+          var fraction = Math.min(1, ms / Math.max(1, total));
           item.querySelector('[data-left]').textContent = formatTimeLeft(ms);
           item.querySelector('.doc-item__bar span').style.width = (fraction * 100).toFixed(1) + '%';
+          item.querySelector('.doc-item__bar').setAttribute('aria-valuenow', Math.round(fraction * 100));
           item.classList.toggle('is-urgent', fraction < 0.1);
         });
       }
