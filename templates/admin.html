@@ -58,7 +58,7 @@
         <div class="admin-stat__num">{{ '{:,}'.format(stats['total_tokens']) }}</div>
         <div class="admin-stat__label"><i class="bx bx-shape-triangle"></i> Tokens registrados · todos los proveedores</div>
       </div>
-      <div class="card admin-stat"><div class="admin-stat__num">{{ stats.premium }}</div><div class="admin-stat__label">Planes Premium activos</div></div>
+      <div class="card admin-stat"><div class="admin-stat__num">{{ stats.premium }}</div><div class="admin-stat__label">Planes mensuales activos</div></div>
       <div class="card admin-stat"><div class="admin-stat__num">{{ stats.pending }}</div><div class="admin-stat__label">Pagos pendientes de revisión</div></div>
       <div class="card admin-stat"><div class="admin-stat__num">${{ '%.2f'|format(stats.revenue) }}</div><div class="admin-stat__label">Monto de pagos aprobados · histórico</div></div>
     </div>
@@ -68,10 +68,10 @@
     {% if msg %}<div class="admin-msg" role="status"><i class="bx bx-info-circle"></i> {{ msg }}</div>{% endif %}
 
     <section class="admin-section" id="retencion">
-      <h2 class="admin-section__title"><i class="bx bx-time-five"></i> Conservación de documentos</h2>
+      <h2 class="admin-section__title"><i class="bx bx-time-five"></i> Conservación sin plan y para admins</h2>
       <form method="POST" action="{{ url_for('admin.save_retention_settings') }}" class="card admin-form">
         <input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}">
-        <p class="admin-form__hint">Solo afecta a documentos nuevos. Los ya creados mantienen su vencimiento original, incluso si aumentas o reduces este plazo.</p>
+        <p class="admin-form__hint">Este plazo se usa para admins y usuarios sin plan. Cada plan de pago tiene su propia conservación en Planes y pagos. Los documentos anteriores mantienen su vencimiento original.</p>
         <label>Horas antes de eliminar un documento
           <input class="input" type="number" name="file_retention_hours" min="1" max="8760" step="1" value="{{ settings.file_retention_hours }}" required>
         </label>
@@ -144,9 +144,10 @@
     <section class="admin-section" id="planes">
       <h2 class="admin-section__title"><i class="bx bx-credit-card"></i> Planes y pagos</h2>
 
+      {% include 'admin_plan_catalog.html' %}
       <form method="POST" action="{{ url_for('admin.save_settings') }}" class="card admin-form">
         <h3>Usuarios sin plan</h3>
-        <p class="admin-form__hint">Qué pueden generar quienes no tienen plan activo. Límite vacío = ilimitado; el límite es el total de documentos por usuario. Admins y usuarios con plan no tienen límites.</p>
+        <p class="admin-form__hint">Qué pueden generar quienes no tienen plan activo. Límite vacío = ilimitado; el límite es el total de documentos por usuario. Los planes de pago usan el cupo configurado arriba; los admins no consumen cupo.</p>
         <div class="admin-form__grid">
           <fieldset>
             <legend><i class="bx bx-shape-triangle"></i> Documentos con IA</legend>
@@ -164,13 +165,9 @@
           </fieldset>
         </div>
 
-        <h3>Plan de pago</h3>
-        <div class="admin-form__grid">
-          <label>Nombre <input class="input" name="plan_name" maxlength="60" value="{{ settings['plan_name'] }}"></label>
-          <label>Precio (USD) <input class="input" name="plan_price_usd" inputmode="decimal" value="{{ settings['plan_price_usd'] }}"></label>
-          <label>Duración (días) <input class="input" type="number" min="1" name="plan_days" value="{{ settings['plan_days'] }}"></label>
-          <label>Tasa manual de respaldo Bs por USD (si BCV falla) <input class="input" name="bs_rate" inputmode="decimal" value="{{ settings['bs_rate'] }}" placeholder="Opcional"></label>
-        </div>
+        <input type="hidden" name="plan_price_usd" value="{{ settings.plan_price_usd }}">
+        <input type="hidden" name="plan_days" value="{{ settings.plan_days }}">
+        <label>Tasa manual de respaldo Bs por USD (si BCV falla)<input class="input" name="bs_rate" inputmode="decimal" value="{{ settings.bs_rate }}" placeholder="Opcional"></label>
 
         <h3>Datos de cobro</h3>
         <div class="admin-form__grid">
@@ -188,12 +185,13 @@
         {% if payments %}
         <table class="admin-table">
           <thead>
-            <tr><th>Usuario</th><th>Método</th><th>Referencia</th><th>Monto</th><th>Estado</th><th>Reportado</th><th></th></tr>
+            <tr><th>Usuario</th><th>Plan</th><th>Método</th><th>Referencia</th><th>Monto</th><th>Estado</th><th>Reportado</th><th></th></tr>
           </thead>
           <tbody>
             {% for p in payments %}
             <tr>
               <td>{{ p['user_name'] or p['user_email'] }}<br><span class="is-dim">{{ p['user_email'] }}</span></td>
+              <td>{{ catalog[p['plan_id']].name }}</td>
               <td>{{ 'Binance' if p['method'] == 'binance' else 'Pago Móvil' }}</td>
               <td><code>{{ p['reference'] }}</code></td>
               <td>${{ '%g'|format(p['amount_usd']) }}</td>
@@ -238,14 +236,15 @@
               <td>{{ u['name'] or '—' }}{% if u['is_admin'] %} <span class="badge badge--admin"><i class="bx bx-crown"></i> admin</span>{% endif %}</td>
               <td>{{ u['email'] }}</td>
               <td>{% if u['google_id'] %}<span class="badge badge--google"><i class="bx bxl-google"></i> Google</span>{% else %}<span class="badge badge--free">Correo</span>{% endif %}</td>
-              <td>{% if active_plan(u) %}<span class="badge badge--approved">Premium</span><br><span class="is-dim">hasta {{ plan_expiry(u).strftime('%d/%m/%Y') }}</span>{% else %}<span class="badge badge--free">Sin plan</span>{% endif %}</td>
-              <td>{{ u['documents_count'] }}</td>
+              <td>{% if active_plan(u) %}<span class="badge badge--approved">{{ catalog[u.plan].name }}</span><br><span class="is-dim">hasta {{ plan_expiry(u).strftime('%d/%m/%Y') }}</span>{% else %}<span class="badge badge--free">Sin plan</span>{% endif %}</td>
+              <td>{{ u['documents_count'] }}<br><span class="is-dim">Recarga: {{ u.credits }} disponibles</span></td>
               <td>{{ '{:,}'.format(u['tokens_used']) }}</td>
               <td class="is-dim">{{ u['created_at'] }}</td>
               <td>
                 <form method="POST" action="{{ url_for('admin.user_plan', user_id=u['id']) }}" class="inline">
                   <input type="hidden" name="action" value="grant">
-                  <button class="mini mini--ok" type="submit">{{ 'Extender' if active_plan(u) else 'Dar plan' }}</button>
+                  <select name="plan_id" aria-label="Plan para {{ u.email }}">{% for key, plan in catalog.items() %}<option value="{{ key }}" {{ 'selected' if key == (u.plan if active_plan(u) else 'premium') }}>{{ plan.name }}</option>{% endfor %}</select>
+                  <button class="mini mini--ok" type="submit">Aplicar</button>
                 </form>
                 {% if active_plan(u) %}
                 <form method="POST" action="{{ url_for('admin.user_plan', user_id=u['id']) }}" class="inline">

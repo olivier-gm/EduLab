@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description"
-    content="Crea informes académicos y glosarios de hasta 100 términos con IA, portada al formato venezolano y descarga en Word y PDF. Sube tu lista o elige un tema.">
+    content="Crea informes académicos y glosarios de hasta {{ public_glossary_limit }} términos con IA, portada al formato venezolano y descarga en Word y PDF. Sube tu lista o elige un tema.">
 
   <title>EduLab · Informes y glosarios de términos con IA</title>
 
@@ -93,7 +93,7 @@
 
           <div class="hero__facts">
             <span class="hero__fact"><i class="bx bx-check-shield"></i> Portada al formato oficial</span>
-            <span class="hero__fact"><i class="bx bx-sort-a-z"></i> Glosarios de hasta 100 términos</span>
+            <span class="hero__fact"><i class="bx bx-sort-a-z"></i> Glosarios de hasta {{ public_glossary_limit }} términos</span>
             <span class="hero__fact"><i class="bx bx-group"></i> Hasta 8 integrantes</span>
           </div>
         </div>
@@ -145,7 +145,7 @@
           <div class="stat__label">instituciones reconocidas</div>
         </div>
         <div class="stat">
-          <div class="stat__num">100</div>
+          <div class="stat__num">{{ public_glossary_limit }}</div>
           <div class="stat__label">términos por glosario</div>
         </div>
       </div>
@@ -196,7 +196,7 @@
           <article class="card feat card--wide reveal">
             <div class="feat__icon is-gold"><i class="bx bx-sort-a-z"></i></div>
             <h3>Glosarios de términos con IA</h3>
-            <p>Hasta <strong>100 términos en orden alfabético</strong>, con definiciones breves y portada.
+            <p>Hasta <strong>{{ public_glossary_limit }} términos en orden alfabético</strong>, con definiciones breves y portada.
               Puedes indicar un tema y la cantidad, o subir tu asignación completa en una imagen, PDF, Word o TXT
               para leer los términos y revisarlos antes de generar. Sin introducción ni conclusión;
               si activas bibliografía, cada término lleva su referencia.</p>
@@ -279,7 +279,7 @@
           <details class="faq__item">
             <summary class="faq__q">¿También puedo crear un glosario de términos? <i class="bx bx-plus"></i></summary>
             <p class="faq__a">Sí. En Contenido, elige <strong>Glosario</strong>. Puedes indicar el tema y una
-              cantidad de 1 a 100 términos, o pegar tu lista y subir una imagen o documento con la asignación.
+              cantidad de 1 a {{ public_glossary_limit }} términos, o pegar tu lista y subir una imagen o documento con la asignación.
               La lectura omite portada, membrete e instrucciones para extraer los términos: revisa la lista
               antes de generar. El resultado incluye portada y definiciones breves en orden alfabético,
               sin introducción ni conclusión. La bibliografía es opcional y va junto a cada término.</p>

@@ -2,7 +2,18 @@
    EDULAB · Planes
    ============================================================ */
 
-.plans-page { padding: 40px 0 90px; max-width: 880px; }
+.plans-page { padding: 40px 0 90px; max-width: 1120px; }
+.plan-catalog { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 22px 0; }
+.plan-catalog .plan-card { display: flex; flex-direction: column; min-width: 0; }
+.plan-catalog .plan-card .btn { margin-top: auto; }
+.plan-catalog .plan-card ul { margin-bottom: 20px; }
+.plan-card--selected { border-color: #20e4da; }
+.account-usage { display: grid; gap: 6px; padding: 18px 22px; color: var(--text-soft); }
+.account-usage strong { color: #20e4da; }
+.plans-grid { display: block; }
+.plans-grid .pay-card { max-width: 620px; margin: 0 auto; }
+#pago { scroll-margin-top: 90px; }
+@media (max-width: 800px) { .plan-catalog { grid-template-columns: 1fr; } }
 .plans-head { text-align: center; margin-bottom: 26px; }
 .plans-head h1 { font-size: clamp(1.7rem, 4vw, 2.4rem); letter-spacing: -1px; }
 .plans-head p { color: var(--text-soft); margin-top: 6px; }
@@ -21,7 +32,6 @@
 .plans-alert--ok { background: rgba(43, 200, 102, 0.1); border: 1px solid rgba(43, 200, 102, 0.35); color: #63e08f; }
 .plans-alert--err { background: rgba(226, 87, 76, 0.1); border: 1px solid rgba(226, 87, 76, 0.35); color: #ff8b80; }
 
-.plans-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 20px; align-items: start; }
 
 .plan-card { padding: 28px 26px; text-align: center; border-color: rgba(232, 197, 71, 0.35); }
 .plan-card__name { font-size: 1.1rem; color: var(--gold); }
@@ -48,10 +58,18 @@
 .pay-data.is-on { display: block; }
 .pay-data dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 0.9rem; }
 .pay-data dt { color: var(--text-dim); }
-.pay-data dd { margin: 0; color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.pay-data dd { margin: 0; color: #fff; display: flex; align-items: center; justify-content: flex-start; gap: 12px; min-width: 0; }
+@media (max-width: 760px) { .pay-data dd { justify-content: space-between; gap: 8px; } }
 .pay-data dd span { overflow-wrap: anywhere; }
 .pay-copy { flex-shrink: 0; padding: 4px 8px; border: 1px solid var(--stroke); border-radius: var(--r-full); background: var(--glass); color: var(--text-soft); font: inherit; font-size: 0.75rem; cursor: pointer; }
 .pay-copy:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.pay-copy { display: inline-grid; place-items: center; transition: color 220ms ease, border-color 220ms ease, background-color 220ms ease; }
+.pay-copy i { grid-area: 1 / 1; transition: opacity 180ms ease, transform 220ms ease; }
+.pay-copy .bx-check { opacity: 0; transform: scale(0.65); }
+.pay-copy.is-copied .bx-copy { opacity: 0; transform: scale(0.65); }
+.pay-copy.is-copied .bx-check { opacity: 1; transform: scale(1); }
+.pay-card [data-copy-status] { margin: -8px 0 12px; min-height: 1.3em; }
+@media (prefers-reduced-motion: reduce) { .pay-copy, .pay-copy i { transition: none; } }
 .pay-data .empty { color: var(--text-dim); font-size: 0.88rem; }
 
 .pay-card .field { margin-bottom: 14px; text-align: left; }
@@ -69,3 +87,4 @@
 .st--rejected { color: #ff8b80; }
 
 @media (max-width: 760px) { .plans-grid { grid-template-columns: 1fr; } }
+.pay-copy.is-copied { color: #63e08f; border-color: rgba(43, 200, 102, 0.5); background: rgba(43, 200, 102, 0.14); }

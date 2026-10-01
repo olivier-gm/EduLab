@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import logging
+import json
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -119,6 +120,26 @@ SETTING_DEFAULTS = {
     'gemini_api_key': '',  # Cifradas; nunca se rellenan en el HTML.
     'openrouter_api_key': '',
 }
+
+PLAN_IDS = ('recharge', 'premium', 'pro')
+for _id, _name, _price, _limit, _terms, _hours, _benefits in (
+    ('recharge', 'Recarga', '2.99', 20, 100, 1, 'Informes con IA\nDocumentos manuales\nDescarga solo en Word\nSin acceso a glosarios\nSaldo sin vencimiento; se pausa con un plan mensual'),
+    ('premium', 'Premium', '4.99', 400, 100, 72, 'Informes y glosarios con IA\nDocumentos manuales\nUniversitario y bachillerato\nDescarga en Word y PDF'),
+    ('pro', 'Pro', '14.99', 2000, 300, 8760, 'Generaciones ilimitadas\nInformes y glosarios con IA\nDocumentos manuales\nUniversitario y bachillerato\nDescarga en Word y PDF'),
+):
+    for _key, _value in {'name': _name, 'price': _price, 'limit': _limit, 'terms': _terms,
+                         'hours': _hours, 'enabled': 1, 'benefits': _benefits}.items():
+        SETTING_DEFAULTS[f'{_id}_{_key}'] = str(_value)
+
+
+def plan_catalog(settings=None):
+    settings = settings or get_settings()
+    return {key: {'id': key, 'name': settings[f'{key}_name'], 'price': settings[f'{key}_price'],
+                  'enabled': settings[f'{key}_enabled'] == '1',
+                  'limit': int(settings[f'{key}_limit']), 'terms': int(settings[f'{key}_terms']),
+                  'hours': int(settings[f'{key}_hours']),
+                  'benefits': settings[f'{key}_benefits'].splitlines()}
+            for key in PLAN_IDS}
 
 # ── Conexión: SQLite (desarrollo) o PostgreSQL (Supabase) ─────────────
 #
@@ -249,7 +270,8 @@ class _Conn:
         return _Cursor(self._raw.execute(sql, params))
 
     def commit(self):
-        self._raw.commit()
+        if not getattr(self, '_in_transaction', False):
+            self._raw.commit()
 
     def rollback(self):
         self._raw.rollback()
@@ -290,6 +312,68 @@ def get_db():
     return g.db
 
 
+@contextmanager
+def transaction():
+    conn = get_db()
+    conn.execute('BEGIN' if conn._pg else 'BEGIN IMMEDIATE', sqlite_only=not conn._pg)
+    conn._in_transaction = True
+    try:
+        yield conn
+        conn._raw.commit()
+    except Exception:
+        conn._raw.rollback()
+        raise
+    finally:
+        conn._in_transaction = False
+
+
+def billing_state(user):
+    """El cupo mensual se renueva cada 30 días desde la activación."""
+    if has_active_plan(user):
+        config = plan_catalog()[user['plan']]
+        anchor = datetime.strptime(user['plan_started_at'], DATETIME_FMT) if user['plan_started_at'] else plan_expiry(user) - timedelta(days=30)
+        cycle = anchor + timedelta(days=max(0, (_utcnow() - anchor).days // 30) * 30)
+        stamp = cycle.strftime(DATETIME_FMT)
+        used = user['plan_used'] if user['plan_cycle_at'] == stamp else 0
+        return {**config, 'source': user['plan'], 'used': used,
+                'remaining': max(0, config['limit'] - used), 'cycle': stamp,
+                'renews_at': min(cycle + timedelta(days=30), plan_expiry(user))}
+    if user['credits'] > 0:
+        return {**plan_catalog()['recharge'], 'source': 'recharge', 'used': 0,
+                'remaining': user['credits'], 'cycle': None}
+    return {'source': 'free', 'hours': get_retention_hours(), 'terms': 100,
+            'remaining': None, 'used': 0, 'limit': None}
+
+
+def reserve_generation(user_id, allow_free=False):
+    with transaction() as conn:
+        user = conn.execute('SELECT * FROM users WHERE id = ?' + (' FOR UPDATE' if conn._pg else ''), (user_id,)).fetchone()
+        state = billing_state(user)
+        if user['is_admin']:
+            return {**state, 'source': 'admin', 'hours': get_retention_hours(),
+                    'terms': max(p['terms'] for p in plan_catalog().values())}
+        if state['source'] == 'free':
+            return state if allow_free else None
+        if state['remaining'] <= 0:
+            return None
+        if state['source'] == 'recharge':
+            conn.execute('UPDATE users SET credits = credits - 1 WHERE id = ?', (user_id,))
+        else:
+            conn.execute('UPDATE users SET plan_used = ?, plan_cycle_at = ? WHERE id = ?',
+                         (state['used'] + 1, state['cycle'], user_id))
+        return state
+
+
+def refund_generation(user_id, ticket):
+    if ticket['source'] == 'recharge':
+        get_db().execute('UPDATE users SET credits = credits + 1 WHERE id = ?', (user_id,))
+    elif ticket['source'] in ('premium', 'pro'):
+        get_db().execute('UPDATE users SET plan_used = plan_used - 1 WHERE id = ? '
+                         'AND plan = ? AND plan_cycle_at = ? AND plan_used > 0',
+                         (user_id, ticket['source'], ticket['cycle']))
+    get_db().commit()
+
+
 def close_db(_exc=None):
     conn = g.pop('db', None)
     if conn is not None:
@@ -308,6 +392,16 @@ def _columns(conn, table):
 def _migrate(conn):
     """Agrega columnas nuevas a bases de datos creadas antes de los planes."""
     columns = lambda table: _columns(conn, table)      # noqa: E731
+    for table, additions in {
+        'users': {'credits': 'INTEGER NOT NULL DEFAULT 0', 'plan_started_at': 'TEXT',
+                  'plan_cycle_at': 'TEXT', 'plan_used': 'INTEGER NOT NULL DEFAULT 0'},
+        'payments': {'plan_id': "TEXT NOT NULL DEFAULT 'premium'", 'plan_snapshot': 'TEXT'},
+        'documents': {'billing_plan': "TEXT NOT NULL DEFAULT 'free'"},
+    }.items():
+        existing = columns(table)
+        for name, definition in additions.items():
+            if name not in existing:
+                conn.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
 
     if 'plan_expires_at' not in columns('users'):
         conn.execute('ALTER TABLE users ADD COLUMN plan_expires_at TEXT')
@@ -418,24 +512,30 @@ def record_document(user_id, title, doc_type, tokens_used, mode='manual', file_s
     output/, sin extensión) queda además disponible en "Mis informes" hasta
     que vence el plazo configurado al crearlo."""
     created_at = _utcnow()
+    ticket = getattr(g, 'generation_ticket', None)
     expires_at = None
     if file_stem:
-        expires_at = (created_at + timedelta(hours=get_retention_hours())).strftime(DATETIME_FMT)
+        hours = ticket['hours'] if ticket else (plan_catalog()[get_user_by_id(user_id)['plan']]['hours']
+            if has_active_plan(get_user_by_id(user_id)) else get_retention_hours())
+        expires_at = (created_at + timedelta(hours=hours)).strftime(DATETIME_FMT)
     db = get_db()
     db.execute(
-        'INSERT INTO documents (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at.strftime(DATETIME_FMT)),
+        'INSERT INTO documents (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at, billing_plan) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at.strftime(DATETIME_FMT),
+         ticket['source'] if ticket else 'free'),
     )
     db.commit()
+    if ticket:
+        ticket['done'] = True
 
 
-def list_user_documents(user_id, limit=100):
+def list_user_documents(user_id, limit=100, offset=0):
     """Informes del usuario cuyos archivos todavía no vencen, el más nuevo primero."""
     return get_db().execute(
         'SELECT * FROM documents WHERE user_id = ? AND file_stem IS NOT NULL '
-        'AND expires_at > ? ORDER BY id DESC LIMIT ?',
-        (user_id, _utcnow().strftime(DATETIME_FMT), limit),
+        'AND expires_at > ? ORDER BY id DESC LIMIT ? OFFSET ?',
+        (user_id, _utcnow().strftime(DATETIME_FMT), limit, offset),
     ).fetchall()
 
 
@@ -576,25 +676,30 @@ def plan_expiry(user):
 
 
 def has_active_plan(user):
-    if user is None or user['plan'] != 'premium':
+    if user is None or user['plan'] not in ('premium', 'pro'):
         return False
     expiry = plan_expiry(user)
     return expiry is not None and expiry > _utcnow()
 
 
-def grant_plan(user_id, days):
+def grant_plan(user_id, days, plan_id='premium'):
     """Activa el plan `days` días. Si ya está activo, suma al vencimiento
     actual en vez de perder los días que le quedaban."""
-    user = get_user_by_id(user_id)
+    db = get_db()
+    if not getattr(db, '_in_transaction', False):
+        with transaction():
+            return grant_plan(user_id, days, plan_id)
+    user = db.execute('SELECT * FROM users WHERE id = ?' + (' FOR UPDATE' if db._pg else ''), (user_id,)).fetchone()
     start = _utcnow()
-    if has_active_plan(user):
+    if has_active_plan(user) and user['plan'] == plan_id:
         start = plan_expiry(user)
     expires = (start + timedelta(days=days)).strftime(DATETIME_FMT)
-    db = get_db()
-    db.execute(
-        "UPDATE users SET plan = 'premium', plan_expires_at = ? WHERE id = ?",
-        (expires, user_id),
-    )
+    if has_active_plan(user) and user['plan'] == plan_id:
+        db.execute('UPDATE users SET plan_expires_at = ? WHERE id = ?', (expires, user_id))
+    else:
+        stamp = _utcnow().strftime(DATETIME_FMT)
+        db.execute('UPDATE users SET plan = ?, plan_expires_at = ?, plan_started_at = ?, '
+                   'plan_cycle_at = ?, plan_used = 0 WHERE id = ?', (plan_id, expires, stamp, stamp, user_id))
     db.commit()
     return expires
 
@@ -621,11 +726,11 @@ def reference_in_use(method, reference):
     return row is not None
 
 
-def create_payment(user_id, method, reference, amount_usd):
+def create_payment(user_id, method, reference, amount_usd, plan_id='premium'):
     db = get_db()
     cur = db.execute(
-        'INSERT INTO payments (user_id, method, reference, amount_usd) VALUES (?, ?, ?, ?)',
-        (user_id, method, reference, amount_usd),
+        'INSERT INTO payments (user_id, method, reference, amount_usd, plan_id, plan_snapshot) VALUES (?, ?, ?, ?, ?, ?)',
+        (user_id, method, reference, amount_usd, plan_id, json.dumps(plan_catalog()[plan_id])),
     )
     db.commit()
     return cur.lastrowid
@@ -656,18 +761,19 @@ def review_payment(payment_id, approve, admin_id, days):
     """Aprueba o rechaza un pago pendiente. Devuelve True si cambió algo.
     Sólo actúa sobre pagos 'pending': aprobar dos veces el mismo pago no
     suma días dos veces."""
-    db = get_db()
-    payment = db.execute('SELECT * FROM payments WHERE id = ?', (payment_id,)).fetchone()
-    if payment is None or payment['status'] != 'pending':
-        return False
-    db.execute(
-        'UPDATE payments SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?',
-        ('approved' if approve else 'rejected', _utcnow().strftime(DATETIME_FMT), admin_id, payment_id),
-    )
-    db.commit()
-    if approve:
-        grant_plan(payment['user_id'], days)
-    return True
+    with transaction() as conn:
+        payment = conn.execute('SELECT * FROM payments WHERE id = ?' + (' FOR UPDATE' if conn._pg else ''), (payment_id,)).fetchone()
+        if payment is None or payment['status'] != 'pending':
+            return False
+        conn.execute('UPDATE payments SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?',
+            ('approved' if approve else 'rejected', _utcnow().strftime(DATETIME_FMT), admin_id, payment_id))
+        if approve:
+            if payment['plan_id'] == 'recharge':
+                config = json.loads(payment['plan_snapshot']) if payment['plan_snapshot'] else plan_catalog()['recharge']
+                conn.execute('UPDATE users SET credits = credits + ? WHERE id = ?', (config['limit'], payment['user_id']))
+            else:
+                grant_plan(payment['user_id'], days, payment['plan_id'])
+        return True
 
 
 def list_users():
@@ -689,7 +795,7 @@ def list_documents(limit=200):
         SELECT d.*, u.email AS user_email, u.name AS user_name
         FROM documents d
         JOIN users u ON u.id = d.user_id
-        ORDER BY d.created_at DESC
+        ORDER BY d.created_at DESC, d.id DESC
         LIMIT ?
     """, (limit,)).fetchall()
 
@@ -730,7 +836,7 @@ def get_dashboard_stats(days=30):
     totals = dict(get_stats())
     totals.update(dict(conn.execute("""
         SELECT
-        (SELECT COUNT(*) FROM users WHERE plan = 'premium' AND plan_expires_at > ?) AS premium,
+        (SELECT COUNT(*) FROM users WHERE plan IN ('premium', 'pro') AND plan_expires_at > ?) AS premium,
         (SELECT COUNT(*) FROM payments WHERE status = 'pending') AS pending,
         (SELECT COALESCE(SUM(amount_usd), 0) FROM payments WHERE status = 'approved') AS revenue,
         (SELECT COUNT(*) FROM documents WHERE file_stem IS NOT NULL AND expires_at > ?) AS available,

@@ -79,7 +79,7 @@
       </span>
 
       <!-- ---------- Tarjetas de descarga ---------- -->
-      <div class="dl-grid">
+      <div class="dl-grid" {% if 'pdf' not in share_urls %}style="grid-template-columns: minmax(0, 1fr); max-width: 480px; margin-inline: auto;"{% endif %}>
 
         <article class="dl-card dl-card--word">
           <img class="dl-card__icon" src="{{ url_for('static', filename='image1.png') }}" alt="Microsoft Word">
@@ -90,14 +90,14 @@
           </a>
         </article>
 
-        <article class="dl-card dl-card--pdf">
+        {% if 'pdf' in share_urls %}<article class="dl-card dl-card--pdf">
           <img class="dl-card__icon" src="{{ url_for('static', filename='image2.png') }}" alt="PDF">
           <h2 class="dl-card__name">PDF</h2>
           <p class="dl-card__desc">Formato .pdf listo para imprimir o subir al aula virtual sin que se mueva nada.</p>
           <a class="btn" href="{{ url_for('download_file', filename=filename, filetype='pdf') }}">
             <i class="bx bx-download"></i> Descargar PDF
           </a>
-        </article>
+        </article>{% endif %}
 
       </div>
 
@@ -109,8 +109,9 @@
         <div class="seg share__format" role="radiogroup" aria-label="Formato a compartir">
           <input type="radio" id="sh-docx" name="share-format" value="docx" checked>
           <label for="sh-docx"><i class="bx bxs-file-doc"></i> Word</label>
-          <input type="radio" id="sh-pdf" name="share-format" value="pdf">
+          {% if 'pdf' in share_urls %}<input type="radio" id="sh-pdf" name="share-format" value="pdf">
           <label for="sh-pdf"><i class="bx bxs-file-pdf"></i> PDF</label>
+          {% endif %}
         </div>
 
         <div class="share__btns">

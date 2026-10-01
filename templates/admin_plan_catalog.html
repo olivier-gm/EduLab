@@ -1,0 +1,21 @@
+<form method="POST" action="{{ url_for('admin.save_catalog_settings') }}" class="card admin-form">
+  <input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}">
+  <h3>Tres planes</h3>
+  <p class="admin-form__hint">Desactivar impide nuevas compras; las suscripciones y recargas ya adquiridas siguen disponibles. Cambiar la conservación solo afecta a documentos nuevos. Un informe, glosario o documento manual consume una generación; Word y PDF juntos cuentan como una.</p>
+  <div class="admin-form__grid">
+    {% for key, plan in catalog.items() %}
+    <fieldset>
+      <legend>{{ plan.name }} · {{ 'Recarga sin vencimiento' if key == 'recharge' else 'Mensual' }}</legend>
+      <label class="check"><input type="checkbox" name="{{ key }}_enabled" {{ 'checked' if plan.enabled }}> Disponible para comprar</label>
+      <label>Nombre<input class="input" name="{{ key }}_name" value="{{ plan.name }}" maxlength="60" required></label>
+      <label>Precio USD<input class="input" name="{{ key }}_price" value="{{ plan.price }}" inputmode="decimal" required></label>
+      <label>{{ 'Generaciones por recarga' if key == 'recharge' else 'Máximo de generaciones cada 30 días' }}<input class="input" type="number" min="1" max="1000000" name="{{ key }}_limit" value="{{ plan.limit }}" required></label>
+      {% if key == 'recharge' %}<input type="hidden" name="{{ key }}_terms" value="{{ plan.terms }}"><p class="admin-form__hint">Incluye informes solo en Word. No permite glosarios ni PDF.</p>{% else %}<label>Máximo de términos por glosario<input class="input" type="number" min="1" max="10000" name="{{ key }}_terms" value="{{ plan.terms }}" required></label>{% endif %}
+      <label>Conservación de documentos (horas)<input class="input" type="number" min="1" max="8760" name="{{ key }}_hours" value="{{ plan.hours }}" required></label>
+      <label>Beneficios · una línea por beneficio<textarea class="input" name="{{ key }}_benefits" rows="7" maxlength="4000">{{ plan.benefits|join('\n') }}</textarea></label>
+      {% if key == 'pro' %}<p class="admin-form__hint">El texto público se edita arriba. El máximo interno predeterminado es 2000 por período.</p>{% endif %}
+    </fieldset>
+    {% endfor %}
+  </div>
+  <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar los tres planes</button>
+</form>

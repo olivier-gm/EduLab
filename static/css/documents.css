@@ -8,6 +8,7 @@
 .docs-head p { color: var(--text-soft); margin-top: 6px; max-width: 620px; }
 
 .docs-list { display: grid; gap: 14px; }
+.docs-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 24px; flex-wrap: wrap; }
 
 .doc-item {
   display: flex;
@@ -65,7 +66,9 @@
 .doc-item.is-urgent .doc-item__left b { color: #ffaaa2; }
 
 .doc-item__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.doc-item__actions > .btn, .doc-share summary { min-height: 42px; padding: 10px 13px; font-size: .84rem; white-space: nowrap; }
+.doc-item__actions > .btn, .doc-share summary { width: 44px; height: 44px; min-height: 44px; padding: 0; justify-content: center; }
+.doc-item__actions > .btn { width: 68px; gap: 6px; }
+.doc-item__actions > .btn i, .doc-share summary i { font-size: 1.4rem; }
 .doc-share { position: relative; }
 .doc-share summary { cursor: pointer; list-style: none; }
 .doc-share summary:focus-visible { outline: 2px solid #20e4da; outline-offset: 3px; }
@@ -94,7 +97,7 @@
 @media (max-width: 760px) {
   .doc-item { flex-direction: column; align-items: stretch; }
   .doc-item__actions { width: 100%; }
-  .doc-item__actions > .btn, .doc-share { flex: 1; }
+  .doc-item__actions { justify-content: flex-end; }
   .doc-share summary { display: flex; justify-content: center; }
   .doc-item__title { white-space: normal; }
 }

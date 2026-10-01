@@ -73,15 +73,15 @@
           </div>
         </div>
         <div class="doc-item__actions">
-          <a class="btn btn--word" href="{{ url_for('my_document_download', doc_id=d.id, filetype='docx') }}"><i class="bx bx-download"></i> Word</a>
+          <a class="btn btn--word" href="{{ url_for('my_document_download', doc_id=d.id, filetype='docx') }}" aria-label="Descargar Word" title="Descargar Word"><i class="bx bx-download" aria-hidden="true"></i><i class="bx bxs-file-doc" aria-hidden="true"></i></a>
           {% if d.has_pdf %}
-          <a class="btn btn--pdf" href="{{ url_for('my_document_download', doc_id=d.id, filetype='pdf') }}"><i class="bx bx-download"></i> PDF</a>
+          <a class="btn btn--pdf" href="{{ url_for('my_document_download', doc_id=d.id, filetype='pdf') }}" aria-label="Descargar PDF" title="Descargar PDF"><i class="bx bx-download" aria-hidden="true"></i><i class="bx bxs-file-pdf" aria-hidden="true"></i></a>
           {% endif %}
           <details class="doc-share">
-            <summary class="btn btn--ghost"><i class="bx bx-share-alt"></i> Compartir</summary>
+            <summary class="btn btn--ghost" aria-label="Compartir documento" title="Compartir documento"><i class="bx bx-share-alt" aria-hidden="true"></i></summary>
             <div class="doc-share__options">
               {% for format, link in d.share_urls.items() %}
-              <button class="btn btn--ghost" type="button" data-share-url="{{ link }}" data-share-title="{{ d.title }}">Compartir {{ 'Word' if format == 'docx' else 'PDF' }}</button>
+              <button class="btn btn--{{ 'word' if format == 'docx' else 'pdf' }}" type="button" data-share-url="{{ link }}" data-share-title="{{ d.title }}">Compartir {{ 'Word' if format == 'docx' else 'PDF' }}</button>
               {% endfor %}
               <span class="doc-share__status" role="status" aria-live="polite"></span>
             </div>
@@ -93,12 +93,19 @@
     {% else %}
     <div class="card docs-empty">
       <i class="bx bx-folder-open"></i>
-      <h2>Todavía no tienes informes guardados</h2>
+      <h2>{{ 'No hay más informes disponibles en esta página' if page > 1 else 'Todavía no tienes informes guardados' }}</h2>
       <p>Los documentos que generes aparecerán aquí durante {{ retention_text }}.</p>
       <a class="btn btn--primary" href="{{ url_for('show_form') }}"><i class="bx bx-plus"></i> Crear un documento</a>
     </div>
     {% endif %}
 
+    {% if page > 1 or has_next %}
+    <nav class="docs-pagination" aria-label="Páginas de informes">
+      {% if page > 1 %}<a class="btn btn--ghost" href="{{ url_for('my_documents', page=page - 1) }}">Anterior</a>{% endif %}
+      <span>Página {{ page }}</span>
+      {% if has_next %}<a class="btn btn--ghost" href="{{ url_for('my_documents', page=page + 1) }}">Siguiente</a>{% endif %}
+    </nav>
+    {% endif %}
   </main>
 
   <footer class="footer">

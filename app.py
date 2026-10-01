@@ -45,6 +45,10 @@ app.secret_key = os.getenv('SECRET_KEY', '7f8b9a2c3d4e5f608192a3b4c5d6e7f8091a2b
 SHARE_FILETYPES = ('docx', 'pdf')
 
 
+def document_filetypes(doc):
+    return ('docx',) if doc['billing_plan'] == 'recharge' else SHARE_FILETYPES
+
+
 def _share_serializer():
     return URLSafeTimedSerializer(app.secret_key, salt='share-file')
 
@@ -69,9 +73,14 @@ def clear_ai_settings(_error):
 
 @app.context_processor
 def inject_current_user():
-    hours = db.get_retention_hours()
+    user = current_user()
+    hours = db.billing_state(user)['hours'] if user and not user['is_admin'] else db.get_retention_hours()
+    from glossary import max_terms
     return {'current_user': current_user(), 'retention_hours': hours,
-            'retention_text': db.format_duration(hours)}
+            'retention_text': db.format_duration(hours), 'glossary_limit': max_terms(),
+            'billing': db.billing_state(user) if user else None,
+            'glossary_allowed': plans.glossary_access(user),
+            'public_glossary_limit': max((p['terms'] for p in db.plan_catalog().values() if p['enabled']), default=100)}
 
 
 @app.route('/validate_title', methods=['POST'])
@@ -145,6 +154,7 @@ def show_form_bach():
 
 @app.route('/process_form_bach', methods=['POST'])
 @login_required
+@plans.with_generation_quota
 def process_form_bach():
     user = current_user()
     # Bachillerato siempre se escribe a mano: cuenta como documento manual.
@@ -222,6 +232,8 @@ def show_form():
 @app.route('/glossary/terms', methods=['POST'])
 @login_required
 def glossary_terms():
+    if not plans.glossary_access(current_user()):
+        return jsonify(error='La recarga no incluye glosarios. Elige un plan mensual.'), 403
     allowed, _ = plans.generation_access(current_user(), 'ai')
     if not allowed:
         return jsonify(error='Necesitas acceso a EduLab AI para leer la lista. Consulta los planes.'), 403
@@ -248,6 +260,7 @@ def upload_too_large(error):
 
 @app.route('/process_form', methods=['POST'])
 @login_required
+@plans.with_generation_quota
 def process_form():
     user = current_user()
 
@@ -306,8 +319,9 @@ def process_form():
             elif source == 'topic':
                 terms = None
                 count = int(form_data.get('glossary_count', '20'))
-                if not 1 <= count <= 100:
-                    raise ValueError('El glosario debe tener entre 1 y 100 términos.')
+                from glossary import max_terms
+                if not 1 <= count <= max_terms():
+                    raise ValueError(f'El glosario debe tener entre 1 y {max_terms()} términos.')
             else:
                 raise ValueError('Elige el tema o una lista de términos para el glosario.')
             usage_sink.append(session.pop('glossary_extraction_tokens', 0))
@@ -442,7 +456,7 @@ def choose_file(filename):
     token = _share_serializer().dumps(filename)
     share_urls = {
         filetype: url_for('shared_file', token=token, filetype=filetype, _external=True)
-        for filetype in SHARE_FILETYPES
+        for filetype in document_filetypes(doc)
     }
     return render_template('download.html', filename=filename, share_urls=share_urls,
                            expiry_text=db.time_left(doc['expires_at'])[0],
@@ -460,6 +474,8 @@ def download_file(filename, filetype):
     if (doc is None or doc['user_id'] != current_user()['id']
             or db.time_left(doc['expires_at'])[1] <= 0):
         return render_template('404.html'), 410
+    if filetype not in document_filetypes(doc):
+        return render_template('404.html'), 403
     try:
         return storage.serve(os.path.basename(filename), filetype)
     except Exception as e:
@@ -472,8 +488,10 @@ def download_file(filename, filetype):
 def my_documents():
     """Informes generados por el usuario que todavía se conservan."""
     documents = []
+    page = max(1, request.args.get('page', 1, type=int))
+    rows = db.list_user_documents(current_user()['id'], limit=51, offset=(page - 1) * 50)
     available = storage.stems_available()      # una sola consulta al almacenamiento
-    for doc in db.list_user_documents(current_user()['id']):
+    for doc in rows[:50]:
         if 'docx' not in available.get(doc['file_stem'], ()):
             continue        # el archivo ya no está (borrado a mano, etc.)
         label, fraction = db.time_left(doc['expires_at'], doc['created_at'])
@@ -484,12 +502,12 @@ def my_documents():
             'expires_iso': doc['expires_at'].replace(' ', 'T') + 'Z',
             'created_iso': doc['created_at'].replace(' ', 'T') + 'Z',
             'urgent': fraction < 0.1,
-            'has_pdf': 'pdf' in available.get(doc['file_stem'], ()),
+            'has_pdf': 'pdf' in document_filetypes(doc) and 'pdf' in available.get(doc['file_stem'], ()),
             'share_urls': {kind: url_for('shared_file',
                 token=_share_serializer().dumps(doc['file_stem']), filetype=kind, _external=True)
-                for kind in SHARE_FILETYPES if kind in available.get(doc['file_stem'], ())},
+                for kind in document_filetypes(doc) if kind in available.get(doc['file_stem'], ())},
         })
-    return render_template('my_documents.html', documents=documents)
+    return render_template('my_documents.html', documents=documents, page=page, has_next=len(rows) > 50)
 
 
 @app.route('/my_documents/<int:doc_id>/<filetype>')
@@ -500,6 +518,8 @@ def my_document_download(doc_id, filetype):
     if filetype not in SHARE_FILETYPES or doc is None:
         flash('Ese informe ya no está disponible.', 'error')
         return redirect(url_for('my_documents'))
+    if filetype not in document_filetypes(doc):
+        return render_template('404.html'), 403
     try:
         return storage.serve(doc['file_stem'], filetype,
                              download_name=f"{safe_filename(doc['title'])}.{filetype}")
@@ -522,6 +542,8 @@ def shared_file(token, filetype):
     doc = db.get_document_by_filename(filename)
     if doc is None or db.time_left(doc['expires_at'])[1] <= 0:
         return render_template('404.html'), 410
+    if filetype not in document_filetypes(doc):
+        return render_template('404.html'), 403
     try:
         return storage.serve(os.path.basename(filename), filetype)
     except Exception as e:

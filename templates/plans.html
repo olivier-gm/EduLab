@@ -20,7 +20,7 @@
 
 <body>
   {% macro copy_value(label, value, display=none) %}
-    <dt>{{ label }}</dt><dd><span>{{ display if display is not none else value }}</span><button class="pay-copy" type="button" data-copy="{{ value }}" aria-label="Copiar {{ label }}" title="Copiar {{ label }}"><i class="bx bx-copy" aria-hidden="true"></i></button></dd>
+    <dt>{{ label }}</dt><dd><span>{{ display if display is not none else value }}</span><button class="pay-copy" type="button" data-copy="{{ value }}" aria-label="Copiar {{ label }}" title="Copiar {{ label }}"><i class="bx bx-copy" aria-hidden="true"></i><i class="bx bx-check" aria-hidden="true"></i></button></dd>
   {% endmacro %}
 
   <header class="nav" data-nav>
@@ -47,7 +47,7 @@
 
     <div class="plans-head">
       <h1>Elige tu plan</h1>
-      <p>Genera documentos sin límites con un solo pago.</p>
+      <p>Elige una recarga sin vencimiento o un plan mensual para tus informes y glosarios.</p>
     </div>
 
     {% if reason_message %}
@@ -60,40 +60,38 @@
     <div class="plans-alert plans-alert--err"><i class="bx bx-error-circle"></i> {{ error }}</div>
     {% endif %}
 
-    <div class="plans-grid">
-
-      <!-- ---------- El plan ---------- -->
-      <article class="card plan-card">
-        <h2 class="plan-card__name">{{ settings['plan_name'] }}</h2>
-        <div class="plan-card__price">${{ '%g'|format(price) }} <small>/ {{ settings['plan_days'] }} días</small></div>
+    <div class="account-usage card">
+      {% if active %}<strong>{{ catalog[billing.source].name }} activo hasta {{ expires_at.strftime('%d/%m/%Y') }}</strong>
+      <span>{{ billing.used }} generaciones usadas este período. Cupo renovable cada 30 días.</span>{% endif %}
+      <span>Recarga: <strong>{{ credits }} generaciones disponibles</strong>{{ ' · en pausa mientras esté activo el plan mensual' if active }}.</span>
+    </div>
+    <div class="plan-catalog">
+      {% for key, plan in catalog.items() if plan.enabled %}
+      <article class="card plan-card{{ ' plan-card--selected' if selected and selected.id == key }}">
+        <h2 class="plan-card__name">{{ plan.name }}</h2>
+        <div class="plan-card__price">${{ '%.2f'|format(plan.price|float) }} <small>{{ '/ recarga' if key == 'recharge' else '/ mes' }}</small></div>
         <ul>
-          <li><i class="bx bx-check"></i> Documentos con IA sin límite</li>
-          <li><i class="bx bx-check"></i> Documentos escritos por ti sin límite</li>
-          <li><i class="bx bx-check"></i> Universitario y bachillerato</li>
-          <li><i class="bx bx-check"></i> Descarga en Word y PDF</li>
+          {% if key != 'pro' %}<li><i class="bx bx-check"></i> {{ plan.limit }} generaciones{{ ' sin vencimiento' if key == 'recharge' else ' cada 30 días' }}</li>{% endif %}
+          {% if key != 'recharge' %}<li><i class="bx bx-check"></i> Glosarios de hasta {{ plan.terms }} términos</li>{% endif %}
+          <li><i class="bx bx-check"></i> Documentos guardados {{ '1 año' if plan.hours == 8760 else (plan.hours|string + (' hora' if plan.hours == 1 else ' horas')) }}</li>
+          {% for benefit in plan.benefits if benefit %}<li><i class="bx bx-check"></i> {{ benefit }}</li>{% endfor %}
         </ul>
-        <div class="plan-card__status">
-          {% if active %}
-          <span class="st st--approved"><i class="bx bx-check-circle"></i> Plan activo hasta {{ expires_at.strftime('%d/%m/%Y') }}</span>
-          {% else %}
-          {% for mode, label in [('ai', 'con IA'), ('manual', 'manuales')] %}
-            {% if summary[mode].limit is not none %}
-            <div class="plan-card__bs">Documentos {{ label }} gratis: {{ summary[mode].used }} de {{ summary[mode].limit }} usados</div>
-            {% endif %}
-          {% endfor %}
-          {% endif %}
-        </div>
+        <a class="btn {{ 'btn--primary' if selected and selected.id == key else 'btn--ghost' }}" href="{{ url_for('plans.plans', plan=key) }}#pago">{{ 'Seleccionado' if selected and selected.id == key else 'Elegir ' + plan.name }}</a>
       </article>
-
+      {% else %}<p>No hay planes disponibles para comprar en este momento.</p>{% endfor %}
+    </div>
+    <div class="plans-grid">
       <!-- ---------- Pago ---------- -->
-      <section class="card pay-card">
-        <h2>{{ 'Renovar o extender' if active else 'Activar el plan' }}</h2>
+      <section class="card pay-card" id="pago">
+        <h2>{{ "Pagar " + selected.name if selected else "Compras desactivadas" }}</h2>
         <p>Paga, luego escribe la referencia del pago. Lo revisamos y se activa el plan.</p>
 
-        {% if has_pending %}
+        {% if not selected %}<p>Los planes están desactivados temporalmente.</p>
+        {% elif has_pending %}
         <div class="plans-alert plans-alert--warn"><i class="bx bx-time-five"></i> Tienes un pago en revisión. Se activará cuando se apruebe.</div>
         {% else %}
         <form method="POST" action="{{ url_for('plans.pay') }}" data-pay>
+          <input type="hidden" name="plan_id" value="{{ selected.id }}">
           <div class="pay-tabs" role="radiogroup" aria-label="Método de pago">
             <input type="radio" id="pm-binance" name="method" value="binance" checked>
             <label for="pm-binance">
@@ -111,7 +109,7 @@
             {% if settings['binance_email'] %}
             <dl>
               {{ copy_value('ID de Binance', settings['binance_email']) }}
-              {{ copy_value('Monto', '%g'|format(price), ('$%g USDT'|format(price))) }}
+              {{ copy_value('Monto', '%g'|format(price), ('%g USDT'|format(price))) }}
             </dl>
             {% else %}<div class="empty">Los datos de Binance aún no están disponibles.</div>{% endif %}
           </div>
@@ -147,11 +145,12 @@
     <section class="pay-history">
       <h3>Tus pagos</h3>
       <table>
-        <thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Plan</th><th>Método</th><th>Referencia</th><th>Estado</th></tr></thead>
         <tbody>
           {% for p in payments %}
           <tr>
             <td>{{ p['created_at'] }}</td>
+            <td>{{ catalog[p['plan_id']].name }}</td>
             <td>{{ pay_methods[p['method']] }}</td>
             <td>{{ p['reference'] }}</td>
             <td><span class="st st--{{ p['status'] }}">{{ {'pending': 'En revisión', 'approved': 'Aprobado', 'rejected': 'Rechazado'}[p['status']] }}</span></td>
@@ -191,6 +190,11 @@
           try {
             await navigator.clipboard.writeText(button.dataset.copy);
             status.textContent = button.getAttribute('aria-label').replace('Copiar ', '') + ' copiado.';
+            button.classList.add('is-copied');
+            clearTimeout(button._copyTimer);
+            button._copyTimer = setTimeout(function () {
+              button.classList.remove('is-copied');
+            }, 1500);
           } catch (error) {
             status.textContent = 'No se pudo copiar. Selecciona el dato y cópialo manualmente.';
           }

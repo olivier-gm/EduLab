@@ -79,7 +79,7 @@
            Los "name" de cada campo son los que espera el backend
            (/process_form → FormProcessor). No cambiar.
            ============================================================ -->
-      <form id="docForm" action="{{ url_for('process_form') }}" method="POST" novalidate data-title-url="{{ url_for('validate_document_title') }}" data-terms-url="{{ url_for('glossary_terms') }}"
+      <form id="docForm" action="{{ url_for('process_form') }}" method="POST" novalidate data-max-terms="{{ glossary_limit }}" data-title-url="{{ url_for('validate_document_title') }}" data-terms-url="{{ url_for('glossary_terms') }}"
         data-universities="{{ url_for('static', filename='txt/lista_imagenes.txt') }}"
         data-logo-base="{{ url_for('static', filename='logos') }}">
 
@@ -264,8 +264,9 @@
               <div class="seg">
                 <input type="radio" id="kind-report" name="document_kind" value="report" checked>
                 <label for="kind-report"><i class="bx bx-file"></i> Trabajo normal</label>
-                <input type="radio" id="kind-glossary" name="document_kind" value="glossary" {% if not access.ai.ok %}disabled{% endif %}>
+                <input type="radio" id="kind-glossary" name="document_kind" value="glossary" {% if not access.ai.ok or not glossary_allowed %}disabled{% endif %}>
                 <label for="kind-glossary"><i class="bx bx-book-open"></i> Glosario</label>
+                {% if not glossary_allowed %}<span class="help">La recarga incluye informes en Word. Los glosarios están disponibles con un plan mensual.</span>{% endif %}
               </div>
               {% if not access.ai.ok %}<span class="help">Los glosarios requieren acceso a EduLab AI. <a href="{{ url_for('plans.plans') }}">Ver planes</a></span>{% endif %}
             </div>
@@ -297,6 +298,8 @@
                   {{ 'EduLab AI' if not access.ai.ok else 'Escribirlo tú' }} requiere el plan.
                   <a href="{{ url_for('plans.plans') }}">Ver planes</a>
                 </span>
+                {% elif billing and billing.source != 'free' %}
+                <span class="help">{{ 'Generaciones disponibles con tu plan Pro' if billing.source == 'pro' else (billing.remaining|string + ' generaciones disponibles' + (' en tu recarga' if billing.source == 'recharge' else ' en este período')) }}. Informes, glosarios y documentos manuales comparten el mismo cupo.</span>
                 {% elif access.ai.limit is not none or access.manual.limit is not none %}
                 <span class="help">
                   {% if access.ai.limit is not none %}Con IA: {{ [access.ai.limit - access.ai.used, 0]|max }} restante(s). {% endif %}
@@ -321,7 +324,7 @@
           </div>
 
           <div class="block" id="glossary-block" style="display:none;">
-            <div class="note"><i class="bx bx-sort-a-z"></i><span>Hasta <strong>100 términos en orden alfabético</strong>, con definiciones de 1 o 2 frases breves. Siempre incluye portada; no lleva introducción ni conclusión. Si activas bibliografía, la fuente irá junto a cada término.</span></div>
+            <div class="note"><i class="bx bx-sort-a-z"></i><span>Hasta <strong>{{ glossary_limit }} términos en orden alfabético</strong>, con definiciones de 1 o 2 frases breves. Siempre incluye portada; no lleva introducción ni conclusión. Si activas bibliografía, la fuente irá junto a cada término.</span></div>
             <div class="seg glossary-source">
               <input type="radio" id="glossary-topic" name="glossary_source" value="topic" checked>
               <label for="glossary-topic">Por tema y cantidad</label>
@@ -330,7 +333,7 @@
             </div>
             <div class="field" id="glossary-count-wrap">
               <label for="f-glossary-count">Cantidad de términos</label>
-              <input class="input" id="f-glossary-count" name="glossary_count" type="number" min="1" max="100" value="20">
+              <input class="input" id="f-glossary-count" name="glossary_count" type="number" min="1" max="{{ glossary_limit }}" value="20">
               <span class="err-msg"></span>
               <span class="help">La IA elige los términos a partir del título y los ordena alfabéticamente.</span>
             </div>
@@ -344,9 +347,9 @@
               </div>
               <div class="field">
                 <label for="f-glossary-terms">Revisa o pega tus términos · uno por línea</label>
-                <textarea class="textarea" id="f-glossary-terms" name="glossary_terms" maxlength="20000" placeholder="Átomo&#10;Célula&#10;Energía"></textarea>
+                <textarea class="textarea" id="f-glossary-terms" name="glossary_terms" maxlength="{{ glossary_limit * 200 }}" placeholder="Átomo&#10;Célula&#10;Energía"></textarea>
                 <span class="err-msg"></span>
-                <span class="help" id="terms-count" aria-live="polite">0 de 100 términos</span>
+                <span class="help" id="terms-count" aria-live="polite">0 de {{ glossary_limit }} términos</span>
                 <span class="help">Se definirán todos los términos de esta lista, sin añadir otros. Revisa la lectura del archivo antes de generar.</span>
               </div>
             </div>

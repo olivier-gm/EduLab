@@ -288,7 +288,7 @@
   }
 
   $('#f-glossary-terms').addEventListener('input', function () {
-    setText($('#terms-count'), termLines().length + ' de 100 términos');
+    setText($('#terms-count'), termLines().length + ' de ' + form.dataset.maxTerms + ' términos');
   });
 
   var extractingTerms = false;
@@ -719,12 +719,12 @@
         if (extractingTerms) { setText($('#terms-status'), 'Espera a que termine la lectura del archivo.'); return false; }
         if ($('#glossary-list').checked) {
           var count = termLines().length;
-          fieldError('#f-glossary-terms', count < 1 || count > 100, 'Revisa o pega entre 1 y 100 términos, uno por línea.');
-          if (count < 1 || count > 100) return false;
+          fieldError('#f-glossary-terms', count < 1 || count > Number(form.dataset.maxTerms), 'Revisa o pega entre 1 y ' + form.dataset.maxTerms + ' términos, uno por línea.');
+          if (count < 1 || count > Number(form.dataset.maxTerms)) return false;
         } else {
           var amount = Number($('#f-glossary-count').value);
-          var invalid = !Number.isInteger(amount) || amount < 1 || amount > 100;
-          fieldError('#f-glossary-count', invalid, 'Elige una cantidad entera entre 1 y 100.');
+          var invalid = !Number.isInteger(amount) || amount < 1 || amount > Number(form.dataset.maxTerms);
+          fieldError('#f-glossary-count', invalid, 'Elige una cantidad entera entre 1 y ' + form.dataset.maxTerms + '.');
           if (invalid) return false;
         }
       }

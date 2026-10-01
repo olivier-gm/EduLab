@@ -208,6 +208,58 @@ def post_form(client, **extra):
     return client.post('/process_form', data=data, follow_redirects=True).get_data(as_text=True)
 
 
+def test_paid_generations_count_once_and_failed_generation_refunds_credit(client, monkeypatch, fake_document):
+    from datetime import datetime, timedelta
+    clock = datetime(2026, 10, 1, 12)
+    monkeypatch.setattr(db, '_utcnow', lambda: clock)
+    with client.session_transaction() as sess:
+        uid = sess['user_id']
+    conn = db.get_db()
+    conn.execute('UPDATE users SET credits = 2 WHERE id = ?', (uid,))
+    conn.commit()
+    html = post_form(client, **{'global-mode': 'standard', 'body': 'Texto manual'})
+    assert 'Tu documento está listo' in html
+    assert db.get_user_by_id(uid)['credits'] == 1
+    doc = db.list_documents()[0]
+    assert doc['billing_plan'] == 'recharge' and doc['expires_at'] == '2026-10-01 13:00:00'
+    assert 'Descargar PDF' not in html and 'id="sh-pdf"' not in html
+    assert 'Descargar PDF' not in client.get('/my_documents').get_data(as_text=True)
+    stem = doc['file_stem']
+    assert client.get(f'/download_file/{stem}/pdf').status_code == 403
+    assert client.get(f'/my_documents/{doc["id"]}/pdf').status_code == 403
+    token = app_module._share_serializer().dumps(stem)
+    assert client.get(f'/s/{token}/pdf').status_code == 403
+    assert client.get(f'/s/{token}/docx').status_code == 200
+    assert 'value="glossary" disabled' in client.get('/form').get_data(as_text=True)
+    html = post_form(client, document_kind='glossary', glossary_count='20')
+    assert 'La recarga incluye informes en Word' in html
+    assert db.get_user_by_id(uid)['credits'] == 1 and len(db.list_documents()) == 1
+    assert client.post('/glossary/terms').status_code == 403
+    def fail(*args, **kwargs):
+        raise RuntimeError('fallo controlado')
+    monkeypatch.setattr(app_module.Document_process, 'fill_placeholders', fail)
+    assert 'error armando el documento' in post_form(client, **{'global-mode': 'standard', 'body': 'Texto'})
+    assert db.get_user_by_id(uid)['credits'] == 1
+    monkeypatch.setattr(app_module.Document_process, 'fill_placeholders', fake_document)
+    db.grant_plan(uid, 30, 'pro')
+    assert client.get(f'/s/{token}/pdf').status_code == 403
+    old_expiry = doc['expires_at']
+    terms = [f'Término {i:03}' for i in range(300)]
+    monkeypatch.setattr(app_module, 'check_glossary', lambda *args, **kwargs: None)
+    monkeypatch.setattr(app_module, 'generate_glossary', lambda title, count, **kwargs:
+                        [{'term': term, 'definition': 'Definición breve.'} for term in kwargs['terms']])
+    html = post_form(client, document_kind='glossary', glossary_source='list', glossary_terms='\n'.join(terms))
+    assert 'Tu documento está listo' in html
+    assert db.get_user_by_id(uid)['credits'] == 1 and db.get_user_by_id(uid)['plan_used'] == 1
+    assert db.list_documents()[0]['expires_at'] == (clock + timedelta(hours=8760)).strftime(db.DATETIME_FMT)
+    assert db.list_documents()[-1]['expires_at'] == old_expiry
+    assert 'max="300"' in client.get('/form').get_data(as_text=True)
+    db.grant_plan(uid, 30, 'premium')
+    html = post_form(client, document_kind='glossary', glossary_source='list', glossary_terms='\n'.join(terms))
+    assert 'entre 1 y 100 términos' in html
+    assert db.get_user_by_id(uid)['plan_used'] == 0
+
+
 def test_title_preflight_rejects_early_reuses_verdict_and_checks_changed_title(client, monkeypatch, fake_document):
     checked = []
     def validate(title, usage_sink=None):

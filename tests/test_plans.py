@@ -66,16 +66,16 @@ def test_bcv_amount_on_payment_page(client, monkeypatch):
     today = datetime.now(timezone(timedelta(hours=-4))).date()
     monkeypatch.setattr(plans, '_bcv_rate', lambda bucket: (Decimal('50.123'), today))
     page = client.get('/plans').get_data(as_text=True)
-    assert page.count('Bs. 250.62') == 1
+    assert page.count('Bs. 250.11') == 1
     assert 'Tasa BCV:' not in page
     assert '<dt>Tasa</dt>' not in page and 'Cédula/RIF' not in page
     assert 'Banco de Venezuela (BDV)' not in page and 'BDV · 0102' in page
     assert '<dt>ID de Binance</dt>' in page
     assert page.count('class="pay-copy"') == 7
-    assert 'data-copy="250.62"' in page and 'data-copy="12345678"' in page
+    assert 'data-copy="250.11"' in page and 'data-copy="12345678"' in page
     monkeypatch.setattr(plans, '_bcv_rate', lambda bucket: None)
     page = client.get('/plans').get_data(as_text=True)
-    assert 'Bs. 200.00' in page and 'Tasa manual de respaldo:' not in page
+    assert 'Bs. 199.60' in page and 'Tasa manual de respaldo:' not in page
     db.set_settings({'bs_rate': ''})
     page = client.get('/plans').get_data(as_text=True)
     assert 'Monto en bolívares pendiente de confirmar' in page
@@ -114,6 +114,85 @@ def user(uid):
 def login(client, uid):
     with client.session_transaction() as sess:
         sess['user_id'] = uid
+
+
+def test_three_plans_recharge_pauses_and_monthly_quota_rolls_over(client, monkeypatch):
+    clock = datetime(2026, 10, 1, 12)
+    monkeypatch.setattr(db, '_utcnow', lambda: clock)
+    uid = make_user()
+    catalog = db.plan_catalog()
+    assert [(p['price'], p['limit'], p['terms'], p['hours']) for p in catalog.values()] == [
+        ('2.99', 20, 100, 1), ('4.99', 400, 100, 72), ('14.99', 2000, 300, 8760)]
+    payment = db.create_payment(uid, 'binance', 'REC001', 2.99, 'recharge')
+    db.set_settings({'recharge_limit': '25'})
+    assert db.review_payment(payment, True, uid, 30)
+    assert not db.review_payment(payment, True, uid, 30)
+    assert user(uid)['credits'] == 20  # conserva lo adquirido, no el nuevo precio/cupo
+    ticket = db.reserve_generation(uid)
+    assert ticket['source'] == 'recharge' and ticket['hours'] == 1
+    assert user(uid)['credits'] == 19
+    db.refund_generation(uid, ticket)
+    assert user(uid)['credits'] == 20
+    db.grant_plan(uid, 60)
+    db.set_settings({'premium_limit': '2'})
+    assert db.reserve_generation(uid)['source'] == 'premium'
+    assert db.reserve_generation(uid)['source'] == 'premium'
+    assert db.reserve_generation(uid) is None
+    assert user(uid)['credits'] == 20
+    assert plans.generation_access(user(uid), 'ai') == (False, 'monthly_limit')
+    clock += timedelta(days=30)
+    assert db.billing_state(user(uid))['remaining'] == 2
+    assert db.reserve_generation(uid)['source'] == 'premium'
+    clock += timedelta(days=31)
+    assert db.reserve_generation(uid)['source'] == 'recharge'
+    assert user(uid)['credits'] == 19
+
+
+def test_plan_catalog_payment_selection_disable_and_admin_validation(client):
+    uid = make_user(admin=True)
+    login(client, uid)
+    html = client.get('/plans?plan=pro').get_data(as_text=True)
+    assert '$2.99' in html and '$4.99' in html and '$14.99' in html
+    assert 'name="plan_id" value="pro"' in html and '300 términos' in html
+    db.set_settings({'pro_enabled': '0'})
+    assert 'name="plan_id" value="pro"' not in client.get('/plans?plan=pro').get_data(as_text=True)
+    client.post('/plans/pay', data={'method': 'binance', 'reference': 'DISABLED', 'plan_id': 'pro'})
+    assert not db.get_user_payments(uid)
+    client.post('/plans/pay', data={'method': 'binance', 'reference': 'RECARGA', 'plan_id': 'recharge', 'amount_usd': '.01'})
+    payment = db.get_user_payments(uid)[0]
+    assert payment['plan_id'] == 'recharge' and payment['amount_usd'] == 2.99
+    client.get('/admin/')
+    with client.session_transaction() as sess:
+        token = sess['ai_csrf_token']
+    form = {'csrf_token': token}
+    for key, plan in db.plan_catalog().items():
+        form.update({f'{key}_{field}': str(plan[field]) for field in ('name', 'price', 'limit', 'terms', 'hours')})
+        form[f'{key}_benefits'] = 'Beneficio nuevo\nWord y PDF'
+        form[f'{key}_enabled'] = 'on'
+    form['pro_terms'] = '450'
+    assert client.post('/admin/catalog-settings', data=form).status_code == 302
+    assert db.plan_catalog()['pro']['terms'] == 450
+    form['premium_hours'] = '0'
+    client.post('/admin/catalog-settings', data=form)
+    assert db.plan_catalog()['premium']['hours'] == 72
+    form['premium_hours'] = '24'
+    form['csrf_token'] = 'incorrecto'
+    client.post('/admin/catalog-settings', data=form)
+    assert db.plan_catalog()['premium']['hours'] == 72
+
+
+def test_paid_quota_is_atomic_for_two_simultaneous_requests(client):
+    from concurrent.futures import ThreadPoolExecutor
+    uid = make_user()
+    db.get_db().execute('UPDATE users SET credits = 1 WHERE id = ?', (uid,))
+    db.get_db().commit()
+    def reserve():
+        with app_module.app.app_context():
+            return db.reserve_generation(uid)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tickets = list(pool.map(lambda _: reserve(), range(2)))
+    assert sum(ticket is not None for ticket in tickets) == 1
+    assert user(uid)['credits'] == 0
 
 
 def add_docs(uid, mode, n):

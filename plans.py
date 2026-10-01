@@ -1,27 +1,17 @@
 # plans.py
-"""Plan de pago: reglas de acceso a la generación de documentos, página de
-planes y registro de pagos.
-
-Reglas (un solo plan por ahora):
-  - Admin o usuario con plan ACTIVO (premium y no vencido): sin límites.
-  - Usuario sin plan: lo que el admin haya configurado en el panel, por
-    separado para documentos con IA y manuales (activado/desactivado y
-    cuántos documentos por usuario). Límite vacío = sin límite.
-  - Si intenta algo que no tiene permitido, se le redirige a /plans.
-
-El pago es manual: el usuario paga por Binance o Pago Móvil, reporta su
-referencia y un admin la aprueba en /admin, lo que activa el plan.
+"""Recarga sin vencimiento, planes mensuales y pagos revisados por el admin.
+Los planes mensuales tienen prioridad sobre el saldo de recarga.
 """
 
 import re
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from functools import lru_cache
+from functools import lru_cache, wraps
 from pathlib import Path
 
 import requests
-from flask import Blueprint, current_app, render_template, request, redirect, url_for
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, g
 
 import db
 from auth import login_required, current_user
@@ -104,8 +94,12 @@ def generation_access(user, mode, settings=None):
     """
     if user is None:
         return False, 'login'
-    if user['is_admin'] or db.has_active_plan(user):
+    if user['is_admin'] or getattr(g, 'generation_ticket', None):
         return True, None
+
+    state = db.billing_state(user)
+    if state['source'] != 'free':
+        return (True, None) if state['remaining'] else (False, 'monthly_limit')
 
     settings = settings or db.get_settings()
     if settings[f'free_{mode}_enabled'] != '1':
@@ -120,17 +114,48 @@ def generation_access(user, mode, settings=None):
 def access_summary(user, settings=None):
     """Por modo: {'ok', 'reason', 'used', 'limit'} — para pintar la UI."""
     settings = settings or db.get_settings()
-    unlimited = bool(user['is_admin']) or db.has_active_plan(user)
+    state = db.billing_state(user)
     summary = {}
     for mode in MODES:
         ok, reason = generation_access(user, mode, settings)
         summary[mode] = {
             'ok': ok,
             'reason': reason,
-            'used': db.count_user_documents(user['id'], mode),
-            'limit': None if unlimited else parse_limit(settings[f'free_{mode}_limit']),
+            'used': state['used'] if state['source'] != 'free' else db.count_user_documents(user['id'], mode),
+            'limit': None if user['is_admin'] else (user['credits'] if state['source'] == 'recharge' else state['limit'] if state['source'] != 'free' else parse_limit(settings[f'free_{mode}_limit'])),
         }
     return summary
+
+
+def with_generation_quota(view):
+    @wraps(view)
+    def run(*args, **kwargs):
+        user = current_user()
+        if request.form.get('document_kind') == 'glossary' and not glossary_access(user):
+            return redirect_to_plans('glossary_unavailable')
+        manual = request.endpoint == 'process_form_bach' or (
+            request.form.get('document_kind') != 'glossary' and request.form.get('global-mode') == 'standard')
+        allowed, reason = generation_access(user, 'manual' if manual else 'ai')
+        if not allowed:
+            return redirect_to_plans(reason)
+        ticket = db.reserve_generation(user['id'], allow_free=db.billing_state(user)['source'] == 'free')
+        if ticket is None:
+            return redirect_to_plans('monthly_limit')
+        g.generation_ticket = ticket
+        try:
+            if request.form.get('document_kind') == 'glossary' and not glossary_access(user):
+                return redirect_to_plans('glossary_unavailable')
+            return view(*args, **kwargs)
+        finally:
+            if not ticket.get('done'):
+                db.refund_generation(user['id'], ticket)
+            g.pop('generation_ticket', None)
+    return run
+
+
+def glossary_access(user):
+    ticket = getattr(g, 'generation_ticket', None)
+    return bool(user and (user['is_admin'] or (ticket or db.billing_state(user))['source'] != 'recharge'))
 
 
 def redirect_to_plans(reason):
@@ -140,6 +165,10 @@ def redirect_to_plans(reason):
 def _reason_message(reason, summary):
     if not reason:
         return None
+    if reason == 'glossary_unavailable':
+        return 'La recarga incluye informes en Word. Para crear glosarios, elige un plan mensual.'
+    if reason == 'monthly_limit':
+        return 'Alcanzaste el cupo de tu período mensual. Tu recarga permanece en pausa hasta que venza el plan.'
     if reason in ('ai_disabled', 'manual_disabled'):
         mode = reason.split('_')[0]
         return f'Los documentos {MODE_LABELS[mode]} están disponibles solo con el plan.'
@@ -160,13 +189,19 @@ def plans():
     settings = db.get_settings()
     summary = access_summary(user, settings)
 
-    price = float(settings['plan_price_usd'] or 0)
-    price_bs, rate_label = _bolivar_quote(settings)
+    catalog = db.plan_catalog(settings)
+    selected_id = request.args.get('plan', 'premium')
+    if selected_id not in catalog or not catalog[selected_id]['enabled']:
+        selected_id = next((key for key, value in catalog.items() if value['enabled']), None)
+    selected = catalog.get(selected_id)
+    price = float(selected['price']) if selected else 0
+    price_bs, rate_label = _bolivar_quote({**settings, 'plan_price_usd': str(price)})
 
     payments = db.get_user_payments(user['id'])
     return render_template(
         'plans.html',
         settings=settings,
+        catalog=catalog, selected=selected, billing=db.billing_state(user), credits=user['credits'],
         price=price,
         price_bs=price_bs,
         rate_label=rate_label,
@@ -194,6 +229,11 @@ def pay():
     def fail(message):
         return redirect(url_for('plans.plans', error=message))
 
+    plan_id = request.form.get('plan_id', 'premium')
+    catalog = db.plan_catalog(settings)
+    if plan_id not in catalog or not catalog[plan_id]['enabled']:
+        return fail('Ese plan no está disponible para comprar.')
+
     if method not in PAY_METHODS:
         return fail('Elige un método de pago.')
     if not REFERENCE_RE.match(reference):
@@ -203,5 +243,5 @@ def pay():
     if db.reference_in_use(method, reference):
         return fail('Esa referencia ya fue reportada.')
 
-    db.create_payment(user['id'], method, reference, float(settings['plan_price_usd'] or 0))
+    db.create_payment(user['id'], method, reference, float(catalog[plan_id]['price']), plan_id)
     return redirect(url_for('plans.plans', sent=1))

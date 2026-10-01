@@ -88,6 +88,20 @@ def test_time_left_fraccion_y_vencido():
 
 # ── Página Mis informes ───────────────────────────────────────────────
 
+
+def test_pagination_keeps_older_active_documents_accessible(client, monkeypatch):
+    uid = make_user()
+    stems = [f'zz_test_page_{i}' for i in range(51)]
+    for index, stem in enumerate(stems):
+        db.record_document(uid, f'Documento de página {index}', 'uni', 0, file_stem=stem)
+    monkeypatch.setattr(app_module.storage, 'stems_available', lambda: {stem: ('docx',) for stem in stems})
+    login(client, uid)
+    first = client.get('/my_documents').get_data(as_text=True)
+    assert 'Documento de página 50' in first and 'Documento de página 0<' not in first and 'Siguiente' in first
+    second = client.get('/my_documents?page=2').get_data(as_text=True)
+    assert 'Documento de página 0<' in second and 'Anterior' in second and 'Siguiente' not in second
+    assert len(db.list_user_documents(uid, limit=50, offset=50)) == 1
+
 def test_lista_solo_mis_informes_vigentes(client):
     a, b = make_user('a@x.com'), make_user('b@x.com')
     make_files(STEM)

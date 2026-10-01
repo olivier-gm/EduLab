@@ -7,6 +7,7 @@ import hmac
 import os
 import re
 import secrets
+from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, render_template, request, redirect, url_for, session
 
@@ -63,6 +64,7 @@ def dashboard():
         users=db.list_users(),
         documents=db.list_documents(limit=100),
         settings=values,
+        catalog=db.plan_catalog(values),
         gemini_default_model=IA.MODEL_NAME,
         key_status=key_status,
         ai_csrf_token=session.setdefault('ai_csrf_token', secrets.token_urlsafe(32)),
@@ -71,6 +73,39 @@ def dashboard():
         plan_expiry=db.plan_expiry,
         msg=request.args.get('msg'),
     )
+
+
+@admin_bp.route('/catalog-settings', methods=['POST'])
+@admin_required
+def save_catalog_settings():
+    token = session.get('ai_csrf_token')
+    if not token or not hmac.compare_digest(token, request.form.get('csrf_token', '')):
+        return _back('Recarga el panel antes de guardar los planes.')
+    values = {}
+    try:
+        for key in db.PLAN_IDS:
+            price = Decimal(request.form.get(f'{key}_price', '').replace(',', '.'))
+            if not price.is_finite() or not 0 < price <= 100000:
+                raise ValueError()
+            values[f'{key}_price'] = str(price.quantize(Decimal('.01')))
+            name = request.form.get(f'{key}_name', '').strip()
+            if not name or len(name) > 60:
+                raise ValueError()
+            values[f'{key}_name'] = name
+            values[f'{key}_enabled'] = '1' if request.form.get(f'{key}_enabled') else '0'
+            for field, maximum in [('limit', 1000000), ('terms', 10000), ('hours', 8760)]:
+                raw = request.form.get(f'{key}_{field}', '')
+                if not raw.isascii() or not raw.isdigit() or len(raw) > 7 or not 1 <= int(raw) <= maximum:
+                    raise ValueError()
+                values[f'{key}_{field}'] = str(int(raw))
+            benefits = request.form.get(f'{key}_benefits', '').strip()
+            if len(benefits) > 4000:
+                raise ValueError()
+            values[f'{key}_benefits'] = benefits
+    except (ValueError, InvalidOperation):
+        return _back('Revisa los planes: nombre, precio positivo, generaciones, términos y conservación entre 1 y 8760 horas.')
+    db.set_settings(values)
+    return _back('Planes guardados. Desactivar oculta la compra; no quita planes ni saldos existentes. Los documentos anteriores mantienen su vencimiento.')
 
 
 @admin_bp.route('/retention-settings', methods=['POST'])
@@ -183,7 +218,15 @@ def user_plan(user_id):
         return _back('Usuario no encontrado.')
     if action == 'grant':
         days = int(db.get_settings()['plan_days'] or 30)
-        db.grant_plan(user_id, days)
+        plan_id = request.form.get('plan_id', 'premium')
+        if plan_id not in db.PLAN_IDS:
+            return _back('Plan inválido.')
+        if plan_id == 'recharge':
+            db.get_db().execute('UPDATE users SET credits = credits + ? WHERE id = ?',
+                                (db.plan_catalog()['recharge']['limit'], user_id))
+            db.get_db().commit()
+            return _back('Recarga añadida. Su saldo no vence.')
+        db.grant_plan(user_id, days, plan_id)
         return _back(f'Plan activado {days} días.')
     if action == 'revoke':
         db.revoke_plan(user_id)
