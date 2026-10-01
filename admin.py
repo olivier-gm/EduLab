@@ -3,9 +3,16 @@
 planes de pago: reglas para usuarios sin plan, datos de cobro, aprobación
 de pagos y activar/quitar el plan a mano."""
 
-from flask import Blueprint, render_template, request, redirect, url_for
+import hmac
+import os
+import re
+import secrets
+
+from flask import Blueprint, render_template, request, redirect, url_for, session
 
 import db
+import ai_provider
+import IA
 from auth import admin_required, current_user
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -38,17 +45,66 @@ def _limit_field(raw):
 @admin_bp.route('/')
 @admin_required
 def dashboard():
+    values = db.get_settings()
+    key_status = {
+        prefix: 'Guardada en el panel' if values[f'{prefix}_api_key'] else (
+            'Configurada en el servidor' if os.environ.get(env_name) else 'Sin configurar')
+        for prefix, env_name in [('gemini', 'GEMINI_API_KEY'), ('openrouter', 'OPENROUTER_API_KEY')]
+    }
     return render_template(
         'admin.html',
         stats=db.get_stats(),
         users=db.list_users(),
         documents=db.list_documents(limit=100),
-        settings=db.get_settings(),
+        settings=values,
+        gemini_default_model=IA.MODEL_NAME,
+        key_status=key_status,
+        ai_csrf_token=session.setdefault('ai_csrf_token', secrets.token_urlsafe(32)),
         payments=db.list_payments(limit=100),
         active_plan=db.has_active_plan,
         plan_expiry=db.plan_expiry,
         msg=request.args.get('msg'),
     )
+
+
+@admin_bp.route('/ai-settings', methods=['POST'])
+@admin_required
+def save_ai_settings():
+    def back(message):
+        return redirect(url_for('admin.dashboard', msg=message) + '#ia')
+    token = session.get('ai_csrf_token')
+    if not token or not hmac.compare_digest(token, request.form.get('csrf_token', '')):
+        return back('La sesión del formulario venció. Recarga el panel y vuelve a guardar.')
+    provider = request.form.get('ai_provider')
+    if provider not in ('gemini', 'openrouter'):
+        return back('Elige Gemini directo u OpenRouter.')
+    values = {'ai_provider': provider}
+    for prefix, default in [('gemini', IA.MODEL_NAME), ('openrouter', 'google/gemini-3.8-flash')]:
+        model = (request.form.get(f'{prefix}_model') or default).strip()
+        expected = 'google/gemini-' if prefix == 'openrouter' else 'gemini-'
+        if len(model) > 160 or not model.startswith(expected) or not re.fullmatch(r'[A-Za-z0-9._/-]+', model):
+            return back(f'Escribe el ID de Gemini correcto: {expected}…')
+        values[f'{prefix}_model'] = model
+        key = (request.form.get(f'{prefix}_api_key') or '').strip()
+        if key:
+            if len(key) > 512 or any(char.isspace() for char in key):
+                return back('La clave API no debe contener espacios ni superar 512 caracteres.')
+            try:
+                values[f'{prefix}_api_key'] = ai_provider.encrypt_key(key)
+            except (OSError, ValueError):
+                return back('No se pudo guardar la clave API. Revisa los permisos del servidor.')
+        elif request.form.get(f'clear_{prefix}_key'):
+            values[f'{prefix}_api_key'] = ''
+    proposed = {**db.get_settings(), **values}
+    try:
+        _, _, active_key = ai_provider.configuration(values=proposed)
+    except IA.GenerationError as exc:
+        return back(exc.user_message)
+    if not active_key:
+        return back('Añade la clave API del proveedor que quieres activar antes de guardar.')
+    db.set_settings(values)
+    IA._search_blocked_until = 0.0
+    return back('Configuración de IA guardada. Se aplicará a las siguientes generaciones.')
 
 
 @admin_bp.route('/settings', methods=['POST'])

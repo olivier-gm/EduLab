@@ -2,15 +2,17 @@ import os
 import logging
 import re
 import time
+import hashlib
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
 load_dotenv()
+import ai_provider  # db debe leer el entorno después de cargar .env.
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+client = genai.Client(api_key=os.environ['GEMINI_API_KEY']) if os.environ.get('GEMINI_API_KEY') else None
 
 MODEL_NAME = "gemini-3.5-flash-lite"
 
@@ -109,6 +111,10 @@ def classify_error(e):
             'quota',
             'La IA alcanzó su límite de uso en este momento. Espera unos minutos e inténtalo de nuevo.',
             text)
+    if code == 402:
+        return GenerationError('quota', 'OpenRouter no tiene saldo suficiente. Revisa tu cuenta de OpenRouter.')
+    if code == 404:
+        return GenerationError('bad_request', 'El modelo configurado no existe o no está disponible. Revisa su nombre en el panel admin.')
     if code in (401, 403) or 'api key' in low or 'permission_denied' in low:
         return GenerationError(
             'auth',
@@ -175,7 +181,7 @@ def _with_retries(fn, *, attempts=3, base_delay=1.5):
             return fn()
         except Exception as e:
             last_err = e
-            if getattr(e, 'code', None) in (400, 401, 403, 404):
+            if getattr(e, 'code', None) in (400, 401, 402, 403, 404, 422):
                 break
             if attempt < attempts - 1:
                 delay = base_delay * (2 ** attempt)
@@ -234,14 +240,23 @@ class _FewShotPrompt:
             )
         self._cache_name = None
         self._cache_attempted = False
+        self._cache_identity = None
 
     def _ensure_cache(self):
+        provider, model, key = ai_provider.configuration(self.model)
+        identity = (provider, model, hashlib.sha256(key.encode()).digest())
+        if identity != self._cache_identity:
+            self._cache_name = None
+            self._cache_attempted = False
+            self._cache_identity = identity
+        if provider != 'gemini' or not key:
+            return
         if self._cache_attempted or not CACHE_ENABLED:
             return
         self._cache_attempted = True
         try:
-            cache = client.caches.create(
-                model=self.model,
+            cache = ai_provider.direct_client(key).caches.create(
+                model=model,
                 config=types.CreateCachedContentConfig(
                     display_name=self.display_name,
                     system_instruction=self.system_instruction,
@@ -299,7 +314,7 @@ class _FewShotPrompt:
             tools=[types.Tool(google_search=types.GoogleSearch())],
         )
         final_turn = types.Content(role='user', parts=[types.Part(text=user_text)])
-        response = client.models.generate_content(
+        response = ai_provider.generate_content(
             model=self.model, config=config,
             contents=self.example_contents + [final_turn],
         )
@@ -343,7 +358,7 @@ class _FewShotPrompt:
         self._ensure_cache()
 
         def _call():
-            return client.models.generate_content(
+            return ai_provider.generate_content(
                 model=self.model,
                 config=self._config(temperature, max_output_tokens),
                 contents=self._contents(user_text),
@@ -544,7 +559,7 @@ def check_title(title, usage_sink=None):
     )
 
     try:
-        response = _with_retries(lambda: client.models.generate_content(
+        response = _with_retries(lambda: ai_provider.generate_content(
             model=MODEL_NAME,
             config=config,
             contents=[prompt],

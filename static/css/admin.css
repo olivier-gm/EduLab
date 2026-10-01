@@ -187,6 +187,8 @@
 }
 
 .admin-form legend { padding: 0 6px; font-size: 0.85rem; font-weight: 600; }
+.admin-form select { margin-bottom: 16px; }
+.admin-form select option { background: #141430; color: #fff; }
 .admin-form .btn { margin-top: 16px; }
 .admin-sub { font-size: 0.95rem; margin: 0 0 10px; }
 form.inline { display: inline; }

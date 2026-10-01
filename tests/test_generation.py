@@ -208,6 +208,25 @@ def post_form(client, **extra):
     return client.post('/process_form', data=data, follow_redirects=True).get_data(as_text=True)
 
 
+def test_parallel_sections_keep_selected_provider(client, monkeypatch, fake_document):
+    import ai_provider
+    import threading
+    db.set_settings({'ai_provider': 'openrouter', 'openrouter_model': 'google/gemini-3.8-flash'})
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'test-thread-key')
+    monkeypatch.setattr(IA, 'CACHE_ENABLED', False)
+    monkeypatch.setattr(app_module, 'check_title', lambda *a, **k: TitleVerdict(True))
+    monkeypatch.setattr(app_module, 'generate_essay_content', lambda *a, **k: 'Desarrollo de prueba.')
+    calls = []
+    def post(url, headers, json, timeout):
+        calls.append((json['model'], threading.get_ident(), headers['Authorization']))
+        return SimpleNamespace(status_code=200, json=lambda: {'choices': [
+            {'message': {'content': 'Sección de prueba.'}}], 'usage': {'total_tokens': 10}})
+    monkeypatch.setattr(ai_provider.requests, 'post', post)
+    assert 'Descargar Word' in post_form(client)
+    assert len(calls) == 2 and all(model == 'google/gemini-3.8-flash' and thread != threading.get_ident()
+        and auth == 'Bearer test-thread-key' for model, thread, auth in calls)
+
+
 def test_titulo_corto_explica_el_motivo(client):
     html = post_form(client, title='ab')
     assert 'mínimo 5 caracteres' in html

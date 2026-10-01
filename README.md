@@ -21,6 +21,10 @@ El sistema no solo genera el contenido académico (Introducción, Desarrollo y C
 
 ## 🛠️ Arquitectura del Proyecto
 
+El panel admin incluye **Proveedor y modelo de IA**: elige Gemini directo u OpenRouter, escribe el modelo de cada uno y guarda sus claves API. Gemini directo usa IDs como `gemini-3.8-flash`; OpenRouter usa `google/gemini-3.8-flash`. Un campo de clave vacío conserva la actual; el checkbox permite quitar la clave del panel y volver a `GEMINI_API_KEY` u `OPENROUTER_API_KEY` del servidor. La configuración se aplica a las siguientes generaciones, también a introducción y conclusión en paralelo.
+
+Las claves del panel se guardan cifradas en SQLite y no se incluyen en el HTML. Conserva **`instance/ai-secret.key` junto con la copia de seguridad de la base de datos**: es necesario para recuperar las claves al mover el servidor. `instance/` está excluido de Git. OpenRouter recibe texto, imágenes y PDF mediante su API; se solicita búsqueda nativa con `openrouter:web_search`, se leen las citas de su respuesta y se conserva el respaldo de bibliografía por IA. La búsqueda tiene un costo adicional; no usa la cuota de tu clave de Google AI Studio. El caché explícito de Google solo se utiliza en Gemini directo y se invalida al cambiar el modelo o la clave.
+
 El sistema está dividido en módulos desacoplados y reutilizables:
 
 - 📂 **`app.py`**: Controlador principal de Flask. Administra el enrutamiento, el ciclo de vida de las peticiones, la interacción con las vistas (HTML) y la entrega de las descargas en Word o PDF.

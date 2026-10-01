@@ -302,6 +302,7 @@ def test_admin_routes_requieren_admin(client):
     uid = make_user()
     login(client, uid)
     assert client.post('/admin/settings', data={}).status_code == 302
+    assert client.post('/admin/ai-settings', data={}).status_code == 302
     assert client.post('/admin/payments/1/approve').status_code == 302
     assert not db.has_active_plan(user(uid))
 
@@ -331,6 +332,42 @@ def test_admin_shows_persistent_bibliography_origin(client, monkeypatch):
     page = client.get('/admin/').get_data(as_text=True)
     assert 'IA · sin verificación en internet' in page
     assert 'Sin respuesta &lt;script&gt;' in page
+
+
+def test_admin_can_switch_providers_without_exposing_keys(client, monkeypatch, tmp_path):
+    import ai_provider
+    import IA
+    monkeypatch.setattr(app_module.app, 'instance_path', str(tmp_path / 'instance'))
+    login(client, make_user(admin=True))
+    page = client.get('/admin/').get_data(as_text=True)
+    assert 'Proveedor y modelo de IA' in page
+    with client.session_transaction() as sess:
+        csrf = sess['ai_csrf_token']
+    data = {'ai_provider': 'openrouter', 'gemini_model': 'gemini-3.8-flash',
+            'openrouter_model': 'google/gemini-3.8-flash', 'openrouter_api_key': 'test-admin-secret'}
+    client.post('/admin/ai-settings', data=data)
+    assert db.get_settings()['ai_provider'] == 'gemini'  # Token obligatorio.
+    IA._search_blocked_until = 1000
+    data['csrf_token'] = csrf
+    client.post('/admin/ai-settings', data=data)
+    values = db.get_settings()
+    assert values['ai_provider'] == 'openrouter' and IA._search_blocked_until == 0
+    assert values['openrouter_api_key'] and 'test-admin-secret' not in values['openrouter_api_key']
+    assert ai_provider.configuration(values=values) == ('openrouter', 'google/gemini-3.8-flash', 'test-admin-secret')
+    assert (tmp_path / 'instance' / 'ai-secret.key').is_file()
+    page = client.get('/admin/').get_data(as_text=True)
+    assert 'test-admin-secret' not in page and values['openrouter_api_key'] not in page
+    data['openrouter_api_key'] = ''
+    data['openrouter_model'] = 'google/gemini-3.7-flash'
+    client.post('/admin/ai-settings', data=data)
+    assert db.get_settings()['openrouter_api_key'] == values['openrouter_api_key']
+    data['openrouter_model'] = 'not-a-gemini-model'
+    client.post('/admin/ai-settings', data=data)
+    assert db.get_settings()['openrouter_model'] == 'google/gemini-3.7-flash'
+    monkeypatch.setenv('GEMINI_API_KEY', 'test-google-env')
+    data.update(ai_provider='gemini', openrouter_model='google/gemini-3.8-flash', clear_openrouter_key='1')
+    client.post('/admin/ai-settings', data=data)
+    assert db.get_settings()['ai_provider'] == 'gemini' and not db.get_settings()['openrouter_api_key']
 
 
 def test_admin_guarda_ajustes_y_aprueba(client):

@@ -101,6 +101,13 @@ SETTING_DEFAULTS = {
     'bibliography_source': '',
     'bibliography_reason': '',
     'bibliography_updated_at': '',
+    'bibliography_provider': '',
+    'bibliography_model': '',
+    'ai_provider': 'gemini',
+    'gemini_model': '',  # Vacío conserva el modelo del entorno actual.
+    'openrouter_model': 'google/gemini-3.8-flash',
+    'gemini_api_key': '',  # Cifradas; nunca se rellenan en el HTML.
+    'openrouter_api_key': '',
 }
 
 

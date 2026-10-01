@@ -6,6 +6,7 @@ env/
 
 # Variables de entorno y credenciales
 .env
+instance/
 
 # Archivos de salida y caché de Python
 __pycache__/

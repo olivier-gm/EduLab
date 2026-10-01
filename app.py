@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, send_file, session, flash, jsonify
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from flask import g
 import sys
 import threading
 import os
@@ -21,6 +23,7 @@ from title_check import check_title
 from glossary import extract_terms, parse_terms, generate_glossary, generate_bibliography
 
 import db
+import ai_provider
 from auth import auth_bp, current_user, login_required
 from admin import admin_bp
 import plans
@@ -51,6 +54,18 @@ db.init_app(app)
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(plans_bp)
+
+
+@app.before_request
+def load_ai_settings():
+    g.ai_settings_token = ai_provider.request_settings.set(db.get_settings())
+
+
+@app.teardown_request
+def clear_ai_settings(_error):
+    token = g.pop('ai_settings_token', None)
+    if token is not None:
+        ai_provider.request_settings.reset(token)
 
 
 @app.context_processor
@@ -311,10 +326,10 @@ def process_form():
             futures = {}
             if incluir_introduccion:
                 futures['introducción'] = executor.submit(
-                    generate_introduction, processor.title, body, usage_sink)
+                    copy_context().run, generate_introduction, processor.title, body, usage_sink)
             if incluir_conclusion:
                 futures['conclusión'] = executor.submit(
-                    generate_conclusion, processor.title, body, usage_sink)
+                    copy_context().run, generate_conclusion, processor.title, body, usage_sink)
             results = {}
             for label, future in futures.items():
                 try:

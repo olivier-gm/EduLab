@@ -63,6 +63,46 @@
 
     {% if msg %}<div class="admin-msg" role="status"><i class="bx bx-info-circle"></i> {{ msg }}</div>{% endif %}
 
+    <section class="admin-section" id="ia">
+      <h2 class="admin-section__title"><i class="bx bx-brain"></i> Proveedor y modelo de IA</h2>
+      <form method="POST" action="{{ url_for('admin.save_ai_settings') }}" class="card admin-form">
+        <input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}">
+        <p class="admin-form__hint">El proveedor seleccionado se usa para informes, glosarios y lectura de archivos. Los cambios se aplican a las siguientes generaciones.</p>
+        <label>Proveedor activo
+          <select class="input" name="ai_provider">
+            <option value="gemini" {% if settings['ai_provider'] == 'gemini' %}selected{% endif %}>Gemini directo · Google AI Studio</option>
+            <option value="openrouter" {% if settings['ai_provider'] == 'openrouter' %}selected{% endif %}>OpenRouter · Gemini</option>
+          </select>
+        </label>
+        <div class="admin-form__grid">
+          <fieldset>
+            <legend>Gemini directo</legend>
+            <label>Nombre del modelo
+              <input class="input" name="gemini_model" maxlength="160" value="{{ settings['gemini_model'] or gemini_default_model }}" placeholder="gemini-3.8-flash" required>
+            </label>
+            <label>Clave API de Google
+              <input class="input" type="password" name="gemini_api_key" maxlength="512" autocomplete="new-password" placeholder="Nueva clave · vacío conserva la actual">
+            </label>
+            <p class="admin-form__hint">{{ key_status['gemini'] }}. La clave completa no se muestra.</p>
+            <label class="check"><input type="checkbox" name="clear_gemini_key"> Quitar la clave del panel y usar la del servidor</label>
+          </fieldset>
+          <fieldset>
+            <legend>OpenRouter</legend>
+            <label>ID del modelo de Gemini
+              <input class="input" name="openrouter_model" maxlength="160" value="{{ settings['openrouter_model'] }}" placeholder="google/gemini-3.8-flash" required>
+            </label>
+            <label>Clave API de OpenRouter
+              <input class="input" type="password" name="openrouter_api_key" maxlength="512" autocomplete="new-password" placeholder="Nueva clave · vacío conserva la actual">
+            </label>
+            <p class="admin-form__hint">{{ key_status['openrouter'] }}. La clave completa no se muestra.</p>
+            <label class="check"><input type="checkbox" name="clear_openrouter_key"> Quitar la clave del panel y usar la del servidor</label>
+          </fieldset>
+        </div>
+        <p class="admin-form__hint">La bibliografía intenta usar Google Search en ambos proveedores y recurre a IA si falla. En OpenRouter se solicita búsqueda nativa; la búsqueda se cobra aparte del texto generado.</p>
+        <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar configuración de IA</button>
+      </form>
+    </section>
+
     <section class="admin-section" id="bibliografia">
       <h2 class="admin-section__title"><i class="bx bx-book"></i> Bibliografía automática</h2>
       <div class="card admin-stat" role="status">
@@ -76,6 +116,7 @@
           {% endif %}
         </p>
         <p class="is-dim">{{ settings['bibliography_updated_at'] }} (hora de Venezuela)</p>
+        {% if settings['bibliography_provider'] %}<p class="is-dim">{{ 'OpenRouter' if settings['bibliography_provider'] == 'openrouter' else 'Gemini directo' }} · {{ settings['bibliography_model'] }}</p>{% endif %}
         {% if settings['bibliography_reason'] %}<p>{{ settings['bibliography_reason'] }}</p>{% endif %}
         {% else %}
         <p class="is-dim">Todavía no se ha generado una bibliografía automática con seguimiento.</p>

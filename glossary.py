@@ -16,6 +16,7 @@ from flask import has_app_context
 
 import IA
 import db
+import ai_provider
 
 MAX_TERMS = 100
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -57,7 +58,7 @@ def parse_terms(text):
 
 def _generate(contents, config, usage_sink):
     try:
-        response = IA._with_retries(lambda: IA.client.models.generate_content(
+        response = IA._with_retries(lambda: ai_provider.generate_content(
             model=IA.MODEL_NAME, contents=contents, config=config), attempts=1 if config.tools else 3)
         IA._record_usage(usage_sink, response)
         return response, IA._extract_text(response)
@@ -184,6 +185,8 @@ def _bibliography_status(sources, reason):
             'bibliography_source': 'google_search' if sources else 'ai',
             'bibliography_reason': reason,
             'bibliography_updated_at': datetime.now(timezone(timedelta(hours=-4))).strftime('%d/%m/%Y %H:%M:%S'),
+            'bibliography_provider': ai_provider.settings()['ai_provider'],
+            'bibliography_model': ai_provider.settings().get('openrouter_model' if ai_provider.settings()['ai_provider'] == 'openrouter' else 'gemini_model') or IA.MODEL_NAME,
         })
 
 

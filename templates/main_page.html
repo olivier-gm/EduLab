@@ -5,10 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description"
-    content="Gullieth genera informes y trabajos escritos universitarios y de bachillerato con portada al formato venezolano, listos para descargar en Word y PDF.">
+    content="Crea informes académicos y glosarios de hasta 100 términos con IA, portada al formato venezolano y descarga en Word y PDF. Sube tu lista o elige un tema.">
   <meta name="theme-color" content="#141430">
 
-  <title>Gullieth · Genera tus informes académicos en minutos</title>
+  <title>Gullieth · Informes y glosarios de términos con IA</title>
 
   <link rel="icon" href="{{ url_for('static', filename='icono.jpg') }}" type="image/x-icon">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -76,13 +76,13 @@
           </span>
 
           <h1 class="hero__title">
-            Tu informe listo <em>en minutos</em>, no en madrugadas.
+            Informes y glosarios <em>listos en minutos.</em>
           </h1>
 
           <p class="hero__lead">
-            Escribe el título de tu trabajo, completa los datos de tu portada y Gullieth redacta la
-            introducción, el desarrollo y la conclusión. Todo con el formato académico venezolano y
-            descargable en <strong>Word</strong> o <strong>PDF</strong>.
+            Crea tu informe académico o un <strong>glosario de términos</strong> con definiciones breves
+            y en orden alfabético. Elige un tema o sube la asignación con tu lista de términos.
+            Gullieth prepara la portada y el contenido para descargar en <strong>Word</strong> y <strong>PDF</strong>.
           </p>
 
           <div class="hero__cta">
@@ -96,7 +96,7 @@
 
           <div class="hero__facts">
             <span class="hero__fact"><i class="bx bx-check-shield"></i> Portada al formato oficial</span>
-            <span class="hero__fact"><i class="bx bx-list-ol"></i> Índice automático</span>
+            <span class="hero__fact"><i class="bx bx-sort-a-z"></i> Glosarios de hasta 100 términos</span>
             <span class="hero__fact"><i class="bx bx-group"></i> Hasta 8 integrantes</span>
           </div>
         </div>
@@ -148,8 +148,8 @@
           <div class="stat__label">instituciones reconocidas</div>
         </div>
         <div class="stat">
-          <div class="stat__num">0<span>$</span></div>
-          <div class="stat__label">cuesta usarlo</div>
+          <div class="stat__num">100</div>
+          <div class="stat__label">términos por glosario</div>
         </div>
       </div>
     </section>
@@ -172,15 +172,15 @@
           </article>
           <article class="card step reveal">
             <div class="step__num">2</div>
-            <h3>El tema del trabajo</h3>
-            <p>Escribe el título y, si quieres, los temas específicos que deben aparecer. La IA se encarga de
-              investigar y desarrollar cada uno.</p>
+            <h3>Informe o glosario</h3>
+            <p>Elige el tipo de documento. Para un informe, indica el título y los temas. Para un glosario,
+              elige un tema y una cantidad de términos, o sube tu lista en una imagen o documento.</p>
           </article>
           <article class="card step reveal">
             <div class="step__num">3</div>
             <h3>Descarga y entrega</h3>
-            <p>En un par de minutos tienes el documento completo, con índice y páginas separadas, listo en Word para
-              editarlo o en PDF para entregarlo.</p>
+            <p>Recibe tu documento con portada: un informe organizado por secciones o un glosario en orden
+              alfabético. Descárgalo en Word para editarlo o en PDF para entregarlo.</p>
           </article>
         </div>
       </div>
@@ -191,10 +191,19 @@
       <div class="shell">
         <div class="section__head reveal">
           <h2 class="section__title">Todo lo que hace por ti</h2>
-          <p class="section__sub">Pensado para el formato de informes y trabajos escritos que se exige en Venezuela.</p>
+          <p class="section__sub">Informes, trabajos escritos y glosarios de términos con el formato académico venezolano.</p>
         </div>
 
         <div class="bento">
+          <article class="card feat card--wide reveal">
+            <div class="feat__icon is-gold"><i class="bx bx-sort-a-z"></i></div>
+            <h3>Glosarios de términos con IA</h3>
+            <p>Hasta <strong>100 términos en orden alfabético</strong>, con definiciones breves y portada.
+              Puedes indicar un tema y la cantidad, o subir tu asignación completa en una imagen, PDF, Word o TXT
+              para leer los términos y revisarlos antes de generar. Sin introducción ni conclusión;
+              si activas bibliografía, cada término lleva su referencia.</p>
+          </article>
+
           <article class="card feat card--wide reveal">
             <div class="feat__icon"><i class="bx bx-brain"></i></div>
             <h3>Redacción académica real</h3>
@@ -212,7 +221,8 @@
           <article class="card feat reveal">
             <div class="feat__icon is-blue"><i class="bx bx-list-ul"></i></div>
             <h3>Índice automático</h3>
-            <p>Se inserta una tabla de contenido que se actualiza sola al abrir el documento en Word.</p>
+            <p>En los informes se inserta una tabla de contenido que puedes actualizar en Word.
+              Los glosarios presentan sus términos directamente en orden alfabético.</p>
           </article>
 
           <article class="card feat reveal">
@@ -269,6 +279,15 @@
 
         <div class="faq reveal">
           <details class="faq__item">
+            <summary class="faq__q">¿También puedo crear un glosario de términos? <i class="bx bx-plus"></i></summary>
+            <p class="faq__a">Sí. En Contenido, elige <strong>Glosario</strong>. Puedes indicar el tema y una
+              cantidad de 1 a 100 términos, o pegar tu lista y subir una imagen o documento con la asignación.
+              La lectura omite portada, membrete e instrucciones para extraer los términos: revisa la lista
+              antes de generar. El resultado incluye portada y definiciones breves en orden alfabético,
+              sin introducción ni conclusión. La bibliografía es opcional y va junto a cada término.</p>
+          </details>
+
+          <details class="faq__item">
             <summary class="faq__q">¿Sirve para bachillerato y no solo para universidad? <i class="bx bx-plus"></i></summary>
             <p class="faq__a">Sí. En el formulario puedes cambiar entre <strong>Universidad</strong> y
               <strong>Bachillerato</strong>: la portada se ajusta al membrete que corresponde en cada caso.</p>
@@ -295,7 +314,7 @@
           <details class="faq__item">
             <summary class="faq__q">¿Necesito crear una cuenta? <i class="bx bx-plus"></i></summary>
             <p class="faq__a">Sí, una cuenta gratuita: con tu correo o con un clic usando "Continuar con Google".
-              Una vez adentro, generas documentos sin límite y sin costo.</p>
+              Una vez adentro, puedes crear informes y glosarios según el acceso disponible en tu plan.</p>
           </details>
         </div>
       </div>
@@ -305,7 +324,7 @@
     <section class="shell" style="padding-bottom: 92px;">
       <div class="cta-final reveal">
         <h2>Deja de pelear con los márgenes</h2>
-        <p>Empieza ahora y ten tu trabajo listo antes de que se enfríe el café.</p>
+        <p>Crea tu próximo informe o glosario de términos con portada, Word y PDF.</p>
         <a class="btn btn--gold btn--lg" href="{{ url_for('show_form') }}">
           <i class="bx bx-rocket"></i> Crear mi documento
         </a>
@@ -323,7 +342,7 @@
             <img class="brand__img" src="{{ url_for('static', filename='img/logo.png') }}" alt="Gullieth">
             <span class="brand__name">Gulli<span>eth</span></span>
           </a>
-          <p class="footer__about">Generador de informes y trabajos escritos para estudiantes universitarios y de
+          <p class="footer__about">Generador de informes, trabajos escritos y glosarios de términos para estudiantes universitarios y de
             bachillerato en Venezuela.</p>
         </div>
 
