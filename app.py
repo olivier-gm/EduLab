@@ -485,6 +485,9 @@ def my_documents():
             'created_iso': doc['created_at'].replace(' ', 'T') + 'Z',
             'urgent': fraction < 0.1,
             'has_pdf': 'pdf' in available.get(doc['file_stem'], ()),
+            'share_urls': {kind: url_for('shared_file',
+                token=_share_serializer().dumps(doc['file_stem']), filetype=kind, _external=True)
+                for kind in SHARE_FILETYPES if kind in available.get(doc['file_stem'], ())},
         })
     return render_template('my_documents.html', documents=documents)
 

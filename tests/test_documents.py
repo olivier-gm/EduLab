@@ -124,6 +124,25 @@ def test_pdf_ausente_solo_muestra_word(client):
     login(client, uid)
     html = client.get('/my_documents').get_data(as_text=True)
     assert 'filetype' not in html and '/docx' in html and '/pdf' not in html
+    assert 'Compartir Word' in html and 'Compartir PDF' not in html
+
+
+def test_each_saved_document_shares_signed_downloads_with_original_expiry(client):
+    import re
+    uid = make_user()
+    make_files(STEM)
+    db.record_document(uid, 'Compartible', 'uni', 0, file_stem=STEM)
+    login(client, uid)
+    html = client.get('/my_documents').get_data(as_text=True)
+    links = re.findall(r'data-share-url="http://localhost([^\"]+)"', html)
+    assert len(links) == 2 and 'Compartir Word' in html and 'Compartir PDF' in html
+    with client.session_transaction() as sess:
+        sess.clear()
+    for link in links:
+        assert client.get(link).status_code == 200
+    set_expiry(timedelta(minutes=-1))
+    for link in links:
+        assert client.get(link).status_code == 410
 
 
 def test_requiere_iniciar_sesion(client):

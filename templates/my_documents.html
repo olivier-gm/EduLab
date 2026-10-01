@@ -77,6 +77,15 @@
           {% if d.has_pdf %}
           <a class="btn btn--pdf" href="{{ url_for('my_document_download', doc_id=d.id, filetype='pdf') }}"><i class="bx bx-download"></i> PDF</a>
           {% endif %}
+          <details class="doc-share">
+            <summary class="btn btn--ghost"><i class="bx bx-share-alt"></i> Compartir</summary>
+            <div class="doc-share__options">
+              {% for format, link in d.share_urls.items() %}
+              <button class="btn btn--ghost" type="button" data-share-url="{{ link }}" data-share-title="{{ d.title }}">Compartir {{ 'Word' if format == 'docx' else 'PDF' }}</button>
+              {% endfor %}
+              <span class="doc-share__status" role="status" aria-live="polite"></span>
+            </div>
+          </details>
         </div>
       </article>
       {% endfor %}
@@ -102,6 +111,27 @@
   <script>
     // Mantiene "Vence en …" al día sin recargar la página (se revisa cada minuto).
     (function () {
+      document.querySelectorAll('[data-share-url]').forEach(function (button) {
+        button.addEventListener('click', async function () {
+          var status = button.closest('.doc-share').querySelector('[role="status"]');
+          var url = button.dataset.shareUrl;
+          try {
+            if (navigator.share) {
+              await navigator.share({title: button.dataset.shareTitle, url: url});
+            } else {
+              await navigator.clipboard.writeText(url);
+              status.textContent = 'Enlace copiado. Vence junto con el documento.';
+            }
+          } catch (error) {
+            if (error.name === 'AbortError') return;
+            status.replaceChildren();
+            var link = document.createElement('a');
+            link.href = url;
+            link.textContent = 'Enlace de descarga: mantén pulsado o haz clic derecho para copiarlo.';
+            status.appendChild(link);
+          }
+        });
+      });
 
       // Mismo criterio que db.time_left(): por horas, redondeando hacia abajo.
       function formatTimeLeft(ms) {

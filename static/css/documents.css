@@ -64,7 +64,17 @@
 .doc-item__left b { color: #fff; }
 .doc-item.is-urgent .doc-item__left b { color: #ffaaa2; }
 
-.doc-item__actions { display: flex; gap: 10px; flex-shrink: 0; }
+.doc-item__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.doc-item__actions > .btn, .doc-share summary { min-height: 42px; padding: 10px 13px; font-size: .84rem; white-space: nowrap; }
+.doc-share { position: relative; }
+.doc-share summary { cursor: pointer; list-style: none; }
+.doc-share summary:focus-visible { outline: 2px solid #20e4da; outline-offset: 3px; }
+.doc-share summary::-webkit-details-marker { display: none; }
+.doc-share__options { position: absolute; right: 0; top: calc(100% + 10px); z-index: 10; width: 240px; display: grid; gap: 8px; padding: 12px; border: 1px solid var(--stroke-strong); border-radius: 14px; background: #141426; box-shadow: 0 16px 40px rgba(0,0,0,.4); }
+.doc-share__options .btn { padding: 10px 12px; font-size: .84rem; }
+.doc-share__status:empty { display: none; }
+.doc-share__status { font-size: .8rem; color: var(--text-soft); overflow-wrap: anywhere; }
+.doc-share__status a { color: #20e4da; }
 
 .btn--word {
   background: linear-gradient(135deg, #2b78c7 0%, #1a5290 100%);
@@ -81,8 +91,10 @@
 .docs-empty h2 { font-size: 1.15rem; margin: 10px 0 6px; }
 .docs-empty p { color: var(--text-dim); margin-bottom: 18px; }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .doc-item { flex-direction: column; align-items: stretch; }
-  .doc-item__actions .btn { flex: 1; }
+  .doc-item__actions { width: 100%; }
+  .doc-item__actions > .btn, .doc-share { flex: 1; }
+  .doc-share summary { display: flex; justify-content: center; }
   .doc-item__title { white-space: normal; }
 }
