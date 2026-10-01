@@ -1,15 +1,19 @@
 # db.py
-"""Acceso a la base de datos SQLite: usuarios y documentos generados.
+"""Acceso a la base de datos: usuarios, documentos, pagos y ajustes.
 
-Se usa sqlite3 directo (sin ORM) para mantener la misma filosofía del resto
-del proyecto: módulos simples, sin dependencias nuevas que no hagan falta.
-La conexión vive en el contexto de la petición de Flask (flask.g), igual
-que recomienda la documentación de Flask para sqlite3.
+PostgreSQL (Supabase) cuando existe DATABASE_URL; archivo SQLite en otro caso
+(desarrollo y pruebas). Se usa SQL directo, sin ORM. La conexión vive en el
+contexto de la petición de Flask (flask.g).
 """
 
 import os
+import re
 import sqlite3
+import sys
+import threading
+import time
 import logging
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 from flask import g
@@ -17,6 +21,11 @@ from flask import g
 logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get('DATABASE_PATH', 'gullieth.db')
+
+# PostgreSQL (Supabase): postgresql://usuario:clave@host:5432/postgres. Si está
+# definida, DB_PATH se ignora. Con el pooler de Supabase usa el puerto 6543.
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+POOL_MAX = int(os.environ.get('DB_POOL_MAX', '5'))
 
 # Horas que se conservan los archivos generados (.docx/.pdf) antes de borrarse.
 # Valor inicial y plazo para archivos huérfanos. El panel cambia el plazo de
@@ -34,23 +43,23 @@ ADMIN_EMAILS = {
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    id            {PK},
     email         TEXT NOT NULL UNIQUE,
     name          TEXT NOT NULL DEFAULT '',
     password_hash TEXT,
     google_id     TEXT UNIQUE,
     is_admin      INTEGER NOT NULL DEFAULT 0,
     plan          TEXT NOT NULL DEFAULT 'free',
-    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at    TEXT NOT NULL DEFAULT {NOW}
 );
 
 CREATE TABLE IF NOT EXISTS documents (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    id           {PK},
     user_id      INTEGER NOT NULL REFERENCES users(id),
     title        TEXT NOT NULL,
     doc_type     TEXT NOT NULL,
     tokens_used  INTEGER NOT NULL DEFAULT 0,
-    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at   TEXT NOT NULL DEFAULT {NOW}
 );
 
 CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
@@ -63,13 +72,13 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Pagos del plan: el usuario reporta su referencia y el admin lo aprueba.
 CREATE TABLE IF NOT EXISTS payments (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          {PK},
     user_id     INTEGER NOT NULL REFERENCES users(id),
     method      TEXT NOT NULL,            -- 'binance' | 'pago_movil'
     reference   TEXT NOT NULL,
-    amount_usd  REAL NOT NULL,
+    amount_usd  DOUBLE PRECISION NOT NULL,
     status      TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | rejected
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at  TEXT NOT NULL DEFAULT {NOW},
     reviewed_at TEXT,
     reviewed_by INTEGER REFERENCES users(id)
 );
@@ -111,12 +120,173 @@ SETTING_DEFAULTS = {
     'openrouter_api_key': '',
 }
 
+# ── Conexión: SQLite (desarrollo) o PostgreSQL (Supabase) ─────────────
+#
+# El resto de la app solo usa las funciones públicas de este módulo. Con
+# DATABASE_URL (postgresql://...) todo va a PostgreSQL; sin ella se usa el
+# archivo SQLite DB_PATH, que sirve para desarrollo local y pruebas.
+#
+# Para no mantener dos versiones de cada consulta se escribe SQL con "?" y se
+# traduce al vuelo para PostgreSQL (ver to_pg). Las fechas se guardan como texto
+# 'YYYY-MM-DD HH:MM:SS' en UTC en ambos motores, así que las comparaciones y el
+# formato no cambian entre uno y otro.
+
+_pool = None
+_pool_lock = threading.Lock()
+_VALIDATE_PG = False     # las pruebas lo activan: valida con pglast cada consulta
+
+
+def is_postgres():
+    return DATABASE_URL.startswith(('postgres://', 'postgresql://'))
+
+
+class Row(dict):
+    """Fila de PostgreSQL con acceso por nombre y por posición (como sqlite3.Row)."""
+    __slots__ = ()
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+
+def _row_factory(cursor):
+    names = [c.name for c in (cursor.description or [])]
+
+    def make(values):
+        return Row(zip(names, values))
+    return make
+
+
+def to_pg(sql):
+    """Traduce una consulta escrita con '?' a PostgreSQL.
+
+    Devuelve (sql, wants_id): en los INSERT se agrega RETURNING id para poder
+    entregar cursor.lastrowid como hace SQLite (la tabla settings no tiene id)."""
+    out = sql.replace('%', '%%').replace('?', '%s')
+    wants_id = False
+    match = re.match(r'\s*INSERT\s+INTO\s+(\w+)', out, re.IGNORECASE)
+    if match and match.group(1).lower() != 'settings' and 'RETURNING' not in out.upper():
+        out = out.rstrip().rstrip(';') + ' RETURNING id'
+        wants_id = True
+    return out, wants_id
+
+
+def _validate_pg(sql):
+    """Comprueba con el parser real de PostgreSQL (pglast) que la consulta es válida."""
+    import pglast
+    counter = iter(range(1, 1000))
+    numbered = re.sub(r'%s', lambda _m: f'${next(counter)}', to_pg(sql)[0]).replace('%%', '%')
+    pglast.parse_sql(numbered)
+
+
+def _get_pool():
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            if 'pytest' in sys.modules and DATABASE_URL != os.environ.get('TEST_DATABASE_URL', ''):
+                # Una prueba jamás debe tocar la base real (usuarios, pagos…).
+                raise RuntimeError('DATABASE_URL apunta a una base real durante las pruebas; '
+                                   'usa TEST_DATABASE_URL para una base de pruebas.')
+            from psycopg_pool import ConnectionPool
+            _pool = ConnectionPool(
+                DATABASE_URL, min_size=1, max_size=POOL_MAX, open=True,
+                check=ConnectionPool.check_connection,       # descarta conexiones que el servidor cerró
+                kwargs={'row_factory': _row_factory,
+                        'autocommit': True,   # cada consulta confirma sola: una generacion dura minutos y no debe dejar una transaccion abierta
+                        'prepare_threshold': None},          # el pooler de Supabase no admite prepared statements
+            )
+        return _pool
+
+
+def reset_pool():
+    """Cierra el pool (cambio de base en pruebas, cierre ordenado)."""
+    global _pool
+    with _pool_lock:
+        if _pool is not None:
+            _pool.close()
+            _pool = None
+
+
+class _Cursor:
+    def __init__(self, cursor, lastrowid=None):
+        self._cursor = cursor
+        self.lastrowid = lastrowid if lastrowid is not None else getattr(cursor, 'lastrowid', None)
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+
+class _Conn:
+    """Misma interfaz mínima sobre sqlite3 y psycopg: execute / commit / close."""
+
+    def __init__(self, raw, postgres, release=None):
+        self._raw = raw
+        self._pg = postgres
+        self._release = release
+
+    def execute(self, sql, params=(), sqlite_only=False):
+        """sqlite_only: consulta que solo se emite con SQLite (hay otra para PostgreSQL)."""
+        if self._pg:
+            pg_sql, wants_id = to_pg(sql)
+            cursor = self._raw.execute(pg_sql, tuple(params))
+            lastrowid = None
+            if wants_id:
+                lastrowid = cursor.fetchone()['id']
+            return _Cursor(cursor, lastrowid)
+        if _VALIDATE_PG and not sqlite_only:
+            _validate_pg(sql)
+        return _Cursor(self._raw.execute(sql, params))
+
+    def commit(self):
+        self._raw.commit()
+
+    def rollback(self):
+        self._raw.rollback()
+
+    def close(self):
+        if self._pg:
+            try:
+                self._raw.rollback()        # lo no confirmado no se queda abierto en el pool
+            finally:
+                self._release(self._raw)
+        else:
+            self._raw.close()
+
+
+def _open():
+    if is_postgres():
+        pool = _get_pool()
+        return _Conn(pool.getconn(), True, pool.putconn)
+    raw = sqlite3.connect(DB_PATH)
+    raw.row_factory = sqlite3.Row
+    raw.execute('PRAGMA foreign_keys = ON')
+    return _Conn(raw, False)
+
+
+@contextmanager
+def standalone():
+    """Conexión fuera de una petición de Flask (hilo de limpieza, scripts)."""
+    conn = _open()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
 
 def get_db():
     if 'db' not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute('PRAGMA foreign_keys = ON')
+        g.db = _open()
     return g.db
 
 
@@ -126,10 +296,18 @@ def close_db(_exc=None):
         conn.close()
 
 
+def _columns(conn, table):
+    if conn._pg:
+        rows = conn.execute(
+            'SELECT column_name FROM information_schema.columns '
+            'WHERE table_name = ? AND table_schema = current_schema()', (table,)).fetchall()
+        return {row['column_name'] for row in rows}
+    return {row[1] for row in conn.execute(f'PRAGMA table_info({table})', sqlite_only=True)}
+
+
 def _migrate(conn):
     """Agrega columnas nuevas a bases de datos creadas antes de los planes."""
-    def columns(table):
-        return {row[1] for row in conn.execute(f'PRAGMA table_info({table})')}
+    columns = lambda table: _columns(conn, table)      # noqa: E731
 
     if 'plan_expires_at' not in columns('users'):
         conn.execute('ALTER TABLE users ADD COLUMN plan_expires_at TEXT')
@@ -142,20 +320,41 @@ def _migrate(conn):
         conn.execute("UPDATE documents SET mode = 'ai' WHERE tokens_used > 0")
 
     if 'file_stem' not in columns('documents'):
-        # Nombre del archivo en output/ (sin extensión) y cuándo se borra. Los
-        # documentos anteriores no lo guardaban: quedan sin archivo asociado.
+        # Nombre del archivo (sin extensión) y cuándo se borra. Los documentos
+        # anteriores no lo guardaban: quedan sin archivo asociado.
         conn.execute('ALTER TABLE documents ADD COLUMN file_stem TEXT')
         conn.execute('ALTER TABLE documents ADD COLUMN expires_at TEXT')
 
 
+def _schema(postgres):
+    if postgres:
+        pk = 'SERIAL PRIMARY KEY'
+        now = "(to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI:SS'))"
+    else:
+        pk = 'INTEGER PRIMARY KEY AUTOINCREMENT'
+        now = "(datetime('now'))"
+    return SCHEMA.replace('{PK}', pk).replace('{NOW}', now)
+
+
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = _open()
     try:
-        conn.executescript(SCHEMA)
-        _migrate(conn)
-        conn.commit()
+        if conn._pg:
+            # Varias instancias arrancando a la vez no deben crear las tablas en paralelo.
+            conn.execute('SELECT pg_advisory_lock(727274)')
+            try:
+                conn._raw.execute(_schema(True))
+                _migrate(conn)
+                conn.commit()
+            finally:
+                conn.execute('SELECT pg_advisory_unlock(727274)')
+        else:
+            conn._raw.executescript(_schema(False))
+            _migrate(conn)
+            conn.commit()
     finally:
         conn.close()
+    _settings_cache.clear()
 
 
 def init_app(app):
@@ -296,12 +495,49 @@ def count_user_documents(user_id, mode):
 
 # ── Ajustes ───────────────────────────────────────────────────────────
 
+SETTINGS_CACHE_SECONDS = 5
+
+
+class _SettingsCache:
+    """Ajustes en memoria unos segundos. Se invalida al guardar y al iniciar la
+    base; otras instancias ven un cambio como máximo tras SETTINGS_CACHE_SECONDS."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.clear()
+
+    def clear(self):
+        with self._lock:
+            self._key = None
+            self._expires = 0.0
+            self._values = None
+
+    def get(self, key):
+        with self._lock:
+            if self._key == key and time.monotonic() < self._expires:
+                return dict(self._values)
+        return None
+
+    def put(self, key, values):
+        with self._lock:
+            self._key, self._values = key, dict(values)
+            self._expires = time.monotonic() + SETTINGS_CACHE_SECONDS
+
+
+_settings_cache = _SettingsCache()
+
+
 def get_settings():
     """Todos los ajustes: los guardados encima de los valores por defecto."""
+    key = DATABASE_URL if is_postgres() else DB_PATH
+    cached = _settings_cache.get(key)
+    if cached is not None:
+        return cached
     values = dict(SETTING_DEFAULTS)
     for row in get_db().execute('SELECT key, value FROM settings'):
         if row['key'] in values:
             values[row['key']] = row['value']
+    _settings_cache.put(key, values)
     return values
 
 
@@ -316,6 +552,7 @@ def set_settings(new_values):
                 (key, str(value)),
             )
     db.commit()
+    _settings_cache.clear()
 
 
 # ── Plan de pago ──────────────────────────────────────────────────────
@@ -424,8 +661,8 @@ def review_payment(payment_id, approve, admin_id, days):
     if payment is None or payment['status'] != 'pending':
         return False
     db.execute(
-        "UPDATE payments SET status = ?, reviewed_at = datetime('now'), reviewed_by = ? WHERE id = ?",
-        ('approved' if approve else 'rejected', admin_id, payment_id),
+        'UPDATE payments SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?',
+        ('approved' if approve else 'rejected', _utcnow().strftime(DATETIME_FMT), admin_id, payment_id),
     )
     db.commit()
     if approve:
@@ -467,18 +704,25 @@ def get_stats():
     """).fetchone()
 
 
+# Día en hora de Venezuela (UTC-4) de una fecha guardada como texto UTC.
+DAY_EXPR_PG = "to_char(created_at::timestamp - interval '4 hours', 'YYYY-MM-DD')"
+DAY_EXPR_SQLITE = "date(created_at, '-4 hours')"
+
+
 def get_dashboard_stats(days=30):
     """Series diarias en hora de Venezuela, incluyendo días sin actividad."""
     today = (_utcnow() - timedelta(hours=4)).date()
     start = today - timedelta(days=days - 1)
     cutoff = datetime.combine(start, datetime.min.time()) + timedelta(hours=4)
     conn = get_db()
-    rows = conn.execute("""
-        SELECT date(created_at, '-4 hours') AS day, COUNT(*) AS documents,
-               SUM(mode = 'ai') AS ai, SUM(mode = 'manual') AS manual,
+    day = DAY_EXPR_PG if is_postgres() else DAY_EXPR_SQLITE
+    rows = conn.execute(f"""
+        SELECT {day} AS day, COUNT(*) AS documents,
+               SUM(CASE WHEN mode = 'ai' THEN 1 ELSE 0 END) AS ai,
+               SUM(CASE WHEN mode = 'manual' THEN 1 ELSE 0 END) AS manual,
                COALESCE(SUM(tokens_used), 0) AS tokens
-        FROM documents WHERE created_at >= ? AND created_at <= ? GROUP BY day
-    """, (cutoff.strftime(DATETIME_FMT), _utcnow().strftime(DATETIME_FMT))).fetchall()
+        FROM documents WHERE created_at >= ? AND created_at <= ? GROUP BY {day}
+    """, sqlite_only=not is_postgres(), params=(cutoff.strftime(DATETIME_FMT), _utcnow().strftime(DATETIME_FMT))).fetchall()
     by_day = {row['day']: dict(row) for row in rows}
     daily = [by_day.get((start + timedelta(days=i)).isoformat(),
                        {'day': (start + timedelta(days=i)).isoformat(),
@@ -500,3 +744,32 @@ def get_dashboard_stats(days=30):
     totals['period_manual'] = sum(row['manual'] for row in daily)
     totals['average_tokens'] = round(totals['period_tokens'] / totals['period_ai']) if totals['period_ai'] else 0
     return totals, daily
+
+
+# ── Limpieza de archivos vencidos (la usa retention.py) ───────────────
+
+def expired_documents(now=None):
+    """[(id, file_stem)] de los documentos cuyo archivo ya venció."""
+    limit = (now or _utcnow()).strftime(DATETIME_FMT)
+    with standalone() as conn:
+        rows = conn.execute(
+            'SELECT id, file_stem FROM documents WHERE file_stem IS NOT NULL AND expires_at <= ?',
+            (limit,)).fetchall()
+    return [(row['id'], row['file_stem']) for row in rows]
+
+
+def detach_file(doc_id):
+    """El archivo ya se borró: el documento queda en el historial sin archivo."""
+    with standalone() as conn:
+        conn.execute('UPDATE documents SET file_stem = NULL WHERE id = ?', (doc_id,))
+        conn.commit()
+
+
+def active_file_stems(now=None):
+    """Nombres de archivo que siguen vigentes según la base de datos."""
+    limit = (now or _utcnow()).strftime(DATETIME_FMT)
+    with standalone() as conn:
+        rows = conn.execute(
+            'SELECT file_stem FROM documents WHERE file_stem IS NOT NULL AND expires_at > ?',
+            (limit,)).fetchall()
+    return {row['file_stem'] for row in rows}

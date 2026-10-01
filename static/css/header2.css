@@ -101,6 +101,7 @@ body.entrada_body {
     font-weight: 500;
     letter-spacing: -0.5px;
   }
+  .logo__text span { color: #20e4da; }
   
   .nav {
     transition: all 0.5s ease-in-out;

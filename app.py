@@ -7,6 +7,7 @@ import threading
 import os
 import logging
 import re
+import time
 from dotenv import load_dotenv
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
@@ -28,6 +29,7 @@ from auth import auth_bp, current_user, login_required
 from admin import admin_bp
 import plans
 import retention
+import storage
 from plans import plans_bp
 
 logging.basicConfig(level=logging.INFO)
@@ -70,6 +72,28 @@ def inject_current_user():
     hours = db.get_retention_hours()
     return {'current_user': current_user(), 'retention_hours': hours,
             'retention_text': db.format_duration(hours)}
+
+
+@app.route('/validate_title', methods=['POST'])
+@login_required
+def validate_document_title():
+    allowed, reason = plans.generation_access(current_user(), 'ai')
+    if not allowed:
+        return jsonify(error=reason), 403
+    title = (request.form.get('title') or '').strip()
+    error = validate_title_field(title)
+    if error:
+        return jsonify(error=error), 400
+    session.pop('validated_title', None)
+    usage = []
+    try:
+        verdict = check_title(title, usage_sink=usage)
+    except GenerationError as exc:
+        return jsonify(error=f'No se pudo validar el título. {exc.user_message}'), 503
+    if not verdict.valid:
+        return jsonify(error=verdict.message(title)), 400
+    session['validated_title'] = {'title': title.casefold(), 'at': time.time(), 'tokens': sum(usage)}
+    return jsonify(valid=True)
 
 
 # ── Validaciones de la generación ─────────────────────────────────────
@@ -150,11 +174,9 @@ def process_form_bach():
 
   # Check if the file exists
     file_stem = safe_filename(head_title)
-    random_code = ''
-    if os.path.isfile(f'output/{file_stem}.docx'):
-        # If the file exists, generate a random code and append it to the filename
-        random_code = '_' + Document_process.generate_random_code()
-    docx_output = f'output/{file_stem}{random_code}.docx'
+    # Nombre libre en el almacenamiento (dos usuarios pueden tener el mismo título).
+    full_stem = storage.unique_stem(file_stem)
+    docx_output = f'output/{full_stem}.docx'
 
     university_name = form_data.get('u', '')
     try:
@@ -172,14 +194,18 @@ def process_form_bach():
         flash('El documento tiene solo la portada porque dejaste el contenido en blanco.', 'warning')
     if not os.path.isfile(docx_output[:-5] + '.pdf'):
         flash('No se pudo generar el PDF; solo está disponible la versión Word.', 'warning')
+    try:
+        storage.publish(full_stem)
+    except storage.StorageError:
+        return form_error('No se pudo guardar el documento. Inténtalo de nuevo.', 'show_form_bach')
 
     db.record_document(user['id'], head_title, 'bach', tokens_used=0, mode='manual',
-                       file_stem=file_stem + random_code)
+                       file_stem=full_stem)
     session['file_generated'] = True
     session['document_kind'] = 'report'
 
     # Redirect to a new page or indicate success
-    return redirect(url_for('choose_file', filename=file_stem + random_code))
+    return redirect(url_for('choose_file', filename=full_stem))
     #return redirect(url_for('index'))
 
 @app.route('/form')
@@ -198,7 +224,7 @@ def show_form():
 def glossary_terms():
     allowed, _ = plans.generation_access(current_user(), 'ai')
     if not allowed:
-        return jsonify(error='Necesitas acceso a Gullieth AI para leer la lista. Consulta los planes.'), 403
+        return jsonify(error='Necesitas acceso a EduLab AI para leer la lista. Consulta los planes.'), 403
     upload = request.files.get('terms_file')
     if upload is None or not upload.filename:
         return jsonify(error='Selecciona una imagen o documento con los términos.'), 400
@@ -262,6 +288,11 @@ def process_form():
     # Lista compartida donde cada llamada a Gemini anota sus tokens
     # (ver IA._record_usage); se suma al final para guardarla en la BD.
     usage_sink = []
+    prevalidated = session.pop('validated_title', {})
+    title_validated = (prevalidated.get('title') == processor.title.strip().casefold()
+                       and 0 <= time.time() - prevalidated.get('at', 0) < 300)
+    if title_validated:
+        usage_sink.append(prevalidated.get('tokens', 0))
     # Avisos que no impiden entregar el documento pero el usuario debe
     # saber (se muestran en la pantalla de descarga).
     warnings = []
@@ -280,7 +311,8 @@ def process_form():
             else:
                 raise ValueError('Elige el tema o una lista de términos para el glosario.')
             usage_sink.append(session.pop('glossary_extraction_tokens', 0))
-            check_glossary(processor.title, terms, usage_sink=usage_sink)
+            check_glossary(processor.title, terms, usage_sink=usage_sink,
+                           include_title=not title_validated)
             glossary_entries = generate_glossary(processor.title, count, terms=terms,
                 bibliography=incluir_bibliografia, usage_sink=usage_sink)
             if terms is None:
@@ -307,9 +339,10 @@ def process_form():
         #    de "no se pudo consultar al modelo": lo segundo NO es culpa del
         #    título y antes se trataba igual (volvía al inicio sin decir nada).
         try:
-            verdict = check_title(processor.formatted_title, usage_sink=usage_sink)
-            if not verdict.valid:
-                return form_error(verdict.message(processor.title))
+            if not title_validated:
+                verdict = check_title(processor.title, usage_sink=usage_sink)
+                if not verdict.valid:
+                    return form_error(verdict.message(processor.title))
         except GenerationError as e:
             return form_error(f'No se pudo validar el título. {e.user_message}')
 
@@ -352,11 +385,9 @@ def process_form():
     input_doc2='input/plantillaempty.docx'
     # Check if the file exists
     file_stem = safe_filename(head_title)
-    random_code = ''
-    if os.path.isfile(f'output/{file_stem}.docx'):
-        # If the file exists, generate a random code and append it to the filename
-        random_code = '_' + Document_process.generate_random_code()
-    docx_output = f'output/{file_stem}{random_code}.docx'
+    # Nombre libre en el almacenamiento (dos usuarios pueden tener el mismo título).
+    full_stem = storage.unique_stem(file_stem)
+    docx_output = f'output/{full_stem}.docx'
     university_name = form_data.get('u', '')
     try:
         Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
@@ -374,17 +405,21 @@ def process_form():
         return form_error('El documento no se pudo guardar. Inténtalo de nuevo.')
     if not os.path.isfile(docx_output[:-5] + '.pdf'):
         warnings.append('No se pudo generar el PDF; solo está disponible la versión Word.')
+    try:
+        storage.publish(full_stem)
+    except storage.StorageError:
+        return form_error('No se pudo guardar el documento. Inténtalo de nuevo.')
 
     db.record_document(user['id'], head_title, 'uni', tokens_used=sum(usage_sink),
                        mode='manual' if manual_mode else 'ai',
-                       file_stem=file_stem + random_code)
+                       file_stem=full_stem)
     session['file_generated'] = True
     session['document_kind'] = document_kind
     for text in warnings:
         flash(text, 'warning')
 
     # Redirect to a new page or indicate success
-    return redirect(url_for('choose_file', filename=file_stem + random_code))
+    return redirect(url_for('choose_file', filename=full_stem))
 
 
 @app.route('/choose_file/<filename>')
@@ -395,10 +430,9 @@ def choose_file(filename):
         # Sesión vencida, o se volvió al formulario (que reinicia la marca).
         return form_error('Esa descarga ya no está disponible en tu sesión. '
                           'Genera el documento de nuevo.')
-    file_path = f'output/{filename}.docx'
     doc = db.get_document_by_filename(filename)
     if (doc is None or doc['user_id'] != current_user()['id']
-            or db.time_left(doc['expires_at'])[1] <= 0 or not os.path.isfile(file_path)):
+            or db.time_left(doc['expires_at'])[1] <= 0 or not storage.exists(filename, 'docx')):
         # Sin esto se mostraba la pantalla de descarga con enlaces que llevaban a un 404.
         return form_error('El documento ya no existe o no está disponible. Genera el documento de nuevo.')
 
@@ -426,9 +460,8 @@ def download_file(filename, filetype):
     if (doc is None or doc['user_id'] != current_user()['id']
             or db.time_left(doc['expires_at'])[1] <= 0):
         return render_template('404.html'), 410
-    file_path = f'output/{os.path.basename(filename)}.{filetype}'
     try:
-        return send_file(file_path, as_attachment=True)
+        return storage.serve(os.path.basename(filename), filetype)
     except Exception as e:
         logging.error('Error descargando archivo: %s', e)
         return render_template('404.html'), 404
@@ -439,8 +472,9 @@ def download_file(filename, filetype):
 def my_documents():
     """Informes generados por el usuario que todavía se conservan."""
     documents = []
+    available = storage.stems_available()      # una sola consulta al almacenamiento
     for doc in db.list_user_documents(current_user()['id']):
-        if not os.path.isfile(f"output/{doc['file_stem']}.docx"):
+        if 'docx' not in available.get(doc['file_stem'], ()):
             continue        # el archivo ya no está (borrado a mano, etc.)
         label, fraction = db.time_left(doc['expires_at'], doc['created_at'])
         documents.append({
@@ -450,7 +484,7 @@ def my_documents():
             'expires_iso': doc['expires_at'].replace(' ', 'T') + 'Z',
             'created_iso': doc['created_at'].replace(' ', 'T') + 'Z',
             'urgent': fraction < 0.1,
-            'has_pdf': os.path.isfile(f"output/{doc['file_stem']}.pdf"),
+            'has_pdf': 'pdf' in available.get(doc['file_stem'], ()),
         })
     return render_template('my_documents.html', documents=documents)
 
@@ -463,11 +497,12 @@ def my_document_download(doc_id, filetype):
     if filetype not in SHARE_FILETYPES or doc is None:
         flash('Ese informe ya no está disponible.', 'error')
         return redirect(url_for('my_documents'))
-    path = f"output/{doc['file_stem']}.{filetype}"
-    if not os.path.isfile(path):
+    try:
+        return storage.serve(doc['file_stem'], filetype,
+                             download_name=f"{safe_filename(doc['title'])}.{filetype}")
+    except FileNotFoundError:
         flash('Ese archivo ya no está disponible.', 'error')
         return redirect(url_for('my_documents'))
-    return send_file(path, as_attachment=True, download_name=f"{safe_filename(doc['title'])}.{filetype}")
 
 
 @app.route('/s/<token>/<filetype>')
@@ -484,9 +519,8 @@ def shared_file(token, filetype):
     doc = db.get_document_by_filename(filename)
     if doc is None or db.time_left(doc['expires_at'])[1] <= 0:
         return render_template('404.html'), 410
-    file_path = f'output/{os.path.basename(filename)}.{filetype}'
     try:
-        return send_file(file_path, as_attachment=True)
+        return storage.serve(os.path.basename(filename), filetype)
     except Exception as e:
         logging.error('Error sirviendo archivo compartido: %s', e)
         return render_template('404.html'), 404
@@ -502,6 +536,10 @@ def internal_error(e):
     return render_template('500.html'), 500
 
 
+
+logging.info('Base de datos: %s · Archivos: %s',
+             'PostgreSQL (Supabase)' if db.is_postgres() else f'SQLite local ({db.DB_PATH})',
+             'Cloudflare R2 / S3' if storage.is_remote() else 'carpeta local (output/)')
 
 # Limpieza automática de archivos vencidos (ver retention.py). No arranca bajo
 # pytest para que las pruebas no borren nada de output/.

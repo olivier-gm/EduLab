@@ -1,4 +1,4 @@
-# 📝 Generador de Informes Académicos con IA (Gemini & Flask)
+# 📝 EduLab · Informes y glosarios académicos con IA
 
 Un potente sistema web desarrollado en **Python / Flask** y potenciado con **Google Gemini (SDK Moderno `google-genai`)** diseñado para automatizar la creación de informes, trabajos escritos e investigaciones escolares o universitarias de calidad profesional en formatos **Microsoft Word (.docx)** y **PDF**.
 
@@ -81,6 +81,24 @@ client = genai.Client(api_key='TU_API_KEY_DE_GEMINI')
 ```
 
 ---
+
+## ☁️ Producción: Supabase y Cloudflare R2
+
+La app no necesita guardar nada en el servidor donde corre: la base de datos vive en **Supabase** (PostgreSQL) y los informes generados en **Cloudflare R2** (compatible con S3). Así se puede cambiar de hosting (Azure, DigitalOcean…) sin perder datos. Sin estas variables usa SQLite y la carpeta `output/`, que sirve para desarrollar.
+
+1. **Supabase:** crea un proyecto y copia la cadena *Transaction pooler* (puerto 6543) en `DATABASE_URL`. Usa el pooler: la conexión directa solo habla IPv6. Las tablas se crean solas al arrancar.
+2. **Cloudflare R2:** crea un bucket **privado** y un token de API con permiso *Object Read & Write* limitado a ese bucket. Rellena `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` y `R2_BUCKET`. Las descargas usan URLs firmadas de 5 minutos. Como respaldo, añade una regla de ciclo de vida que borre objetos a los 2 días; la app ya borra los vencidos cada 15 minutos.
+3. **Comprueba todo con tus credenciales:** `python tools/check_services.py` conecta a la base, sube, descarga y borra un archivo de prueba.
+4. **Si ya tienes usuarios en SQLite:** `python tools/migrate_sqlite_to_postgres.py gullieth.db` los copia a Supabase conservando ids y pagos (no corre si el destino ya tiene datos).
+
+Otro proveedor S3 (AWS, DigitalOcean Spaces, Backblaze, MinIO): define `S3_ENDPOINT_URL` además de las claves.
+
+### Pruebas
+
+`pytest tests` corre sobre SQLite y nunca toca Supabase ni R2 (el aislamiento está en `tests/conftest.py`). Dos modos opcionales:
+
+- `VALIDATE_PG_SQL=1 pytest tests` valida con el parser real de PostgreSQL cada consulta que ejecute la app.
+- `TEST_DATABASE_URL=postgresql://... pytest tests` corre toda la suite contra un PostgreSQL de pruebas. **Borra el esquema `public` antes de cada prueba**: usa una base desechable.
 
 ## 🚀 Ejecución del Servidor de Desarrollo
 

@@ -1,5 +1,5 @@
 /* ============================================================
-   GULLIETH · Comportamientos compartidos de interfaz
+   EDULAB · Comportamientos compartidos de interfaz
    (navbar móvil, sombra al hacer scroll y animaciones de entrada)
    ============================================================ */
 

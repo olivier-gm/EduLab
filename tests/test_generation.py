@@ -208,6 +208,28 @@ def post_form(client, **extra):
     return client.post('/process_form', data=data, follow_redirects=True).get_data(as_text=True)
 
 
+def test_title_preflight_rejects_early_reuses_verdict_and_checks_changed_title(client, monkeypatch, fake_document):
+    checked = []
+    def validate(title, usage_sink=None):
+        checked.append(title)
+        usage_sink.append(7)
+        return TitleVerdict(title == 'EL PUMA', reason='not_a_topic' if title != 'EL PUMA' else None)
+    monkeypatch.setattr(app_module, 'check_title', validate)
+    monkeypatch.setattr(app_module, 'generate_essay_content', lambda *args, **kwargs: 'Contenido educativo del puma')
+    rejected = client.post('/validate_title', data={'title': 'hola amigo'})
+    assert rejected.status_code == 400 and 'error' in rejected.json
+    assert not db.list_documents()
+    assert client.post('/validate_title', data={'title': 'EL PUMA'}).json == {'valid': True}
+    page = client.post('/process_form', data={'title': 'EL PUMA', 'global-mode': 'ia'}, follow_redirects=True)
+    assert 'Tu documento está listo' in page.get_data(as_text=True)
+    assert checked.count('EL PUMA') == 1
+    assert db.list_documents()[0]['tokens_used'] == 7
+    assert client.post('/validate_title', data={'title': 'EL PUMA'}).status_code == 200
+    html = post_form(client, title='hola amigo')
+    assert 'La IA no reconoce' in html and checked[-1] == 'HOLA AMIGO'
+    assert len(db.list_documents()) == 1
+
+
 def test_parallel_sections_keep_selected_provider(client, monkeypatch, fake_document):
     import ai_provider
     import threading

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Crear documento · Gullieth</title>
+  <title>Crear documento · EduLab</title>
 
   {% include "app_icons.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,8 +23,8 @@
   <header class="nav" data-nav>
     <div class="shell nav__inner">
       <a href="{{ url_for('welcome') }}" class="brand">
-        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="Gullieth">
-        <span class="brand__name">Gulli<span>eth</span></span>
+        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="EduLab">
+        <span class="brand__name">Edu<span>Lab</span></span>
       </a>
 
       <nav class="nav__links" data-nav-links>
@@ -38,7 +38,7 @@
       </nav>
 
       <div class="nav__actions">
-        <span class="pill btn--nav-cta"><i class="bx bx-shape-triangle"></i> Gullieth AI</span>
+        <span class="pill btn--nav-cta"><i class="bx bx-shape-triangle"></i> EduLab AI</span>
         {% if current_user %}
         <a class="btn btn--ghost btn--sm" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
         {% endif %}
@@ -79,7 +79,7 @@
            Los "name" de cada campo son los que espera el backend
            (/process_form → FormProcessor). No cambiar.
            ============================================================ -->
-      <form id="docForm" action="{{ url_for('process_form') }}" method="POST" novalidate data-terms-url="{{ url_for('glossary_terms') }}"
+      <form id="docForm" action="{{ url_for('process_form') }}" method="POST" novalidate data-title-url="{{ url_for('validate_document_title') }}" data-terms-url="{{ url_for('glossary_terms') }}"
         data-universities="{{ url_for('static', filename='txt/lista_imagenes.txt') }}"
         data-logo-base="{{ url_for('static', filename='logos') }}">
 
@@ -267,7 +267,7 @@
                 <input type="radio" id="kind-glossary" name="document_kind" value="glossary" {% if not access.ai.ok %}disabled{% endif %}>
                 <label for="kind-glossary"><i class="bx bx-book-open"></i> Glosario</label>
               </div>
-              {% if not access.ai.ok %}<span class="help">Los glosarios requieren acceso a Gullieth AI. <a href="{{ url_for('plans.plans') }}">Ver planes</a></span>{% endif %}
+              {% if not access.ai.ok %}<span class="help">Los glosarios requieren acceso a EduLab AI. <a href="{{ url_for('plans.plans') }}">Ver planes</a></span>{% endif %}
             </div>
           </div>
 
@@ -287,14 +287,14 @@
                 <span>¿Quién escribe el contenido?</span>
                 <div class="seg">
                   <input type="radio" id="mode-ia" name="global-mode" value="ia" {% if access.ai.ok %}checked{% else %}disabled{% endif %}>
-                  <label for="mode-ia"><i class="bx bx-shape-triangle"></i> Gullieth AI</label>
+                  <label for="mode-ia"><i class="bx bx-shape-triangle"></i> EduLab AI</label>
                   <input type="radio" id="mode-standard" name="global-mode" value="standard" {% if not access.manual.ok %}disabled{% elif not access.ai.ok %}checked{% endif %}>
                   <label for="mode-standard"><i class="bx bx-pencil"></i> Lo escribo yo</label>
                 </div>
                 {% if not access.ai.ok or not access.manual.ok %}
                 <span class="help mode-lock">
                   <i class="bx bx-lock-alt"></i>
-                  {{ 'Gullieth AI' if not access.ai.ok else 'Escribirlo tú' }} requiere el plan.
+                  {{ 'EduLab AI' if not access.ai.ok else 'Escribirlo tú' }} requiere el plan.
                   <a href="{{ url_for('plans.plans') }}">Ver planes</a>
                 </span>
                 {% elif access.ai.limit is not none or access.manual.limit is not none %}

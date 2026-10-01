@@ -45,7 +45,9 @@ QUESTIONS = {
             'valid': (
                 'A real subject, concept, person, event, work or question that can be '
                 'researched, even if it is badly written, has typos, or is very short '
-                'or informal. Medical terms and acronyms, including anatomy, sexual '
+                'or informal. Animals, plants and common names are valid topics: '
+                'EL PUMA, el gato, la rosa. Articles and uppercase text do not make '
+                'a subject invalid. Medical terms and acronyms, including anatomy, sexual '
                 'health, injuries and pathology, are valid academic subjects.'
             ),
             'gibberish': (

@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
-  <title>Tu documento está listo · Gullieth</title>
+  <title>Tu documento está listo · EduLab</title>
 
   {% include "app_icons.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,8 +23,8 @@
   <header class="nav" data-nav>
     <div class="shell nav__inner">
       <a href="{{ url_for('welcome') }}" class="brand">
-        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="Gullieth">
-        <span class="brand__name">Gulli<span>eth</span></span>
+        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="EduLab">
+        <span class="brand__name">Edu<span>Lab</span></span>
       </a>
 
       <nav class="nav__links" data-nav-links>
@@ -153,7 +153,7 @@
   <!-- ===================== FOOTER ===================== -->
   <footer class="footer">
     <div class="shell footer__bottom" style="border: 0; padding-top: 0;">
-      <span>&copy; 2026 Gullieth. Todos los derechos reservados.</span>
+      <span>&copy; 2026 EduLab. Todos los derechos reservados.</span>
       <span>Hecho en Venezuela 🇻🇪</span>
     </div>
   </footer>
@@ -205,7 +205,7 @@
       root.querySelector('[data-share-gmail]').addEventListener('click', function () {
         window.open(
           'https://mail.google.com/mail/?view=cm&fs=1&su=' +
-          encodeURIComponent('Mi documento de Gullieth') +
+          encodeURIComponent('Mi documento de EduLab') +
           '&body=' + encodeURIComponent(message()),
           '_blank', 'noopener'
         );
@@ -218,7 +218,7 @@
 
       anyBtn.addEventListener('click', function () {
         if (native) {
-          navigator.share({ title: 'Mi documento de Gullieth', text: message() })
+          navigator.share({ title: 'Mi documento de EduLab', text: message() })
             .catch(function () { /* el usuario cerró el diálogo */ });
           return;
         }

@@ -1,5 +1,5 @@
 # retention.py
-"""Limpieza automática de los archivos generados (output/*.docx y *.pdf).
+"""Limpieza automática de los archivos generados (.docx y .pdf, en R2 o en output/).
 
 Cada documento guarda en la base de datos cuándo vence (db.FILE_RETENTION_HOURS
 después de generarse). Un hilo en segundo plano revisa cada pocos minutos y
@@ -9,29 +9,16 @@ cada visita y los archivos que nadie abría nunca se borraban.
 """
 
 import logging
-import os
-import sqlite3
 import threading
 import time
 
 import db
+import storage
 
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = 'output'
-EXTENSIONS = ('.docx', '.pdf')
 SWEEP_INTERVAL = 15 * 60      # segundos entre revisiones
-
-
-def _remove(stem):
-    for ext in EXTENSIONS:
-        path = os.path.join(OUTPUT_DIR, stem + ext)
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
-        except OSError as e:
-            logger.warning('No se pudo borrar %s: %s', path, e)
+SCRATCH_MAX_AGE = 3600        # restos de generaciones fallidas en output/ (solo con R2)
 
 
 def cleanup_expired_files(now=None):
@@ -39,49 +26,31 @@ def cleanup_expired_files(now=None):
 
     1) Los que la base de datos marca como vencidos (y les quita el nombre de
        archivo, para no volver a procesarlos).
-    2) Los archivos sueltos de output/ más viejos que el plazo que nadie
+    2) Los archivos sueltos del almacenamiento más viejos que el plazo que nadie
        registró (documentos anteriores a "Mis informes", pruebas, restos).
+    3) Restos de trabajo en la carpeta local cuando el almacenamiento es R2.
     """
-    now = now or db._utcnow()
-    limit = now.strftime(db.DATETIME_FMT)
     cleaned = 0
 
-    conn = sqlite3.connect(db.DB_PATH)
-    try:
-        rows = conn.execute(
-            'SELECT id, file_stem FROM documents WHERE file_stem IS NOT NULL AND expires_at <= ?',
-            (limit,),
-        ).fetchall()
-        for doc_id, stem in rows:
-            _remove(stem)
-            conn.execute('UPDATE documents SET file_stem = NULL WHERE id = ?', (doc_id,))
-            cleaned += 1
-        conn.commit()
+    for doc_id, stem in db.expired_documents(now):
+        storage.delete(stem)
+        db.detach_file(doc_id)
+        cleaned += 1
 
-        # Archivos vigentes según la base de datos: nunca se tocan por antigüedad.
-        active = {
-            row[0] for row in conn.execute(
-                'SELECT file_stem FROM documents WHERE file_stem IS NOT NULL AND expires_at > ?',
-                (limit,),
-            )
-        }
-    finally:
-        conn.close()
-
-    # mtime es hora real (epoch), así que se compara contra el reloj real.
+    # Archivos vigentes según la base de datos: nunca se tocan por antigüedad.
+    active = db.active_file_stems(now)
+    # La fecha de modificación es hora real (epoch), así que se compara contra el reloj real.
     real_cutoff = time.time() - db.FILE_RETENTION_HOURS * 3600
-    if os.path.isdir(OUTPUT_DIR):
-        for name in os.listdir(OUTPUT_DIR):
-            stem, ext = os.path.splitext(name)
-            if ext.lower() not in EXTENSIONS or stem in active:
-                continue
-            path = os.path.join(OUTPUT_DIR, name)
-            try:
-                if os.path.getmtime(path) < real_cutoff:
-                    os.remove(path)
-                    cleaned += 1
-            except OSError as e:
-                logger.warning('No se pudo revisar/borrar %s: %s', path, e)
+    for item in storage.list_files():
+        if item['stem'] in active or item['modified'] >= real_cutoff:
+            continue
+        try:
+            storage.delete_file(item['stem'], item['ext'])
+            cleaned += 1
+        except Exception as e:
+            logger.warning('No se pudo borrar %s.%s: %s', item['stem'], item['ext'], e)
+
+    storage.local_scratch_cleanup(SCRATCH_MAX_AGE)
 
     if cleaned:
         logger.info('Limpieza automática: %d archivo(s)/documento(s) vencidos borrados', cleaned)

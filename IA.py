@@ -567,6 +567,9 @@ def check_title(title, usage_sink=None):
         f"Analiza si este título es válido para buscar información en internet o escribir un "
         f"artículo. Responde únicamente con la palabra 'TRUE' si es coherente, o 'FALSE' si no "
         f"tiene sentido o son letras al azar. Título: '{title}'"
+        " Los nombres de animales, plantas y conceptos son temas válidos aunque sean "
+        "breves o estén en mayúsculas. Ejemplos válidos: EL PUMA, el gato, la célula. "
+        "No exijas que el título formule una pregunta ni describa un enfoque específico."
     )
 
     try:

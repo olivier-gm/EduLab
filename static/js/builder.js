@@ -1,5 +1,5 @@
 /* ============================================================
-   GULLIETH · Constructor de documento
+   EDULAB · Constructor de documento
    Controla el asistente por pasos, la vista previa en vivo de la
    portada y el overlay de progreso durante la generación.
 
@@ -803,7 +803,7 @@
     });
   }
 
-  function startLoader() {
+  function startLoader(validating) {
     if (isGlossary()) {
       ['Preparando la portada', 'Revisando los términos', 'Definiendo los términos',
         'Comprobando el glosario', 'Armando el Word y el PDF'].forEach(function (label, i) {
@@ -814,6 +814,17 @@
     loader.classList.add('is-on');
     document.body.style.overflow = 'hidden';
     progress = 0;
+    paintPhase();
+
+    if (validating) {
+      progress = 10;
+      bar.style.width = '10%';
+      pct.textContent = 'Validando';
+      paintPhase();
+      msg.textContent = 'Validando que el título sea apto para un trabajo académico…';
+      return; // El indicador no avanza hasta recibir la validación real.
+    }
+    progress = 26;
     paintPhase();
 
     timer = setInterval(function () {
@@ -835,16 +846,38 @@
     btnSubmit.disabled = false;
   }
 
-  form.addEventListener('submit', function (e) {
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
     if (!validateStep(1)) { e.preventDefault(); goTo(1, true); return; }
     if (!validateStep(3)) { e.preventDefault(); goTo(3, true); return; }
     if (btnSubmit.disabled) { e.preventDefault(); return; }
 
     saveDraft();
     btnSubmit.disabled = true;
+    var needsValidation = isGlossary() || ($('input[name="global-mode"]:checked') || {}).value !== 'standard';
+    if (needsValidation) {
+      startLoader(true);
+      try {
+        var validationData = new FormData();
+        validationData.set('title', $('#f-title').value);
+        var response = await fetch(form.dataset.titleUrl, {method: 'POST', body: validationData});
+        var result = await response.json();
+        if (!response.ok || !result.valid) {
+          stopLoader();
+          goTo(3, true);
+          fieldError('#f-title', true, result.error || 'No se pudo validar el título. Inténtalo de nuevo.');
+          $('#f-title').focus();
+          return;
+        }
+      } catch (error) {
+        stopLoader();
+        goTo(3, true);
+        fieldError('#f-title', true, 'No se pudo validar el título. Revisa tu conexión e inténtalo de nuevo.');
+        return;
+      }
+    }
     startLoader();
-    // No se llama a preventDefault: el envío sigue su curso normal
-    // y el overlay permanece visible hasta que el servidor responde.
+    HTMLFormElement.prototype.submit.call(form);
   });
 
   // Si el usuario vuelve con el botón "atrás", el overlay no debe quedarse pegado
