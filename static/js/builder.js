@@ -245,6 +245,7 @@
     show($('#ia-block'), !glossary && mode === 'ia');
     show($('#manual-block'), !glossary && mode === 'standard');
     show($('#writer-options'), !glossary);
+    show($('#scan-block'), !glossary);
     show($('#glossary-block'), glossary);
     $('#f-incluir-intro').disabled = glossary;
     $('#f-incluir-concl').disabled = glossary;
@@ -509,6 +510,47 @@
   });
 
   /* ==========================================================
+     6b. FOTO DE LA CONSIGNA -> título y temas
+     ========================================================== */
+  var scanningPhoto = false;
+  $('#scan-photo').addEventListener('click', async function () {
+    var file = $('#f-scan-photo').files[0];
+    var status = $('#scan-status');
+    if (!file) { status.textContent = 'Selecciona primero una foto.'; return; }
+    if (!/\.(png|jpe?g|webp)$/i.test(file.name)) { status.textContent = 'La foto debe ser PNG, JPG o WebP.'; return; }
+    if (file.size > 10 * 1024 * 1024) { status.textContent = 'La foto supera 10 MB.'; return; }
+    if (scanningPhoto) return;
+    scanningPhoto = true;
+    this.disabled = true;
+    status.textContent = 'Leyendo la consigna…';
+    var data = new FormData();
+    data.append('photo', file);
+    try {
+      var response = await fetch(form.dataset.scanUrl, { method: 'POST', body: data });
+      if (response.redirected) { throw new Error('Tu sesión venció. Inicia sesión de nuevo.'); }
+      var result = await response.json();
+      if (!response.ok) { throw new Error(result.error || 'No se pudo leer la foto.'); }
+      var titleInput = $('#f-title');
+      titleInput.value = result.title;
+      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+      $$('.topic-row', topicsBox).forEach(function (row) { row.remove(); });
+      result.topics.slice(0, MAX_TOPICS).forEach(function (topic) {
+        var row = buildTopicRow();
+        $('input', row).value = topic;
+        topicsBox.appendChild(row);
+      });
+      reindexTopics();
+      status.textContent = 'Se leyó el título y ' + result.topics.length + (result.topics.length === 1 ? ' tema' : ' temas') +
+        '. Revísalos antes de generar.';
+    } catch (error) {
+      status.textContent = error.message || 'No se pudo leer la foto. Escribe el título a mano.';
+    } finally {
+      scanningPhoto = false;
+      this.disabled = false;
+    }
+  });
+
+  /* ==========================================================
      7. FECHA (el backend espera dd/mm/yyyy)
      ========================================================== */
   var datePicker = $('#f-date-picker');
@@ -715,6 +757,7 @@
         return false;
       }
       fieldError('#f-title', false);
+      if (scanningPhoto) { setText($('#scan-status'), 'Espera a que termine la lectura de la foto.'); return false; }
       if (isGlossary()) {
         if (extractingTerms) { setText($('#terms-status'), 'Espera a que termine la lectura del archivo.'); return false; }
         if ($('#glossary-list').checked) {

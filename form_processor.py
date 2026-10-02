@@ -1,4 +1,5 @@
 # form_processor.py
+import re
 
 class FormProcessor:
     def __init__(self, form_data, route):
@@ -79,7 +80,17 @@ class FormProcessor:
         """
         subtitles = [self.subtitle_1, self.subtitle_2, self.subtitle_3, self.subtitle_4,
                      self.subtitle_5, self.subtitle_6, self.subtitle_7, self.subtitle_8]
-        return [subtitle for subtitle in subtitles if subtitle]
+        cleaned = [self.clean_subtitle(subtitle) for subtitle in subtitles if subtitle]
+        return [subtitle for subtitle in cleaned if subtitle]
+
+    @staticmethod
+    def clean_subtitle(subtitle):
+        """Subtítulo listo para usar: sin puntos suspensivos ni ':' al final y con mayúscula inicial.
+
+        Se limpia antes de mandarlo a la IA: si se le pasa 'que es...' tal cual, lo
+        copia con los puntos y en minúscula y el documento lo trata como un párrafo."""
+        text = re.sub(r'\s+', ' ', str(subtitle)).strip().rstrip('.…:;, ').strip()
+        return text[:1].upper() + text[1:]
 
     def process(self):
         

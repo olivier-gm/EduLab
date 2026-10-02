@@ -92,7 +92,7 @@ def _json_generate(contents, schema, instruction, usage_sink):
         raise IA.GenerationError('invalid', 'La IA devolvió una lista incompleta o ilegible. Inténtalo de nuevo.') from exc
 
 
-def secure_read_upload(upload, allowed_extensions, max_bytes):
+def secure_read_upload(upload, allowed_extensions, max_bytes, invalid_type_message=None):
     """
     VALIDACIÓN ESTRICTA Y SEGURA DE ARCHIVOS (USO EXTENSIBLE)
     =========================================================
@@ -120,7 +120,7 @@ def secure_read_upload(upload, allowed_extensions, max_bytes):
     """
     suffix = Path(upload.filename or '').suffix.lower()
     if suffix not in allowed_extensions:
-        raise ValueError('Sube una imagen PNG, JPG o WebP, o un documento PDF, Word (.docx) o TXT.')
+        raise ValueError(invalid_type_message or 'Sube una imagen PNG, JPG o WebP, o un documento PDF, Word (.docx) o TXT.')
 
     # 1. DOS Defense: Leemos sólo hasta el límite + 1 para saber si se pasó,
     # sin cargar un archivo hipotéticamente inmenso completamente en la memoria.

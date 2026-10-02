@@ -921,7 +921,7 @@ class Document_process:
                 run.italic = True
 
     @staticmethod
-    def parrafos(body, document, topic, flag, detect_subtitles=True):
+    def parrafos(body, document, topic, flag, detect_subtitles=True, known_subtitles=()):
         """Agrega una sección al documento: título, subtítulos y párrafos.
 
         El título de sección va con nivel de esquema 1 y cada subtítulo
@@ -938,8 +938,16 @@ class Document_process:
         if body == '':
             return
 
+        known = {Document_process._subtitle_key(k): k for k in known_subtitles or () if k}
+
         # ── Título de la sección (nivel 1 del índice) ──
         p = document.add_paragraph(topic)
+        if getattr(document, '_break_before_next', False):
+            # El salto de página va antes del título y no como un párrafo suelto
+            # al final de la sección: si la sección llenaba justo la página, el
+            # salto aparte dejaba una página en blanco.
+            p.paragraph_format.page_break_before = True
+            document._break_before_next = False
         try:
             p.style = document.styles['Heading 1']
         except KeyError:
@@ -957,12 +965,21 @@ class Document_process:
         # ── Cuerpo ──
         for block in Document_process._split_blocks(body):
             text = Document_process._clean_markdown(block)
-            if not text:
-                continue
+            if not re.search(r'\w', text):
+                continue            # una línea de solo puntos o signos no es un párrafo
 
+            key = Document_process._subtitle_key(text)
+            ellipsis_title = (detect_subtitles and re.search(r'(\.{3}|…)$', text) is not None
+                              and len(text) <= Document_process.SUBTITLE_MAX_LEN
+                              and not re.search(r'[.!?]\s+\S', text))
+            is_known = detect_subtitles and key in known
             bullet = detect_subtitles and Document_process._BULLET_RE.match(block)
-            if detect_subtitles and not bullet and Document_process._is_subtitle(block):
-                sp = document.add_paragraph(Document_process._strip_inline_markers(text))
+            if detect_subtitles and not bullet and (
+                    is_known or ellipsis_title or Document_process._is_subtitle(block)):
+                shown = known[key] if is_known else Document_process._strip_inline_markers(text)
+                shown = shown.rstrip('.…:; ').strip()
+                shown = shown[:1].upper() + shown[1:]
+                sp = document.add_paragraph(shown)
                 try:
                     sp.style = document.styles['Heading 2']
                 except KeyError:
@@ -995,7 +1012,13 @@ class Document_process:
                 Document_process._add_inline(bp, marked, strip_stray=detect_subtitles, size=Pt(12))
 
         if flag:
-            document.add_page_break()
+            document._break_before_next = True
+
+    @staticmethod
+    def _subtitle_key(text):
+        """Clave para comparar subtítulos sin importar mayúsculas, marcas ni puntos finales."""
+        text = Document_process._strip_inline_markers(Document_process._clean_markdown(text))
+        return re.sub(r'\s+', ' ', text.rstrip('.…:; ')).casefold()
 
     # ── Underline helpers ──────────────────────────────────────────────
 
@@ -1065,7 +1088,8 @@ class Document_process:
     @staticmethod
     def fill_placeholders(docx_output, template_path, template_path2, replacements,
                            introduction, essay_content, conclusion, head_title, id,
-                           university_name='', detect_subtitles=True, bibliography='', glossary_entries=None):
+                           university_name='', detect_subtitles=True, bibliography='', glossary_entries=None,
+                           subtitles=()):
         if id == 'bach':
             words = ['DOCENTE:', 'ALUMNOS:', 'ALUMNO:', 'MATERIA:']
         else:
@@ -1167,11 +1191,11 @@ class Document_process:
             Document_process.add_glossary(document, glossary_entries)
         else:
             Document_process.parrafos(introduction, document, 'Introducción', flagi, detect_subtitles)
-            Document_process.parrafos(essay_content, document, head_title, flage, detect_subtitles)
+            Document_process.parrafos(essay_content, document, head_title, flage, detect_subtitles, subtitles)
             Document_process.parrafos(conclusion, document, 'Conclusión', False, detect_subtitles)
             if bibliography:
                 if introduction or essay_content or conclusion:
-                    document.add_page_break()
+                    document._break_before_next = True
                 Document_process.parrafos(bibliography, document, 'Bibliografía', False, False)
 
         # Forzar actualización de campos (TOC) al abrir

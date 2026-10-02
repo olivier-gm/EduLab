@@ -79,7 +79,7 @@
            Los "name" de cada campo son los que espera el backend
            (/process_form → FormProcessor). No cambiar.
            ============================================================ -->
-      <form id="docForm" action="{{ url_for('process_form') }}" method="POST" novalidate data-max-terms="{{ glossary_limit }}" data-title-url="{{ url_for('validate_document_title') }}" data-terms-url="{{ url_for('glossary_terms') }}"
+      <form id="docForm" action="{{ url_for('process_form') }}" method="POST" novalidate data-max-terms="{{ glossary_limit }}" data-title-url="{{ url_for('validate_document_title') }}" data-terms-url="{{ url_for('glossary_terms') }}" data-scan-url="{{ url_for('report_scan') }}"
         data-universities="{{ url_for('static', filename='txt/lista_imagenes.txt') }}"
         data-logo-base="{{ url_for('static', filename='logos') }}">
 
@@ -269,6 +269,16 @@
                 {% if not glossary_allowed %}<span class="help">La recarga incluye informes en Word. Los glosarios están disponibles con un plan mensual.</span>{% endif %}
               </div>
               {% if not access.ai.ok %}<span class="help">Los glosarios requieren acceso a EduLab AI. <a href="{{ url_for('plans.plans') }}">Ver planes</a></span>{% endif %}
+            </div>
+          </div>
+
+          <div class="block" id="scan-block">
+            <div class="field">
+              <label for="f-scan-photo">Foto de tu consigna o guía <span class="opt">· opcional</span></label>
+              <input class="input" id="f-scan-photo" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" {% if not access.ai.ok %}disabled{% endif %}>
+              <span class="help">Sube una foto de la asignación: EduLab AI lee el tema y los puntos que piden y rellena el título y los temas. Revísalos antes de generar. PNG, JPG o WebP, hasta 10 MB.</span>
+              <button class="add-btn" type="button" id="scan-photo" {% if not access.ai.ok %}disabled{% endif %}><i class="bx bx-camera"></i> Leer consigna de la foto</button>
+              <span class="help" id="scan-status" role="status" aria-live="polite"></span>
             </div>
           </div>
 

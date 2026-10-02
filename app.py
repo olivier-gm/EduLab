@@ -22,6 +22,7 @@ from algorythms import Document_process
 from IA import generate_essay_content, generate_introduction, generate_conclusion, GenerationError
 from title_check import check_title, check_glossary
 from glossary import extract_terms, parse_terms, generate_glossary, generate_bibliography
+from report_scan import extract_assignment
 
 import db
 import ai_provider
@@ -261,9 +262,38 @@ def glossary_terms():
         session['glossary_extraction_tokens'] = session.get('glossary_extraction_tokens', 0) + sum(usage)
 
 
+SCAN_MIN_INTERVAL = 3      # segundos entre lecturas de foto: cada una gasta tokens de IA
+
+
+@app.route('/report/scan', methods=['POST'])
+@login_required
+def report_scan():
+    """Lee la foto de una consigna y devuelve el título y los temas para el formulario."""
+    allowed, _ = plans.generation_access(current_user(), 'ai')
+    if not allowed:
+        return jsonify(error='Necesitas acceso a EduLab AI para leer la foto. Consulta los planes.'), 403
+    now = time.time()
+    if now - session.get('scan_at', 0) < SCAN_MIN_INTERVAL:
+        return jsonify(error='Espera unos segundos antes de leer otra foto.'), 429
+    session['scan_at'] = now
+    upload = request.files.get('photo')
+    if upload is None or not upload.filename:
+        return jsonify(error='Selecciona la foto de tu consigna.'), 400
+    usage = []
+    try:
+        return jsonify(**extract_assignment(upload, usage_sink=usage))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    except GenerationError as exc:
+        return jsonify(error=exc.user_message), 502
+    finally:
+        # Los tokens de la lectura se suman al informe que se genere después.
+        session['scan_extraction_tokens'] = session.get('scan_extraction_tokens', 0) + sum(usage)
+
+
 @app.errorhandler(413)
 def upload_too_large(error):
-    if request.path == '/glossary/terms':
+    if request.path in ('/glossary/terms', '/report/scan'):
         return jsonify(error='El archivo supera el límite de 10 MB.'), 413
     return form_error('El archivo o el formulario es demasiado grande (máximo 10 MB por archivo).')
 
@@ -310,6 +340,7 @@ def process_form():
     # Lista compartida donde cada llamada a Gemini anota sus tokens
     # (ver IA._record_usage); se suma al final para guardarla en la BD.
     usage_sink = []
+    usage_sink.append(session.pop('scan_extraction_tokens', 0))   # lectura de foto previa, si hubo
     prevalidated = session.pop('validated_title', {})
     title_validated = (prevalidated.get('title') == processor.title.strip().casefold()
                        and 0 <= time.time() - prevalidated.get('at', 0) < 300)
@@ -418,7 +449,8 @@ def process_form():
                                             university_name=university_name,
                                             detect_subtitles=not manual_mode,
                                             bibliography=bibliography,
-                                            glossary_entries=glossary_entries)
+                                            glossary_entries=glossary_entries,
+                                            subtitles=processor.subtitles)
     except Exception:
         logging.exception('Error armando el documento "%s"', head_title)
         return form_error('Ocurrió un error armando el documento. Inténtalo de nuevo; '

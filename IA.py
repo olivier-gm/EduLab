@@ -408,7 +408,7 @@ class _FewShotPrompt:
 # DESARROLLO DEL TRABAJO (ensayo)
 # ---------------------------------------------------------------------------
 
-_ESSAY_SYSTEM_INSTRUCTION = 'Genera una investigacion estructurada detallada, utilizando subtitulos de ser necesario para una investigacion mas detallada, basandote en el tema que te indique el usuario en su siguiente mensaje. el texto no debe tener un ultimo parrafo de conclusion sin importar que parezca incompleto asi que omite un subtitulo de **conclusion**. omite colocar el titulo principal al principio. La respuesta debe estar representada en una sola linea de texto con cada párrafo separado estrictamente por \n\n\n. ejemplo: "concepto...\n\n\nSubtitulo1\n\n\n.....\n\n\nsubtitulo2\n\n\n...."'
+_ESSAY_SYSTEM_INSTRUCTION = 'Genera una investigacion estructurada detallada, utilizando subtitulos de ser necesario para una investigacion mas detallada, basandote en el tema que te indique el usuario en su siguiente mensaje. el texto no debe tener un ultimo parrafo de conclusion sin importar que parezca incompleto asi que omite un subtitulo de **conclusion**. omite colocar el titulo principal al principio. La respuesta debe estar representada en una sola linea de texto con cada párrafo separado estrictamente por \n\n\n. Cada subtitulo va en su propia linea, con mayuscula inicial, sin puntos suspensivos ni punto final, y nunca escribas lineas que contengan solo puntos. ejemplo de estructura: "[parrafo de concepto]\n\n\nSubtitulo 1\n\n\n[parrafo]\n\n\nSubtitulo 2\n\n\n[parrafo]"'
 
 _essay_prompt = _FewShotPrompt(
     'essay', MODEL_NAME, _ESSAY_SYSTEM_INSTRUCTION,

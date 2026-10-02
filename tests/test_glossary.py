@@ -191,4 +191,4 @@ def test_glossary_layout_and_bibliography_page(tmp_path, monkeypatch):
     headings = [p.text for p in doc.paragraphs if p.style.name == 'Heading 1']
     assert headings[-2:] == ['Conclusión', 'Bibliografía']
     index = next(i for i, p in enumerate(doc.paragraphs) if p.text == 'Bibliografía')
-    assert 'w:type="page"' in doc.paragraphs[index - 1]._p.xml
+    assert doc.paragraphs[index].paragraph_format.page_break_before is True
