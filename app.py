@@ -42,6 +42,17 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024
 app.secret_key = os.getenv('SECRET_KEY', '7f8b9a2c3d4e5f608192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8')
 
+
+# Detrás del proxy de Azure/DigitalOcean la app ve http y la IP del proxy: con
+# TRUST_PROXY=1 se respetan X-Forwarded-* (esquema https en los enlaces
+# firmados, el redirect de Google y la IP real). SESSION_COOKIE_SECURE=1 manda
+# la cookie de sesión solo por https.
+if os.getenv('TRUST_PROXY') == '1':
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+if os.getenv('SESSION_COOKIE_SECURE') == '1':
+    app.config['SESSION_COOKIE_SECURE'] = True
+
 # Enlaces firmados: el vencimiento se comprueba contra el documento guardado.
 SHARE_FILETYPES = ('docx', 'pdf')
 
