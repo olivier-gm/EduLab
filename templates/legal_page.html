@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{ 'Cómo EduLab utiliza y conserva tus datos.' if privacy_page else 'Condiciones de uso de EduLab para informes y glosarios académicos.' }}">
+  <title>{{ 'Política de privacidad' if privacy_page else 'Términos y condiciones' }} · EduLab</title>
+  {% include 'app_icons.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/legal.css') }}">
+</head>
+<body>
+  <header class="nav">
+    <div class="shell nav__inner">
+      <a href="{{ url_for('welcome') }}" class="brand" aria-label="EduLab · Inicio">
+        <img class="brand__img" src="{{ url_for('static', filename='img/icon.png') }}" alt="" width="42" height="42">
+        <span class="brand__name">Edu<span>Lab</span></span>
+      </a>
+      <a class="btn btn--ghost btn--sm" href="{{ url_for('welcome') }}">Volver al inicio</a>
+    </div>
+  </header>
+  <main class="shell legal-page">
+    <article class="card legal-card">
+      <h1>{{ 'Política de privacidad' if privacy_page else 'Términos y condiciones' }}</h1>
+      <p class="legal-date">Última actualización: 2 de octubre de 2026</p>
+      {% if privacy_page %}
+      <p>Esta política describe el tratamiento de datos en EduLab, disponible en edulab.wiki, para crear y gestionar informes y glosarios académicos.</p>
+      <h2>Datos que utilizamos</h2>
+      <p>Guardamos tu nombre, correo y datos de cuenta. Si accedes con Google, recibimos tu nombre, correo e identificador de Google para iniciar sesión y vincular tu cuenta. No solicitamos acceso a Gmail, Drive ni contactos, ni recibimos tu contraseña de Google. En el registro con contraseña, esta se almacena mediante un hash.</p>
+      <p>También tratamos el contenido que envías, los documentos generados, las referencias de pago, el plan y los registros de uso necesarios para administrar el servicio.</p>
+      <h2>Para qué y con quién se comparten</h2>
+      <p>Usamos estos datos para identificarte, generar y entregar documentos, gestionar pagos y cupos, y mantener el servicio. El contenido necesario para validar temas, leer archivos y generar textos se envía a los proveedores de IA configurados, como Google Gemini, OpenRouter y el servicio de validación JEV. Los proveedores de alojamiento, base de datos y almacenamiento procesan los datos necesarios para operar EduLab. No vendemos tus datos personales.</p>
+      <h2>Conservación y seguridad</h2>
+      <p>Los documentos están disponibles hasta el vencimiento indicado en tu cuenta; después dejan de poder descargarse y se eliminan durante la limpieza automática. Los archivos que subes para leer una asignación se procesan en memoria, sin guardarse como archivos permanentes en EduLab. Los datos de cuenta, pagos e historial de uso se conservan para gestionar el servicio. Los proveedores externos aplican sus propias políticas de tratamiento y conservación.</p>
+      <p>Utilizamos cookies de sesión para mantener tu acceso. No incluyas datos sensibles que no sean necesarios. Si compartes un enlace de descarga, cualquier persona que lo reciba podrá acceder al documento hasta su vencimiento.</p>
+      <h2>Tus datos y consultas</h2>
+      <p>Puedes solicitar información, corrección o eliminación de tus datos a la administración de EduLab en <a href="mailto:edulab.wiki@gmail.com">edulab.wiki@gmail.com</a>. También puedes revocar el acceso de EduLab desde los permisos de tu cuenta de Google; esto no elimina por sí solo tu cuenta en EduLab. Las solicitudes de eliminación pueden estar sujetas a obligaciones de conservación aplicables.</p>
+      {% else %}
+      <p>Estas condiciones regulan el uso de EduLab, disponible en edulab.wiki. Al utilizar el servicio, aceptas estas condiciones y la <a href="{{ url_for('privacy') }}">Política de privacidad</a>.</p>
+      <h2>Uso del servicio</h2>
+      <p>EduLab ayuda a crear informes y glosarios académicos. Debes aportar información que puedas utilizar legítimamente, proteger tu cuenta y respetar las normas de tu institución. No utilices el servicio para actividades ilegales, vulnerar derechos de terceros o interferir con su funcionamiento.</p>
+      <h2>Contenido generado con IA</h2>
+      <p>Los textos y referencias pueden contener errores. Debes revisarlos y verificar las fuentes antes de entregar o publicar un documento. EduLab no garantiza una calificación ni sustituye el criterio docente o el asesoramiento profesional, incluido el médico.</p>
+      <h2>Planes, pagos y documentos</h2>
+      <p>El precio, los formatos, los cupos y la conservación disponibles se muestran al elegir una opción. Los pagos reportados se revisan antes de activar el servicio. La recarga no vence y se pausa mientras haya un plan mensual activo; los cupos mensuales se renuevan cada 30 días.</p>
+      <p>Descarga tus documentos antes de su vencimiento. Una modificación del plazo de conservación no cambia el vencimiento de documentos ya creados. Ante un pago duplicado, una activación incorrecta o un problema de servicio, solicita su revisión a la administración; se respetarán los derechos que correspondan según la normativa aplicable.</p>
+      <h2>Disponibilidad y cambios</h2>
+      <p>El servicio puede tener interrupciones por mantenimiento o fallos de proveedores. Podemos limitar cuentas que abusen del servicio o incumplan estas condiciones. Los cambios de precios o beneficios se mostrarán antes de nuevas compras. Las actualizaciones de estas condiciones se publicarán en esta página.</p>
+      <h2>Consultas</h2>
+      <p>Contacta a la administración de EduLab en <a href="mailto:edulab.wiki@gmail.com">edulab.wiki@gmail.com</a>.</p>
+      {% endif %}
+    </article>
+  </main>
+  <footer class="footer">
+    <div class="shell legal-footer">
+      <span>© 2026 EduLab · Hecho en Venezuela</span>
+      <nav aria-label="Información legal">
+        <a href="{{ url_for('privacy') }}" {% if privacy_page %}aria-current="page"{% endif %}>Privacidad</a>
+        <a href="{{ url_for('terms') }}" {% if not privacy_page %}aria-current="page"{% endif %}>Términos y condiciones</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

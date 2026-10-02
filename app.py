@@ -164,6 +164,16 @@ def form_error(message, endpoint='show_form'):
 def welcome():
     return render_template('main_page.html')
 
+
+@app.route('/privacy')
+def privacy():
+    return render_template('legal_page.html', privacy_page=True)
+
+
+@app.route('/terms')
+def terms():
+    return render_template('legal_page.html', privacy_page=False)
+
 @app.route('/bach')
 @login_required
 def show_form_bach():

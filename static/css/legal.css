@@ -1,0 +1,9 @@
+.legal-page { max-width: 900px; padding-block: 44px 64px; }
+.legal-card { padding: clamp(22px, 5vw, 44px); }
+.legal-card h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); line-height: 1.2; }
+.legal-card h2 { font-size: 1.1rem; margin-top: 26px; margin-bottom: 8px; }
+.legal-card p { color: var(--text-soft); line-height: 1.75; margin-bottom: 12px; }
+.legal-card .legal-date { color: var(--text-dim); font-size: .85rem; margin-block: 12px 24px; }
+.legal-card a, .legal-footer a { color: var(--cyan, #20e4da); text-decoration: underline; text-underline-offset: 3px; }
+.legal-footer, .legal-footer nav { display: flex; flex-wrap: wrap; gap: 16px; }
+.legal-footer { justify-content: space-between; color: var(--text-dim); font-size: .85rem; }
