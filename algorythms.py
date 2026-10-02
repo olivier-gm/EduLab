@@ -849,6 +849,77 @@ class Document_process:
         # parte un mismo párrafo en varias líneas.
         return [b.strip() for b in re.split(r'[\r\n]+', body) if b.strip()]
 
+    # ── Marcas de énfasis que la IA escribe en markdown ────────────────
+    #
+    # El modelo resalta con ***negrita cursiva***, **negrita** y *cursiva* (por
+    # ejemplo los nombres científicos: *Puma concolor*). Word no entiende esas
+    # marcas y salían como asteriscos sueltos en el documento. Se convierten en
+    # formato real. Solo se interpretan PARES bien formados (el asterisco de
+    # apertura pegado a la palabra y el de cierre también), y un asterisco entre
+    # dígitos (2*3) o entre letras no cuenta como marca.
+
+    _INLINE_RE = re.compile(
+        r'\*\*\*(?=\S)(?P<bi>.+?)(?<=\S)\*\*\*'
+        r'|\*\*(?=\S)(?P<b>.+?)(?<=\S)\*\*'
+        r'|(?<![*\w])\*(?=[^\s*])(?P<i>[^*]+?)(?<=[^\s*])\*(?![*\w])'
+    )
+    _STRAY_ASTERISKS_RE = re.compile(r'\*+')
+    _BULLET_RE = re.compile(r'^\s*[*\-•]\s+(?=\S)')
+
+    @staticmethod
+    def _inline_segments(text, strip_stray=True, bold=False, italic=False):
+        """[(texto, negrita, cursiva)] a partir de texto con marcas markdown.
+        strip_stray: quita los asteriscos que quedaron sin pareja (texto de la
+        IA); en texto escrito a mano se conservan."""
+        segments = []
+        position = 0
+        for match in Document_process._INLINE_RE.finditer(text):
+            if match.start() > position:
+                segments.append((text[position:match.start()], bold, italic))
+            if match.group('bi') is not None:
+                segments += Document_process._inline_segments(match.group('bi'), strip_stray, True, True)
+            elif match.group('b') is not None:
+                segments += Document_process._inline_segments(match.group('b'), strip_stray, True, italic)
+            else:
+                segments += Document_process._inline_segments(match.group('i'), strip_stray, bold, True)
+            position = match.end()
+        if position < len(text):
+            segments.append((text[position:], bold, italic))
+        if strip_stray:
+            segments = [(Document_process._remove_stray_asterisks(t), b, i) for t, b, i in segments]
+        return [segment for segment in segments if segment[0]]
+
+    @staticmethod
+    def _remove_stray_asterisks(text):
+        """Quita los asteriscos sin pareja, salvo los que son una multiplicación."""
+        def decide(match):
+            before = text[max(0, match.start() - 5):match.start()]
+            after = text[match.end():match.end() + 5]
+            if re.search(r'\d$', before) or re.match(r'\d', after):
+                return match.group(0)                       # 2*3
+            if re.search(r'\b\w{1,3}\s$', before) and re.match(r'\s\w{1,3}\b', after):
+                return match.group(0)                       # m * c
+            return ''
+        return Document_process._STRAY_ASTERISKS_RE.sub(decide, text)
+
+    @staticmethod
+    def _strip_inline_markers(text):
+        """El mismo texto sin las marcas de énfasis (para subtítulos, que ya van en negrita)."""
+        return ''.join(t for t, _, _ in Document_process._inline_segments(text))
+
+    @staticmethod
+    def _add_inline(paragraph, text, strip_stray=True, size=None, base_bold=False):
+        """Agrega `text` al párrafo convirtiendo las marcas markdown en negrita/cursiva."""
+        for chunk, bold, italic in Document_process._inline_segments(text, strip_stray):
+            run = paragraph.add_run(chunk)
+            run.font.name = 'Arial'
+            if size:
+                run.font.size = size
+            if bold or base_bold:
+                run.bold = True
+            if italic:
+                run.italic = True
+
     @staticmethod
     def parrafos(body, document, topic, flag, detect_subtitles=True):
         """Agrega una sección al documento: título, subtítulos y párrafos.
@@ -889,8 +960,9 @@ class Document_process:
             if not text:
                 continue
 
-            if detect_subtitles and Document_process._is_subtitle(block):
-                sp = document.add_paragraph(text)
+            bullet = detect_subtitles and Document_process._BULLET_RE.match(block)
+            if detect_subtitles and not bullet and Document_process._is_subtitle(block):
+                sp = document.add_paragraph(Document_process._strip_inline_markers(text))
                 try:
                     sp.style = document.styles['Heading 2']
                 except KeyError:
@@ -906,14 +978,21 @@ class Document_process:
                     run.bold = True
                     run.font.color.rgb = RGBColor(0, 0, 0)
             else:
-                bp = document.add_paragraph(text)
+                bp = document.add_paragraph()
                 bp.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 bp.paragraph_format.line_spacing = Pt(21)
                 # Separación real entre párrafos (antes quedaban pegados)
                 bp.paragraph_format.space_after = Pt(12)
-                for run in bp.runs:
-                    run.font.name = 'Arial'
-                    run.font.size = Pt(12)
+                # Sin quitar las marcas antes: _clean_markdown borraba los asteriscos
+                # de los extremos y descartaba la negrita.
+                marked = re.sub(r'^\s*#{1,6}\s*', '', block.strip())
+                if bullet:
+                    marked = Document_process._BULLET_RE.sub('', marked)
+                    bp.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+                    bp.paragraph_format.left_indent = Cm(0.9)
+                    bp.paragraph_format.first_line_indent = Cm(-0.5)
+                    bp.add_run('• ').font.name = 'Arial'
+                Document_process._add_inline(bp, marked, strip_stray=detect_subtitles, size=Pt(12))
 
         if flag:
             document.add_page_break()
@@ -973,8 +1052,8 @@ class Document_process:
             paragraph.paragraph_format.line_spacing = Pt(21)
             paragraph.paragraph_format.space_after = Pt(8)
             paragraph.paragraph_format.keep_together = True
-            paragraph.add_run(entry['term'] + ': ').bold = True
-            paragraph.add_run(entry['definition'])
+            paragraph.add_run(Document_process._strip_inline_markers(entry['term']) + ': ').bold = True
+            Document_process._add_inline(paragraph, entry['definition'])
             if entry.get('reference'):
                 paragraph.paragraph_format.keep_with_next = True
                 source = document.add_paragraph('Fuente: ' + entry['reference'])
