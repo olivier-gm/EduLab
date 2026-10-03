@@ -240,6 +240,13 @@
   color: #e2574c;
 }
 
+.hero__stage.is-paused .paper-mock,
+.hero__stage.is-paused .float-chip { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__stage, .paper-mock, .paper-mock::after, .float-chip { animation: none; }
+}
+
 /* ---------------- BANDA DE MÉTRICAS ---------------- */
 .stats {
   display: grid;
@@ -529,11 +536,19 @@
 
   .hero__stage {
     min-height: 300px;
+    display: flex;
+    margin-top: 12px;
   }
+
+  .hero__orb { display: none; }
+  .paper-mock::after { animation: none; }
+  .paper-mock, .float-chip { will-change: transform; }
 
   .float-chip {
     font-size: 0.72rem;
     padding: 9px 13px;
+    backdrop-filter: none;
+    background: #101023;
   }
 
   .float-chip--ai {

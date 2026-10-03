@@ -6,6 +6,13 @@
 (function () {
   'use strict';
 
+  var stage = document.querySelector('.hero__stage');
+  if (stage && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      stage.classList.toggle('is-paused', !entries[0].isIntersecting);
+    }).observe(stage);
+  }
+
   var retry = document.querySelector('[data-retry]');
   if (retry) {
     retry.addEventListener('click', function () { window.location.reload(); });

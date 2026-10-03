@@ -42,12 +42,12 @@
 
       <div class="nav__actions">
         {% if current_user %}
-        <a class="btn btn--ghost btn--sm" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
+        <a class="btn btn--ghost btn--sm btn--icon" href="{{ url_for('auth.logout') }}" aria-label="Cerrar sesión" title="Cerrar sesión"><i class="bx bx-log-out" aria-hidden="true"></i></a>
         <a class="btn btn--primary btn--sm btn--nav-cta" href="{{ url_for('show_form') }}">
           <i class="bx bx-rocket"></i> Crear documento
         </a>
         {% else %}
-        <a class="btn btn--ghost btn--sm" href="{{ url_for('auth.login') }}">Iniciar sesión</a>
+        <a class="btn btn--ghost btn--sm btn--login" href="{{ url_for('auth.login') }}" aria-label="Iniciar sesión" title="Iniciar sesión"><i class="bx bx-user nav-login__icon" aria-hidden="true"></i><span class="nav-login__label">Iniciar sesión</span></a>
         <a class="btn btn--primary btn--sm btn--nav-cta" href="{{ url_for('auth.register') }}">
           <i class="bx bx-rocket"></i> Empezar gratis
         </a>
@@ -90,6 +90,8 @@
               <i class="bx bx-play-circle"></i> Ver cómo funciona
             </a>
           </div>
+
+          <button class="btn btn--ghost btn--sm" type="button" data-install-app><i class="bx bx-download" aria-hidden="true"></i> Descargar app</button>
 
           <div class="hero__facts">
             <span class="hero__fact"><i class="bx bx-check-shield"></i> Portada al formato oficial</span>

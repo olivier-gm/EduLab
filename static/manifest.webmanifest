@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "EduLab",
+  "short_name": "EduLab",
+  "description": "Informes académicos y glosarios con inteligencia artificial.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#050e12",
+  "background_color": "#0b0b19",
+  "icons": [
+    {"src": "/static/img/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/static/img/icon-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}

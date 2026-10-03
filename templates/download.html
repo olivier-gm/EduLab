@@ -41,7 +41,7 @@
           <i class="bx bx-plus"></i> Nuevo
         </a>
         {% if current_user %}
-        <a class="btn btn--ghost btn--sm" href="{{ url_for('auth.logout') }}">Salir</a>
+        <a class="btn btn--ghost btn--sm btn--icon" href="{{ url_for('auth.logout') }}" aria-label="Cerrar sesión" title="Cerrar sesión"><i class="bx bx-log-out" aria-hidden="true"></i></a>
         {% endif %}
         <button class="nav__burger" data-burger type="button" aria-label="Abrir menú" aria-expanded="false">
           <span></span><span></span><span></span>

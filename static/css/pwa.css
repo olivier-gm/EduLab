@@ -1,0 +1,25 @@
+.btn.btn--icon { width:44px; height:44px; padding:0; flex-shrink:0; }
+.btn--icon i { font-size:1.35rem; }
+.nav__actions .nav-login__icon { display:none; }
+@media (max-width:420px) {
+  .nav__actions .btn--login { width:44px; height:44px; padding:0; }
+  .nav__actions .nav-login__icon { display:block; font-size:1.35rem; }
+  .nav__actions .nav-login__label { display:none; }
+}
+.pwa-download { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border:1px solid rgba(0,217,218,.25); border-radius:12px; background:#08171c; color:#00d9da; cursor:pointer; flex-shrink:0; }
+.pwa-download svg { width:21px; height:21px; }
+[data-install-app][hidden] { display:none !important; }
+.pwa-dialog { box-sizing:border-box; width:min(440px,calc(100% - 28px)); max-height:85svh; margin:auto; padding:26px; border:1px solid #33414b; border-radius:22px; background:#101021; color:#f2f4fa; font:16px/1.55 system-ui; }
+.pwa-dialog::backdrop { background:rgba(0,0,0,.7); }
+.pwa-dialog__close { float:right; width:36px; height:36px; border:0; border-radius:9px; background:#242438; color:white; font-size:24px; cursor:pointer; }
+.pwa-dialog__brand { display:flex; align-items:center; gap:12px; font-size:23px; font-weight:750; }
+.pwa-dialog__brand img { width:48px; height:48px; border-radius:12px; }
+.pwa-dialog__brand span { color:#00d9da; }
+.pwa-dialog h2 { margin:20px 0 8px; font-size:21px; }
+.pwa-dialog p { color:#b6bdce; }
+.pwa-dialog details { padding:12px 0; border-top:1px solid #303042; }
+.pwa-dialog summary { cursor:pointer; font-weight:650; }
+.pwa-dialog ol { padding-left:22px; list-style:decimal; }
+.pwa-dialog li { margin:7px 0; }
+.pwa-dialog__install { width:100%; margin-top:16px; padding:13px; border:0; border-radius:12px; background:#00d9da; color:#051215; font:700 16px system-ui; cursor:pointer; }
+.pwa-download:focus-visible, .pwa-dialog button:focus-visible, .pwa-dialog summary:focus-visible { outline:2px solid #00d9da; outline-offset:4px; }

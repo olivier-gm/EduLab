@@ -166,6 +166,13 @@ def welcome():
     return render_template('main_page.html')
 
 
+@app.route('/sw.js')
+def service_worker():
+    response = send_file('static/sw.js', mimetype='application/javascript', max_age=0)
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
+
+
 @app.route('/privacy')
 def privacy():
     return render_template('legal_page.html', privacy_page=True)
