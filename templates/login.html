@@ -54,6 +54,7 @@
       {% endif %}
 
       <span class="err-msg{{ ' is-on' if error }}">{{ error or '' }}</span>
+      {% if request.args.get('reset') == '1' %}<p class="help" role="status">Contraseña actualizada. Inicia sesión con tu nueva contraseña.</p>{% endif %}
 
       <form method="POST" action="{{ url_for('auth.login') }}" novalidate>
         <input type="hidden" name="next" value="{{ next }}">
@@ -72,6 +73,8 @@
           <i class="bx bx-log-in"></i> Entrar
         </button>
       </form>
+
+      <p class="auth-card__foot"><a href="{{ url_for('auth.forgot_password') }}">Olvidé mi contraseña</a></p>
 
       <p class="auth-card__foot">
         ¿No tienes cuenta? <a href="{{ url_for('auth.register') }}">Regístrate gratis</a>

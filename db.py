@@ -86,6 +86,23 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+
+-- Solicitudes de registro: nunca son usuarios ni permiten iniciar sesión.
+CREATE TABLE IF NOT EXISTS pending_registrations (
+    email TEXT PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    sent_at INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    sends INTEGER NOT NULL,
+    window_at INTEGER NOT NULL,
+    ip_hash TEXT NOT NULL,
+    purpose TEXT NOT NULL DEFAULT 'register',
+    verified_until INTEGER NOT NULL DEFAULT 0
+);
 """
 
 # Valores por defecto de los ajustes. Vacío en un límite = sin límite.
@@ -400,10 +417,11 @@ def _migrate(conn):
     """Agrega columnas nuevas a bases de datos creadas antes de los planes."""
     columns = lambda table: _columns(conn, table)      # noqa: E731
     for table, additions in {
-        'users': {'credits': 'INTEGER NOT NULL DEFAULT 0', 'plan_started_at': 'TEXT',
+        'users': {'auth_version': 'INTEGER NOT NULL DEFAULT 0', 'credits': 'INTEGER NOT NULL DEFAULT 0', 'plan_started_at': 'TEXT',
                   'plan_cycle_at': 'TEXT', 'plan_used': 'INTEGER NOT NULL DEFAULT 0'},
         'payments': {'plan_id': "TEXT NOT NULL DEFAULT 'premium'", 'plan_snapshot': 'TEXT'},
         'documents': {'billing_plan': "TEXT NOT NULL DEFAULT 'free'"},
+        'pending_registrations': {'purpose': "TEXT NOT NULL DEFAULT 'register'", 'verified_until': 'INTEGER NOT NULL DEFAULT 0'},
     }.items():
         existing = columns(table)
         for name, definition in additions.items():
@@ -489,6 +507,92 @@ def get_user_by_email(email):
     return db.execute(
         'SELECT * FROM users WHERE email = ?', (email.strip().lower(),)
     ).fetchone()
+
+
+def pending_registration(token, purpose='register'):
+    return get_db().execute('SELECT * FROM pending_registrations WHERE token = ? AND purpose = ?', (token, purpose)).fetchone()
+
+
+def begin_registration(email, name, password_hash, token, code_hash, now, ip_hash, purpose='register'):
+    with transaction() as conn:
+        if conn._pg:
+            # ponytail: bloqueo global solo durante escrituras breves; usar bloqueos por correo si el volumen lo exige.
+            conn.execute('SELECT pg_advisory_xact_lock(727275)')
+        conn.execute('DELETE FROM pending_registrations WHERE sent_at < ?', (now - 86400,))
+        previous = conn.execute('SELECT * FROM pending_registrations WHERE email = ?', (email,)).fetchone()
+        if previous and now - previous['sent_at'] < 60:
+            raise ValueError('Espera un minuto antes de solicitar otro código.')
+        sends = previous['sends'] if previous and now - previous['window_at'] < 3600 else 0
+        if sends >= 5:
+            raise ValueError('Alcanzaste el límite de envíos. Inténtalo dentro de una hora.')
+        total = conn.execute('SELECT COALESCE(SUM(sends), 0) FROM pending_registrations '
+                             'WHERE ip_hash = ? AND window_at > ?', (ip_hash, now - 3600)).fetchone()[0]
+        if total >= 20:
+            raise ValueError('Demasiadas solicitudes. Inténtalo dentro de una hora.')
+        if purpose == 'register' and get_user_by_email(email):
+            raise ValueError('Ya existe una cuenta con ese correo. Inicia sesión.')
+        window = previous['window_at'] if sends else now
+        conn.execute('INSERT INTO pending_registrations '
+                     '(email, token, name, password_hash, code_hash, expires_at, sent_at, attempts, sends, window_at, ip_hash, purpose) '
+                     'VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) ON CONFLICT (email) DO UPDATE SET '
+                     'token = excluded.token, name = excluded.name, password_hash = excluded.password_hash, '
+                     'code_hash = excluded.code_hash, expires_at = excluded.expires_at, sent_at = excluded.sent_at, '
+                     'attempts = 0, sends = excluded.sends, window_at = excluded.window_at, ip_hash = excluded.ip_hash, '
+                     'purpose = excluded.purpose, verified_until = 0 RETURNING token',
+                     (email, token, name, password_hash, code_hash, now + 600, now, sends + 1, window, ip_hash, purpose)).fetchall()
+
+
+def _check_pending_code(conn, token, code_hash, now, purpose):
+    import hmac
+    row = conn.execute('SELECT * FROM pending_registrations WHERE token = ? AND purpose = ?' +
+                       (' FOR UPDATE' if conn._pg else ''), (token, purpose)).fetchone()
+    if not row or not row['code_hash']:
+        return None, 'Solicita un nuevo código para continuar.'
+    if now >= row['expires_at']:
+        return None, 'El código venció. Solicita uno nuevo.'
+    if row['attempts'] >= 5:
+        return None, 'Alcanzaste el límite de intentos. Solicita un nuevo código.'
+    if not hmac.compare_digest(row['code_hash'], code_hash):
+        conn.execute('UPDATE pending_registrations SET attempts = attempts + 1 WHERE token = ?', (token,))
+        return None, 'Código incorrecto. Revisa el correo e inténtalo de nuevo.'
+    return row, None
+
+
+def complete_registration(token, code_hash, now):
+    with transaction() as conn:
+        row, error = _check_pending_code(conn, token, code_hash, now, 'register')
+        if not row:
+            return None, error
+        cur = conn.execute('INSERT INTO users (email, name, password_hash) VALUES (?, ?, ?) '
+                           'ON CONFLICT (email) DO NOTHING RETURNING id', (row['email'], row['name'], row['password_hash']))
+        created = cur.fetchall()
+        conn.execute('DELETE FROM pending_registrations WHERE token = ?', (token,))
+        if not created:
+            return None, 'Ya existe una cuenta con ese correo. Inicia sesión.'
+        user_id = created[0][0]
+        _sync_admin_flag(conn, user_id, row['email'])
+        return user_id, None
+
+
+def verify_password_reset(token, code_hash, now):
+    with transaction() as conn:
+        row, error = _check_pending_code(conn, token, code_hash, now, 'reset')
+        if not row:
+            return error
+        conn.execute("UPDATE pending_registrations SET code_hash = '', verified_until = ? WHERE token = ?", (now + 600, token))
+        return None
+
+
+def complete_password_reset(token, password_hash, now):
+    with transaction() as conn:
+        row = conn.execute("SELECT * FROM pending_registrations WHERE token = ? AND purpose = 'reset'" +
+                           (' FOR UPDATE' if conn._pg else ''), (token,)).fetchone()
+        if not row or row['verified_until'] <= now:
+            return False
+        result = conn.execute('UPDATE users SET password_hash = ?, auth_version = auth_version + 1 '
+                              'WHERE email = ? AND password_hash IS NOT NULL', (password_hash, row['email']))
+        conn.execute('DELETE FROM pending_registrations WHERE token = ?', (token,))
+        return result.rowcount == 1
 
 
 def get_user_by_google_id(google_id):

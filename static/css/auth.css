@@ -108,3 +108,6 @@
   color: var(--gold);
   font-weight: 600;
 }
+.verification-code { text-align: center; font-size: 1.6rem; letter-spacing: .35em; }
+.auth-card .verification-resend { margin-top: 16px; }
+.auth-card__sub strong { overflow-wrap: anywhere; }

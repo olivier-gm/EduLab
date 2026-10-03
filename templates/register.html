@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Crear cuenta · EduLab</title>
+  <title>{{ 'Verificar correo' if verify else 'Crear cuenta' }} · EduLab</title>
 
   {% include "app_icons.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -42,42 +42,69 @@
 
     <div class="card auth-card">
       <div class="auth-card__head">
-        <h1 class="auth-card__title">Crea tu cuenta</h1>
-        <p class="auth-card__sub">Gratis, y genera documentos sin límite.</p>
+        <h1 class="auth-card__title">{{ 'Verifica tu correo' if verify else 'Crea tu cuenta' }}</h1>
+        <p class="auth-card__sub">{% if verify %}Introduce el código que enviamos a <strong>{{ email }}</strong>.{% else %}Te enviaremos un código para confirmar tu correo.{% endif %}</p>
       </div>
 
       {% if google_enabled %}
       <a class="btn btn--google" href="{{ url_for('auth.google_start') }}">
         <i class="bx bxl-google"></i> Continuar con Google
       </a>
-      <div class="auth-divider">o con tu correo</div>
+      <div class="auth-divider">{{ 'o introduce el código' if verify else 'o con tu correo' }}</div>
       {% endif %}
 
       <span class="err-msg{{ ' is-on' if error }}">{{ error or '' }}</span>
 
+      {% if verify %}
+      {% if sent %}<p class="help" role="status">Enviamos un nuevo código. El anterior ya no sirve.</p>{% endif %}
+      <form method="POST" action="{{ url_for('auth.verify_registration') }}">
+        <input type="hidden" name="csrf_token" value="{{ session.registration_csrf }}">
+        <div class="field">
+          <label for="f-code">Código de 6 dígitos</label>
+          <input class="input verification-code" id="f-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="000000" autofocus>
+          <span class="help">Vence en 10 minutos. Revisa también la carpeta de spam.</span>
+        </div>
+        <button type="submit" class="btn btn--primary btn--block">Verificar y crear cuenta</button>
+      </form>
+      <form class="verification-resend" method="POST" action="{{ url_for('auth.verify_registration') }}">
+        <input type="hidden" name="csrf_token" value="{{ session.registration_csrf }}">
+        <input type="hidden" name="action" value="resend">
+        <button class="btn btn--ghost btn--block" type="submit">Reenviar código</button>
+        {% if resend_wait %}<span class="help">Podrás solicitar otro código en {{ resend_wait }} segundos.</span>{% endif %}
+      </form>
+      <p class="auth-card__foot"><a href="{{ url_for('auth.register', restart=1) }}">Cambiar correo o datos</a></p>
+      {% else %}
       <form method="POST" action="{{ url_for('auth.register') }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ session.registration_csrf }}">
         <div class="field">
           <label for="f-name">Nombre</label>
           <input class="input" type="text" id="f-name" name="name" maxlength="60" required
-            placeholder="Tu nombre" autocomplete="name">
+            placeholder="Tu nombre" autocomplete="name" value="{{ name or '' }}">
         </div>
 
         <div class="field">
           <label for="f-email">Correo</label>
           <input class="input" type="email" id="f-email" name="email" required
-            placeholder="tu@correo.com" autocomplete="email">
+            placeholder="tu@correo.com" autocomplete="email" maxlength="254" value="{{ email or '' }}">
         </div>
 
         <div class="field">
           <label for="f-password">Contraseña</label>
-          <input class="input" type="password" id="f-password" name="password" required minlength="8"
-            placeholder="Mínimo 8 caracteres" autocomplete="new-password">
+          <input class="input" type="password" id="f-password" name="password" required minlength="6" maxlength="256"
+            placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label for="f-password-confirm">Confirmar contraseña</label>
+          <input class="input" type="password" id="f-password-confirm" name="password_confirm" required minlength="6" maxlength="256" placeholder="Repite tu contraseña" autocomplete="new-password">
         </div>
 
         <button type="submit" class="btn btn--primary btn--block">
-          <i class="bx bx-user-plus"></i> Crear cuenta
+          <i class="bx bx-envelope"></i> Enviar código
         </button>
       </form>
+      {% endif %}
+
+      <p class="auth-card__foot">Al crear tu cuenta aceptas los <a href="{{ url_for('terms') }}">Términos</a> y la <a href="{{ url_for('privacy') }}">Política de privacidad</a>.</p>
 
       <p class="auth-card__foot">
         ¿Ya tienes cuenta? <a href="{{ url_for('auth.login') }}">Inicia sesión</a>

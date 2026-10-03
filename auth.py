@@ -1,23 +1,27 @@
 # auth.py
 """Registro/login normal y 'Continuar con Google' (OAuth 2.0 manual, sin
 Authlib: el flujo es simple y `requests` ya es una dependencia del
-proyecto). El propósito actual es únicamente dejar entrar a los usuarios
-para que puedan generar documentos ilimitados mientras se decide cuándo
-activar un plan de pago (ver comentario en app.py sobre user_can_generate).
+proyecto). El registro normal crea la cuenta solo después de verificar el
+código por correo; Google confirma el correo directamente.
 """
 
 import os
 import re
 import secrets
 import logging
+import hashlib
+import hmac
+import time
+import smtplib
 from functools import wraps
 from urllib.parse import urlencode
 
 import requests
-from flask import Blueprint, render_template, request, redirect, url_for, session
+from flask import Blueprint, render_template, request, redirect, url_for, session, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import db
+import mail_service
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +49,23 @@ def current_user():
     user_id = session.get('user_id')
     if not user_id:
         return None
-    return db.get_user_by_id(user_id)
+    user = db.get_user_by_id(user_id)
+    if not user or session.get('auth_version', 0) != user['auth_version']:
+        session.clear()
+        return None
+    return user
+
+
+@auth_bp.before_app_request
+def validate_session():
+    if session.get('user_id'):
+        current_user()
 
 
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if not session.get('user_id'):
+        if not current_user():
             return redirect(url_for('auth.login', next=request.path))
         return view(*args, **kwargs)
     return wrapped
@@ -70,6 +84,42 @@ def admin_required(view):
 def _log_in_as(user_id):
     session.clear()
     session['user_id'] = user_id
+    session['auth_version'] = db.get_user_by_id(user_id)['auth_version']
+
+
+def _registration_hash(value):
+    return hmac.new(str(current_app.secret_key).encode(), value.encode(), hashlib.sha256).hexdigest()
+
+
+def _registration_csrf_valid():
+    expected = session.get('registration_csrf')
+    return bool(expected and secrets.compare_digest(expected, request.form.get('csrf_token', '')))
+
+
+def _send_registration(email, name, password_hash, purpose='register'):
+    if not mail_service.mail_configured():
+        return 'El envío de códigos no está disponible por ahora. Inténtalo más tarde o accede con Google.'
+    token = secrets.token_urlsafe(32)
+    code = f'{secrets.randbelow(1000000):06d}'
+    try:
+        db.begin_registration(email, name, password_hash, token, _registration_hash(token + ':' + code),
+                              int(time.time()), _registration_hash(request.remote_addr or 'unknown'), purpose)
+    except ValueError as exc:
+        return str(exc)
+    session['registration_token' if purpose == 'register' else 'reset_token'] = token
+    try:
+        if purpose == 'reset':
+            user = db.get_user_by_email(email)
+            if user and user['password_hash']:
+                mail_service.send_verification(email, name, code, purpose='reset')
+        else:
+            mail_service.send_verification(email, name, code)
+    except (smtplib.SMTPException, OSError):
+        logger.error('No se pudo enviar el correo de verificación por Gmail.')
+        if purpose == 'reset':
+            return None  # La respuesta pública no revela si existe una cuenta.
+        return 'No pudimos enviar el código. Comprueba el correo y vuelve a solicitarlo en un minuto.'
+    return None
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
@@ -77,26 +127,139 @@ def register():
     if session.get('user_id'):
         return redirect(url_for('welcome'))
 
+    session.setdefault('registration_csrf', secrets.token_urlsafe(24))
+    if request.method == 'GET':
+        if request.args.get('restart') == '1':
+            session.pop('registration_token', None)
+        elif session.get('registration_token') and db.pending_registration(session['registration_token']):
+            return redirect(url_for('auth.verify_registration'))
     error = None
+    name = email = ''
     if request.method == 'POST':
+        if not _registration_csrf_valid():
+            return render_template('register.html', error='Recarga la página y vuelve a intentarlo.',
+                                   google_enabled=google_oauth_enabled()), 403
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
 
-        if not name:
+        if not name or len(name) > 60:
             error = 'Escribe tu nombre.'
-        elif not EMAIL_RE.match(email):
+        elif len(email) > 254 or not EMAIL_RE.fullmatch(email):
             error = 'Ese correo no parece válido.'
-        elif len(password) < 8:
-            error = 'La contraseña debe tener al menos 8 caracteres.'
+        elif not 6 <= len(password) <= 256:
+            error = 'La contraseña debe tener entre 6 y 256 caracteres.'
+        elif password != request.form.get('password_confirm', ''):
+            error = 'Las contraseñas no coinciden.'
         elif db.get_user_by_email(email):
             error = 'Ya existe una cuenta con ese correo. Inicia sesión.'
         else:
-            user_id = db.create_user(email, name, password_hash=generate_password_hash(password))
-            _log_in_as(user_id)
-            return redirect(url_for('welcome'))
+            error = _send_registration(email, name, generate_password_hash(password))
+            if session.get('registration_token'):
+                if error is None:
+                    return redirect(url_for('auth.verify_registration'))
+                return _verification_page(error)
 
-    return render_template('register.html', error=error, google_enabled=google_oauth_enabled())
+    return render_template('register.html', error=error, name=name, email=email, google_enabled=google_oauth_enabled())
+
+
+def _verification_page(error=None, sent=False):
+    row = db.pending_registration(session.get('registration_token', ''))
+    if not row:
+        session.pop('registration_token', None)
+        return redirect(url_for('auth.register'))
+    return render_template('register.html', verify=True, email=row['email'], error=error, sent=sent,
+                           google_enabled=google_oauth_enabled(),
+                           resend_wait=max(0, 60 - (int(time.time()) - row['sent_at'])))
+
+
+@auth_bp.route('/register/verify', methods=['GET', 'POST'])
+def verify_registration():
+    if session.get('user_id'):
+        return redirect(url_for('welcome'))
+    row = db.pending_registration(session.get('registration_token', ''))
+    if not row:
+        return redirect(url_for('auth.register'))
+    if request.method == 'POST':
+        if not _registration_csrf_valid():
+            return _verification_page('Recarga la página y vuelve a intentarlo.'), 403
+        if request.form.get('action') == 'resend':
+            error = _send_registration(row['email'], row['name'], row['password_hash'])
+            return _verification_page(error, sent=error is None)
+        code = request.form.get('code', '').strip()
+        # Las entradas inválidas también consumen intento; el límite está en la base de datos.
+        digest = _registration_hash(row['token'] + ':' + code) if re.fullmatch(r'[0-9]{6}', code) else ''
+        uid, error = db.complete_registration(row['token'], digest, int(time.time()))
+        if uid:
+            _log_in_as(uid)
+            return redirect(url_for('welcome'))
+        return _verification_page(error)
+    return _verification_page()
+
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if session.get('user_id'):
+        return redirect(url_for('welcome'))
+    session.setdefault('registration_csrf', secrets.token_urlsafe(24))
+    error = None
+    email = ''
+    if request.method == 'POST':
+        if not _registration_csrf_valid():
+            return render_template('password_recovery.html', stage='email', error='Recarga la página y vuelve a intentarlo.'), 403
+        email = request.form.get('email', '').strip().lower()
+        if len(email) > 254 or not EMAIL_RE.fullmatch(email):
+            error = 'Escribe un correo válido.'
+        else:
+            user = db.get_user_by_email(email)
+            error = _send_registration(email, user['name'] if user else 'Usuario', '', purpose='reset')
+            if error is None:
+                return redirect(url_for('auth.reset_password'))
+    return render_template('password_recovery.html', stage='email', error=error, email=email)
+
+
+def _reset_page(error=None, sent=False):
+    row = db.pending_registration(session.get('reset_token', ''), 'reset')
+    if not row:
+        return redirect(url_for('auth.forgot_password'))
+    stage = 'password' if row['verified_until'] > int(time.time()) else 'code'
+    return render_template('password_recovery.html', stage=stage, error=error, sent=sent, email=row['email'])
+
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    if session.get('user_id'):
+        return redirect(url_for('welcome'))
+    token = session.get('reset_token', '')
+    row = db.pending_registration(token, 'reset')
+    if not row:
+        return redirect(url_for('auth.forgot_password'))
+    if request.method == 'POST':
+        if not _registration_csrf_valid():
+            return _reset_page('Recarga la página y vuelve a intentarlo.'), 403
+        action = request.form.get('action', 'verify')
+        if action == 'resend':
+            error = _send_registration(row['email'], row['name'], '', purpose='reset')
+            return _reset_page(error, sent=error is None)
+        if action == 'change':
+            if row['verified_until'] <= int(time.time()):
+                return _reset_page('Verifica un código vigente antes de cambiar la contraseña.')
+            password = request.form.get('password', '')
+            if not 6 <= len(password) <= 256:
+                return _reset_page('La contraseña debe tener entre 6 y 256 caracteres.')
+            if password != request.form.get('password_confirm', ''):
+                return _reset_page('Las contraseñas no coinciden.')
+            if not db.complete_password_reset(token, generate_password_hash(password), int(time.time())):
+                return _reset_page('No se pudo cambiar la contraseña. Solicita un nuevo código.')
+            session.clear()
+            return redirect(url_for('auth.login', reset=1))
+        code = request.form.get('code', '').strip()
+        digest = _registration_hash(token + ':' + code) if re.fullmatch(r'[0-9]{6}', code) else ''
+        error = db.verify_password_reset(token, digest, int(time.time()))
+        if error:
+            return _reset_page(error)
+        return redirect(url_for('auth.reset_password'))
+    return _reset_page()
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -187,7 +350,7 @@ def google_callback():
     email = (info.get('email') or '').strip().lower()
     name = info.get('name') or (email.split('@')[0] if email else 'Usuario')
 
-    if not google_id or not email:
+    if not google_id or not email or info.get('email_verified') not in (True, 'true'):
         logger.error('Respuesta de Google sin sub/email, no se puede iniciar sesión.')
         return redirect(url_for('auth.login'))
 
