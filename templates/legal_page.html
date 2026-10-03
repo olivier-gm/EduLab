@@ -22,7 +22,7 @@
   <main class="shell legal-page">
     <article class="card legal-card">
       <h1>{{ 'Política de privacidad' if privacy_page else 'Términos y condiciones' }}</h1>
-      <p class="legal-date">Última actualización: 2 de octubre de 2026</p>
+      <p class="legal-date">Última actualización: 3 de octubre de 2026</p>
       {% if privacy_page %}
       <p>Esta política describe el tratamiento de datos en EduLab, disponible en edulab.wiki, para crear y gestionar informes y glosarios académicos.</p>
       <h2>Datos que utilizamos</h2>
@@ -31,6 +31,7 @@
       <p>El registro con contraseña requiere un código enviado por Gmail. Hasta verificarlo, no se crea una cuenta: mantenemos una solicitud temporal con la contraseña protegida mediante hash y límites de intentos y envíos. El código vence en 10 minutos; las solicitudes antiguas se depuran al tramitar nuevos registros. Google permite acceder directamente cuando confirma que el correo está verificado.</p>
       <h2>Para qué y con quién se comparten</h2>
       <p>Usamos estos datos para identificarte, generar y entregar documentos, gestionar pagos y cupos, y mantener el servicio. El contenido necesario para validar temas, leer archivos y generar textos se envía a los proveedores de IA configurados, como Google Gemini, OpenRouter y el servicio de validación JEV. Los proveedores de alojamiento, base de datos y almacenamiento procesan los datos necesarios para operar EduLab. No vendemos tus datos personales.</p>
+      <p>Para comprobar los cobros con Binance, cuando corresponda, compartimos el identificador del pago, el importe esperado y una referencia del pedido con nuestro servicio de verificación de pagos.</p>
       <h2>Conservación y seguridad</h2>
       <p>Los documentos están disponibles hasta el vencimiento indicado en tu cuenta; después dejan de poder descargarse y se eliminan durante la limpieza automática. Los archivos que subes para leer una asignación se procesan en memoria, sin guardarse como archivos permanentes en EduLab. Los datos de cuenta, pagos e historial de uso se conservan para gestionar el servicio. Los proveedores externos aplican sus propias políticas de tratamiento y conservación.</p>
       <p>Utilizamos cookies de sesión para mantener tu acceso. No incluyas datos sensibles que no sean necesarios. Si compartes un enlace de descarga, cualquier persona que lo reciba podrá acceder al documento hasta su vencimiento.</p>
@@ -42,11 +43,16 @@
       <p>EduLab ayuda a crear informes y glosarios académicos. Debes aportar información que puedas utilizar legítimamente, proteger tu cuenta y respetar las normas de tu institución. No utilices el servicio para actividades ilegales, vulnerar derechos de terceros o interferir con su funcionamiento.</p>
       <h2>Contenido generado con IA</h2>
       <p>Los textos y referencias pueden contener errores. Debes revisarlos y verificar las fuentes antes de entregar o publicar un documento. EduLab no garantiza una calificación ni sustituye el criterio docente o el asesoramiento profesional, incluido el médico.</p>
+      {% if plans_visible %}
       <h2>Planes, pagos y documentos</h2>
       <p>El precio, los formatos, los cupos y la conservación disponibles se muestran al elegir una opción. Los pagos reportados se revisan antes de activar el servicio. La recarga no vence y se pausa mientras haya un plan mensual activo; los cupos mensuales se renuevan cada 30 días.</p>
-      <p>Descarga tus documentos antes de su vencimiento. Una modificación del plazo de conservación no cambia el vencimiento de documentos ya creados. Ante un pago duplicado, una activación incorrecta o un problema de servicio, solicita su revisión a la administración; se respetarán los derechos que correspondan según la normativa aplicable.</p>
+      {% else %}
+      <h2>Documentos y conservación</h2>
+      <p>Actualmente puedes generar y descargar tus informes y glosarios gratuitamente.</p>
+      {% endif %}
+      <p>Descarga tus documentos antes de su vencimiento. Una modificación del plazo de conservación no cambia el vencimiento de documentos ya creados. {% if plans_visible %}Ante un pago duplicado, una activación incorrecta o un problema de servicio, solicita su revisión a la administración; se respetarán los derechos que correspondan según la normativa aplicable.{% else %}Si tienes un problema con el servicio, contacta a la administración.{% endif %}</p>
       <h2>Disponibilidad y cambios</h2>
-      <p>El servicio puede tener interrupciones por mantenimiento o fallos de proveedores. Podemos limitar cuentas que abusen del servicio o incumplan estas condiciones. Los cambios de precios o beneficios se mostrarán antes de nuevas compras. Las actualizaciones de estas condiciones se publicarán en esta página.</p>
+      <p>El servicio puede tener interrupciones por mantenimiento o fallos de proveedores. Podemos limitar cuentas que abusen del servicio o incumplan estas condiciones. {% if plans_visible %}Los cambios de precios o beneficios se mostrarán antes de nuevas compras. {% endif %}Las actualizaciones de estas condiciones se publicarán en esta página.</p>
       <h2>Consultas</h2>
       <p>Contacta a la administración de EduLab en <a href="mailto:edulab.wiki@gmail.com">edulab.wiki@gmail.com</a>.</p>
       {% endif %}

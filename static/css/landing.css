@@ -76,7 +76,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  margin-bottom: 30px;
+  margin-bottom: 16px;
   animation: fadeUp 0.7s var(--ease) 0.24s both;
 }
 
@@ -238,6 +238,10 @@
 
 .float-chip--pdf i {
   color: #e2574c;
+}
+
+.hero__install {
+  margin-bottom: 14px;
 }
 
 .hero__stage.is-paused .paper-mock,

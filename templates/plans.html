@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/plans.css') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/payments.js') }}"></script>
 </head>
 
 <body>
@@ -54,13 +55,14 @@
     <div class="plans-alert plans-alert--warn"><i class="bx bx-lock-alt"></i> {{ reason_message }}</div>
     {% endif %}
     {% if sent %}
-    <div class="plans-alert plans-alert--ok"><i class="bx bx-check-circle"></i> Recibimos tu referencia. Revisaremos el pago y activaremos tu plan pronto.</div>
+    <div class="plans-alert plans-alert--ok"><i class="bx bx-check-circle"></i> {{ 'Pago confirmado. Tu plan ya está activo.' if payments and payments[0].status == 'approved' else 'Recibimos tu referencia. Puedes consultar el resultado aquí.' }}</div>
     {% endif %}
     {% if error %}
     <div class="plans-alert plans-alert--err"><i class="bx bx-error-circle"></i> {{ error }}</div>
     {% endif %}
 
     <div class="account-usage card">
+      {% if current_user.is_admin %}<span>Como admin puedes probar compras reales. Tu acceso a la generación sigue sin restricciones.</span>{% endif %}
       {% if active %}<strong>{{ catalog[billing.source].name }} activo hasta {{ expires_at.strftime('%d/%m/%Y') }}</strong>
       <span>{{ billing.used }} generaciones usadas este período. Cupo renovable cada 30 días.</span>{% endif %}
       <span>Recarga: <strong>{{ credits }} generaciones disponibles</strong>{{ ' · en pausa mientras esté activo el plan mensual' if active }}.</span>
@@ -84,13 +86,25 @@
       <!-- ---------- Pago ---------- -->
       <section class="card pay-card" id="pago">
         <h2>{{ "Pagar " + selected.name if selected else "Compras desactivadas" }}</h2>
-        <p>Paga, luego escribe la referencia del pago. Lo revisamos y se activa el plan.</p>
+        <p>Paga, luego escribe la referencia. Binance se verifica automáticamente; Pago Móvil se revisa de forma manual.</p>
 
         {% if not selected %}<p>Los planes están desactivados temporalmente.</p>
         {% elif has_pending %}
-        <div class="plans-alert plans-alert--warn"><i class="bx bx-time-five"></i> Tienes un pago en revisión. Se activará cuando se apruebe.</div>
+        {% for p in payments if p.status == 'pending' %}
+        {% if p.method == 'binance' %}
+        <div data-binance-payment data-verify-url="{{ url_for('plans.verify_payment', payment_id=p.id) }}" data-csrf="{{ payment_csrf_token }}" data-retry-after="{{ p.verify_after }}">
+          <p class="plans-alert plans-alert--warn" role="status" aria-live="polite" data-verification-message>{{ payment_messages.get(p.provider_status, 'Estamos comprobando tu pago con Binance.') }}</p>
+          <button class="btn btn--ghost btn--sm" type="button" data-verification-retry><i class="bx bx-refresh" aria-hidden="true"></i> Volver a comprobar</button>
+          <form method="POST" action="{{ url_for('plans.correct_payment', payment_id=p.id) }}" data-verification-correct {% if p.provider_status != 'NOT_FOUND' %}hidden{% endif %}>
+            <input type="hidden" name="csrf_token" value="{{ payment_csrf_token }}">
+            <button class="btn btn--ghost btn--sm" type="submit">Corregir ID de pago</button>
+          </form>
+        </div>
+        {% else %}<div class="plans-alert plans-alert--warn"><i class="bx bx-time-five"></i> Tienes un pago de Pago Móvil en revisión. Se activará cuando se apruebe.</div>{% endif %}
+        {% endfor %}
         {% else %}
         <form method="POST" action="{{ url_for('plans.pay') }}" data-pay>
+          <input type="hidden" name="csrf_token" value="{{ payment_csrf_token }}">
           <input type="hidden" name="plan_id" value="{{ selected.id }}">
           <div class="pay-tabs" role="radiogroup" aria-label="Método de pago">
             <input type="radio" id="pm-binance" name="method" value="binance" checked>
@@ -133,7 +147,7 @@
             <label for="f-ref">Referencia del pago</label>
             <input class="input" id="f-ref" name="reference" required minlength="4" maxlength="40"
               placeholder="Ej. 0012345678" autocomplete="off">
-            <span class="help">En Binance es el ID de la orden; en Pago Móvil, el número de referencia.</span>
+            <span class="help">En Binance es el ID de la transacción de Binance Pay; en Pago Móvil, el número de referencia. El pago Binance debe haberse realizado en las últimas 24 horas.</span>
           </div>
           <button class="btn btn--primary" type="submit"><i class="bx bx-send"></i> Ya pagué</button>
         </form>
@@ -153,7 +167,7 @@
             <td>{{ catalog[p['plan_id']].name }}</td>
             <td>{{ pay_methods[p['method']] }}</td>
             <td>{{ p['reference'] }}</td>
-            <td><span class="st st--{{ p['status'] }}">{{ {'pending': 'En revisión', 'approved': 'Aprobado', 'rejected': 'Rechazado'}[p['status']] }}</span></td>
+            <td><span class="st st--{{ p['status'] }}">{{ {'pending': 'En revisión', 'approved': 'Aprobado', 'rejected': 'Rechazado'}[p['status']] }}</span>{% if p.method == 'binance' and p.provider_status %}<p class="help">{{ payment_messages.get(p.provider_status, 'Verificación pendiente.') }}</p>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>

@@ -158,10 +158,20 @@
     <section class="admin-section" id="planes">
       <h2 class="admin-section__title"><i class="bx bx-credit-card"></i> Planes y pagos</h2>
 
+      <form class="card admin-form" method="POST" action="{{ url_for('admin.plans_visibility') }}">
+        <input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}">
+        <h3>{{ 'Planes públicos activos' if settings.plans_public_enabled == '1' else 'Modo gratuito activo' }}</h3>
+        <p class="admin-form__hint">Al ocultar los planes, todos pueden crear informes y glosarios y descargar Word y PDF sin gastar su saldo ni su cupo. Los documentos nuevos usan la conservación general; los anteriores mantienen su vencimiento. Solo los admins ven y prueban las compras, con verificación real de Binance.</p>
+        <input type="hidden" name="plans_public_enabled" value="{{ '0' if settings.plans_public_enabled == '1' else '1' }}">
+        <button class="btn btn--primary" type="submit">{{ 'Activar modo gratuito' if settings.plans_public_enabled == '1' else 'Mostrar planes al público' }}</button>
+        <a class="btn btn--ghost" href="{{ url_for('plans.plans') }}">Probar compra</a>
+        <p class="admin-form__hint">Binance: {{ 'token configurado en el servidor' if binance_configured else 'falta BINANCE_VERIFY_TOKEN en el servidor' }}. La inmunidad admin no aprueba pagos.</p>
+      </form>
+
       {% include 'admin_plan_catalog.html' %}
       <form method="POST" action="{{ url_for('admin.save_settings') }}" class="card admin-form">
         <h3>Usuarios sin plan</h3>
-        <p class="admin-form__hint">Qué pueden generar quienes no tienen plan activo. Límite vacío = ilimitado; el límite es el total de documentos por usuario. Los planes de pago usan el cupo configurado arriba; los admins no consumen cupo.</p>
+        <p class="admin-form__hint">Estas reglas se aplican cuando los planes están visibles al público. En modo gratuito quedan en pausa. Límite vacío = ilimitado; el límite es el total de documentos por usuario. Los admins no consumen cupo.</p>
         <div class="admin-form__grid">
           <fieldset>
             <legend><i class="bx bx-shape-triangle"></i> Documentos con IA</legend>
@@ -209,12 +219,12 @@
               <td>{{ 'Binance' if p['method'] == 'binance' else 'Pago Móvil' }}</td>
               <td><code>{{ p['reference'] }}</code></td>
               <td>${{ '%g'|format(p['amount_usd']) }}</td>
-              <td><span class="badge badge--{{ p['status'] }}">{{ {'pending': 'Pendiente', 'approved': 'Aprobado', 'rejected': 'Rechazado'}[p['status']] }}</span></td>
+              <td><span class="badge badge--{{ p['status'] }}">{{ {'pending': 'Pendiente', 'approved': 'Aprobado', 'rejected': 'Rechazado'}[p['status']] }}</span>{% if p.provider_status %}<p class="is-dim payment-status"><code>{{ p.provider_status }}</code><br>{{ payment_messages.get(p.provider_status, '') }}</p>{% endif %}</td>
               <td class="is-dim">{{ p['created_at'] }}</td>
               <td>
                 {% if p['status'] == 'pending' %}
-                <form method="POST" action="{{ url_for('admin.review_payment', payment_id=p['id'], action='approve') }}" class="inline"><button class="mini mini--ok" type="submit">Aprobar</button></form>
-                <form method="POST" action="{{ url_for('admin.review_payment', payment_id=p['id'], action='reject') }}" class="inline"><button class="mini mini--no" type="submit">Rechazar</button></form>
+                <form method="POST" action="{{ url_for('admin.review_payment', payment_id=p['id'], action='approve') }}" class="inline"><input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}"><button class="mini mini--ok" type="submit">{{ 'Verificar Binance' if p.method == 'binance' else 'Aprobar' }}</button></form>
+                {% if p.method != 'binance' %}<form method="POST" action="{{ url_for('admin.review_payment', payment_id=p['id'], action='reject') }}" class="inline"><input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}"><button class="mini mini--no" type="submit">Rechazar</button></form>{% endif %}
                 {% endif %}
               </td>
             </tr>

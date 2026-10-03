@@ -14,6 +14,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 import db
 import ai_provider
 import IA
+import binance_payments
 from auth import admin_required, current_user
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -69,6 +70,8 @@ def dashboard():
         key_status=key_status,
         ai_csrf_token=session.setdefault('ai_csrf_token', secrets.token_urlsafe(32)),
         payments=db.list_payments(limit=100),
+        binance_configured=binance_payments.configured(),
+        payment_messages=binance_payments.MESSAGES,
         active_plan=db.has_active_plan,
         plan_expiry=db.plan_expiry,
         msg=request.args.get('msg'),
@@ -213,13 +216,34 @@ def save_settings():
 @admin_bp.route('/payments/<int:payment_id>/<action>', methods=['POST'])
 @admin_required
 def review_payment(payment_id, action):
+    token = session.get('ai_csrf_token')
+    if not token or not hmac.compare_digest(token, request.form.get('csrf_token', '')):
+        return _back('Recarga el panel e inténtalo otra vez.')
     if action not in ('approve', 'reject'):
         return _back('Acción inválida.')
+    payment = db.get_payment(payment_id)
+    if not payment:
+        return _back('Pago no encontrado.')
+    if payment['method'] == 'binance':
+        if action != 'approve':
+            return _back('Los pagos Binance se resuelven mediante la verificación de la API.')
+        return _back(binance_payments.verify_payment(payment_id)['message'])
     days = int(db.get_settings()['plan_days'] or 30)
     changed = db.review_payment(payment_id, action == 'approve', current_user()['id'], days)
     if not changed:
         return _back('Ese pago ya fue revisado.')
     return _back('Pago aprobado: plan activado.' if action == 'approve' else 'Pago rechazado.')
+
+
+@admin_bp.route('/plans-visibility', methods=['POST'])
+@admin_required
+def plans_visibility():
+    token = session.get('ai_csrf_token')
+    if not token or not hmac.compare_digest(token, request.form.get('csrf_token', '')):
+        return _back('Recarga el panel e inténtalo otra vez.')
+    enabled = request.form.get('plans_public_enabled') == '1'
+    db.set_settings({'plans_public_enabled': '1' if enabled else '0'})
+    return _back('Planes visibles para todos.' if enabled else 'Modo gratuito activado. Solo los admins ven los planes.')
 
 
 @admin_bp.route('/users/<int:user_id>/plan', methods=['POST'])

@@ -102,6 +102,14 @@
   color: var(--text-dim);
 }
 
+.admin-table .payment-status {
+  white-space: normal;
+  min-width: 170px;
+  max-width: 280px;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

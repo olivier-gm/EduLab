@@ -59,6 +59,9 @@ SHARE_FILETYPES = ('docx', 'pdf')
 
 
 def document_filetypes(doc):
+    user = current_user()
+    if not db.public_plans_enabled() or (user and user['is_admin']):
+        return SHARE_FILETYPES
     return ('docx',) if doc['billing_plan'] == 'recharge' else SHARE_FILETYPES
 
 
@@ -90,10 +93,11 @@ def inject_current_user():
     hours = db.billing_state(user)['hours'] if user and not user['is_admin'] else db.get_retention_hours()
     from glossary import max_terms
     return {'current_user': current_user(), 'retention_hours': hours,
+            'plans_visible': db.public_plans_enabled() or bool(user and user['is_admin']),
             'retention_text': db.format_duration(hours), 'glossary_limit': max_terms(),
             'billing': db.billing_state(user) if user else None,
             'glossary_allowed': plans.glossary_access(user),
-            'public_glossary_limit': max((p['terms'] for p in db.plan_catalog().values() if p['enabled']), default=100)}
+            'public_glossary_limit': max((p['terms'] for p in db.plan_catalog().values() if p['enabled'] or not db.public_plans_enabled()), default=100)}
 
 
 @app.route('/validate_title', methods=['POST'])

@@ -116,6 +116,13 @@ def login(client, uid):
         sess['user_id'] = uid
 
 
+def report_payment(client, data):
+    client.get('/plans')
+    with client.session_transaction() as sess:
+        token = sess['payment_csrf_token']
+    return client.post('/plans/pay', data={**data, 'csrf_token': token})
+
+
 def test_three_plans_recharge_pauses_and_monthly_quota_rolls_over(client, monkeypatch):
     clock = datetime(2026, 10, 1, 12)
     monkeypatch.setattr(db, '_utcnow', lambda: clock)
@@ -156,9 +163,9 @@ def test_plan_catalog_payment_selection_disable_and_admin_validation(client):
     assert 'name="plan_id" value="pro"' in html and '300 términos' in html
     db.set_settings({'pro_enabled': '0'})
     assert 'name="plan_id" value="pro"' not in client.get('/plans?plan=pro').get_data(as_text=True)
-    client.post('/plans/pay', data={'method': 'binance', 'reference': 'DISABLED', 'plan_id': 'pro'})
+    report_payment(client, {'method': 'binance', 'reference': 'DISABLED', 'plan_id': 'pro'})
     assert not db.get_user_payments(uid)
-    client.post('/plans/pay', data={'method': 'binance', 'reference': 'RECARGA', 'plan_id': 'recharge', 'amount_usd': '.01'})
+    report_payment(client, {'method': 'binance', 'reference': 'RECARGA', 'plan_id': 'recharge', 'amount_usd': '.01'})
     payment = db.get_user_payments(uid)[0]
     assert payment['plan_id'] == 'recharge' and payment['amount_usd'] == 2.99
     client.get('/admin/')
@@ -369,11 +376,11 @@ def test_logos_de_pago_son_opcionales_y_prefieren_svg(client, tmp_path, monkeypa
 def test_reportar_pago_valida_y_evita_duplicados(client):
     uid = make_user()
     login(client, uid)
-    bad = client.post('/plans/pay', data={'method': 'binance', 'reference': 'x'})
+    bad = report_payment(client, {'method': 'binance', 'reference': 'x'})
     assert 'error=' in bad.headers['Location']
-    ok = client.post('/plans/pay', data={'method': 'binance', 'reference': 'REF12345'})
+    ok = report_payment(client, {'method': 'binance', 'reference': 'REF12345'})
     assert 'sent=1' in ok.headers['Location']
-    again = client.post('/plans/pay', data={'method': 'binance', 'reference': 'OTRA9999'})
+    again = report_payment(client, {'method': 'binance', 'reference': 'OTRA9999'})
     assert 'error=' in again.headers['Location']  # ya tiene uno pendiente
 
 
@@ -454,14 +461,17 @@ def test_admin_guarda_ajustes_y_aprueba(client):
     uid = make_user()
     pid = None
     with app_module.app.test_request_context('/'):
-        pid = db.create_payment(uid, 'binance', 'REF12345', 5)
+        pid = db.create_payment(uid, 'pago_movil', 'REF12345', 5)
     login(client, admin)
 
     client.post('/admin/settings', data={
         'free_ai_limit': '3', 'free_manual_enabled': 'on', 'free_manual_limit': '',
         'plan_price_usd': '5', 'plan_days': '30', 'binance_email': '12345678',
     })
-    client.post(f'/admin/payments/{pid}/approve')
+    client.get('/admin/')
+    with client.session_transaction() as sess:
+        token = sess['ai_csrf_token']
+    client.post(f'/admin/payments/{pid}/approve', data={'csrf_token': token})
 
     with app_module.app.test_request_context('/'):
         s = db.get_settings()

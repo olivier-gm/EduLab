@@ -33,7 +33,7 @@
         <a class="nav__link" href="#como-funciona">Cómo funciona</a>
         <a class="nav__link" href="#funciones">Funciones</a>
         <a class="nav__link" href="#instituciones">Instituciones</a>
-        <a class="nav__link" href="{{ url_for('plans.plans') }}">Planes</a>
+        {% if plans_visible %}<a class="nav__link" href="{{ url_for('plans.plans') }}">Planes</a>{% endif %}
         <a class="nav__link" href="{{ url_for('my_documents') }}">Mis informes</a>
         {% if current_user and current_user.is_admin %}
         <a class="nav__link" href="{{ url_for('admin.dashboard') }}">Admin</a>
@@ -91,7 +91,7 @@
             </a>
           </div>
 
-          <button class="btn btn--ghost btn--sm" type="button" data-install-app><i class="bx bx-download" aria-hidden="true"></i> Descargar app</button>
+          <button class="btn btn--ghost btn--sm hero__install" type="button" data-install-app><i class="bx bx-download" aria-hidden="true"></i> Descargar app</button>
 
           <div class="hero__facts">
             <span class="hero__fact"><i class="bx bx-check-shield"></i> Portada al formato oficial</span>

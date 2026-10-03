@@ -14,6 +14,7 @@ import threading
 import time
 import logging
 import json
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -107,6 +108,8 @@ CREATE TABLE IF NOT EXISTS pending_registrations (
 
 # Valores por defecto de los ajustes. Vacío en un límite = sin límite.
 SETTING_DEFAULTS = {
+    # Mientras se preparan los cobros, todo es gratuito salvo la vista admin.
+    'plans_public_enabled': '0',
     'file_retention_hours': str(FILE_RETENTION_HOURS),
     # Usuarios SIN plan activo: por cada modo, si pueden generar y cuántos
     # documentos en total por usuario.
@@ -356,6 +359,10 @@ def transaction():
 
 def billing_state(user):
     """El cupo mensual se renueva cada 30 días desde la activación."""
+    if not user['is_admin'] and not public_plans_enabled():
+        return {'source': 'free', 'hours': get_retention_hours(),
+                'terms': max(p['terms'] for p in plan_catalog().values()),
+                'remaining': None, 'used': 0, 'limit': None}
     if has_active_plan(user):
         config = plan_catalog()[user['plan']]
         anchor = datetime.strptime(user['plan_started_at'], DATETIME_FMT) if user['plan_started_at'] else plan_expiry(user) - timedelta(days=30)
@@ -370,6 +377,10 @@ def billing_state(user):
                 'remaining': user['credits'], 'cycle': None}
     return {'source': 'free', 'hours': get_retention_hours(), 'terms': 100,
             'remaining': None, 'used': 0, 'limit': None}
+
+
+def public_plans_enabled(settings=None):
+    return (settings or get_settings())['plans_public_enabled'] == '1'
 
 
 def reserve_generation(user_id, allow_free=False):
@@ -422,7 +433,9 @@ def _migrate(conn):
     for table, additions in {
         'users': {'auth_version': 'INTEGER NOT NULL DEFAULT 0', 'credits': 'INTEGER NOT NULL DEFAULT 0', 'plan_started_at': 'TEXT',
                   'plan_cycle_at': 'TEXT', 'plan_used': 'INTEGER NOT NULL DEFAULT 0'},
-        'payments': {'plan_id': "TEXT NOT NULL DEFAULT 'premium'", 'plan_snapshot': 'TEXT'},
+        'payments': {'plan_id': "TEXT NOT NULL DEFAULT 'premium'", 'plan_snapshot': 'TEXT',
+                     'order_reference': 'TEXT', 'provider_status': "TEXT NOT NULL DEFAULT ''",
+                     'verify_after': 'INTEGER NOT NULL DEFAULT 0', 'verify_attempt': 'TEXT'},
         'documents': {'billing_plan': "TEXT NOT NULL DEFAULT 'free'"},
         'pending_registrations': {'purpose': "TEXT NOT NULL DEFAULT 'register'", 'verified_until': 'INTEGER NOT NULL DEFAULT 0'},
     }.items():
@@ -629,8 +642,8 @@ def record_document(user_id, title, doc_type, tokens_used, mode='manual', file_s
     ticket = getattr(g, 'generation_ticket', None)
     expires_at = None
     if file_stem:
-        hours = ticket['hours'] if ticket else (plan_catalog()[get_user_by_id(user_id)['plan']]['hours']
-            if has_active_plan(get_user_by_id(user_id)) else get_retention_hours())
+        user = get_user_by_id(user_id)
+        hours = ticket['hours'] if ticket else (get_retention_hours() if user['is_admin'] else billing_state(user)['hours'])
         expires_at = (created_at + timedelta(hours=hours)).strftime(DATETIME_FMT)
     db = get_db()
     db.execute(
@@ -840,14 +853,76 @@ def reference_in_use(method, reference):
     return row is not None
 
 
-def create_payment(user_id, method, reference, amount_usd, plan_id='premium'):
-    db = get_db()
-    cur = db.execute(
-        'INSERT INTO payments (user_id, method, reference, amount_usd, plan_id, plan_snapshot) VALUES (?, ?, ?, ?, ?, ?)',
-        (user_id, method, reference, amount_usd, plan_id, json.dumps(plan_catalog()[plan_id])),
-    )
-    db.commit()
-    return cur.lastrowid
+def create_payment(user_id, method, reference, amount_usd, plan_id='premium', snapshot=None):
+    config = dict(snapshot or plan_catalog()[plan_id])
+    config['days'] = int(get_settings()['plan_days'] or 30)
+    with transaction() as conn:
+        # Serializa compras del mismo usuario y referencias entre usuarios.
+        conn.execute('SELECT id FROM users WHERE id = ?' + (' FOR UPDATE' if conn._pg else ''), (user_id,))
+        if conn._pg:
+            conn.execute('SELECT pg_advisory_xact_lock(hashtext(?))', (method + ':' + reference.lower(),))
+        if reference_in_use(method, reference):
+            raise ValueError('Esa referencia ya fue reportada.')
+        if conn.execute("SELECT id FROM payments WHERE user_id = ? AND status = 'pending'", (user_id,)).fetchone():
+            raise ValueError('Ya tienes un pago pendiente de revisión.')
+        cur = conn.execute(
+            'INSERT INTO payments (user_id, method, reference, amount_usd, plan_id, plan_snapshot, order_reference) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (user_id, method, reference, amount_usd, plan_id, json.dumps(config), 'edulab-' + uuid.uuid4().hex),
+        )
+        return cur.lastrowid
+
+
+def get_payment(payment_id):
+    return get_db().execute('SELECT * FROM payments WHERE id = ?', (payment_id,)).fetchone()
+
+
+def begin_payment_verification(payment_id):
+    """Reserva un intento corto. La llamada de red ocurre fuera de la transacción."""
+    with transaction() as conn:
+        payment = conn.execute('SELECT * FROM payments WHERE id = ?' + (' FOR UPDATE' if conn._pg else ''), (payment_id,)).fetchone()
+        if not payment or payment['method'] != 'binance' or payment['status'] != 'pending' or payment['verify_after'] > time.time():
+            return None
+        attempt = uuid.uuid4().hex
+        reference = payment['order_reference'] or 'edulab-' + uuid.uuid4().hex
+        conn.execute('UPDATE payments SET order_reference = ?, provider_status = ?, verify_after = ?, verify_attempt = ? WHERE id = ?',
+                     (reference, 'VERIFYING', int(time.time()) + 120, attempt, payment_id))
+        return dict(get_payment(payment_id))
+
+
+def _approve_payment(conn, payment, admin_id, days):
+    conn.execute('UPDATE payments SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?',
+                 ('approved', _utcnow().strftime(DATETIME_FMT), admin_id, payment['id']))
+    config = json.loads(payment['plan_snapshot']) if payment['plan_snapshot'] else plan_catalog()[payment['plan_id']]
+    if payment['plan_id'] == 'recharge':
+        conn.execute('UPDATE users SET credits = credits + ? WHERE id = ?', (config['limit'], payment['user_id']))
+    else:
+        grant_plan(payment['user_id'], config.get('days', days), payment['plan_id'])
+
+
+def finish_payment_verification(payment_id, attempt, provider_status, outcome):
+    """Guarda el resultado y activa el plan una sola vez, en la misma transacción."""
+    with transaction() as conn:
+        payment = conn.execute('SELECT * FROM payments WHERE id = ?' + (' FOR UPDATE' if conn._pg else ''), (payment_id,)).fetchone()
+        if payment['status'] != 'pending' or payment['verify_attempt'] != attempt:
+            return
+        conn.execute('UPDATE payments SET provider_status = ?, verify_after = ? WHERE id = ?',
+                     (provider_status, int(time.time()) + 6 if outcome == 'pending' else 0, payment_id))
+        if outcome == 'approved':
+            _approve_payment(conn, payment, None, int(get_settings()['plan_days'] or 30))
+        elif outcome == 'rejected':
+            conn.execute('UPDATE payments SET status = ?, reviewed_at = ? WHERE id = ?',
+                         ('rejected', _utcnow().strftime(DATETIME_FMT), payment_id))
+
+
+def cancel_missing_payment(payment_id, user_id):
+    """Solo permite corregir un ID que la API no encontró, sin intento en curso."""
+    with transaction() as conn:
+        payment = conn.execute('SELECT * FROM payments WHERE id = ?' + (' FOR UPDATE' if conn._pg else ''), (payment_id,)).fetchone()
+        if not payment or payment['user_id'] != user_id or payment['method'] != 'binance' or payment['status'] != 'pending' or payment['provider_status'] != 'NOT_FOUND':
+            return False
+        conn.execute('UPDATE payments SET status = ?, provider_status = ?, reviewed_at = ? WHERE id = ?',
+                     ('rejected', 'USER_CANCELLED', _utcnow().strftime(DATETIME_FMT), payment_id))
+        return True
 
 
 def get_user_payments(user_id, limit=10):
@@ -879,14 +954,13 @@ def review_payment(payment_id, approve, admin_id, days):
         payment = conn.execute('SELECT * FROM payments WHERE id = ?' + (' FOR UPDATE' if conn._pg else ''), (payment_id,)).fetchone()
         if payment is None or payment['status'] != 'pending':
             return False
-        conn.execute('UPDATE payments SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?',
-            ('approved' if approve else 'rejected', _utcnow().strftime(DATETIME_FMT), admin_id, payment_id))
+        if payment['provider_status'] == 'VERIFYING':
+            return False
         if approve:
-            if payment['plan_id'] == 'recharge':
-                config = json.loads(payment['plan_snapshot']) if payment['plan_snapshot'] else plan_catalog()['recharge']
-                conn.execute('UPDATE users SET credits = credits + ? WHERE id = ?', (config['limit'], payment['user_id']))
-            else:
-                grant_plan(payment['user_id'], days, payment['plan_id'])
+            _approve_payment(conn, payment, admin_id, days)
+        else:
+            conn.execute('UPDATE payments SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?',
+                         ('rejected', _utcnow().strftime(DATETIME_FMT), admin_id, payment_id))
         return True
 
 

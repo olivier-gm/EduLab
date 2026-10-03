@@ -5,15 +5,18 @@ Los planes mensuales tienen prioridad sobre el saldo de recarga.
 
 import re
 import time
+import hmac
+import secrets
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import lru_cache, wraps
 from pathlib import Path
 
 import requests
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, g
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, g, session, abort, jsonify
 
 import db
+import binance_payments
 from auth import login_required, current_user
 
 plans_bp = Blueprint('plans', __name__)
@@ -102,6 +105,8 @@ def generation_access(user, mode, settings=None):
         return (True, None) if state['remaining'] else (False, 'monthly_limit')
 
     settings = settings or db.get_settings()
+    if not db.public_plans_enabled(settings):
+        return True, None
     if settings[f'free_{mode}_enabled'] != '1':
         return False, f'{mode}_disabled'
 
@@ -122,7 +127,7 @@ def access_summary(user, settings=None):
             'ok': ok,
             'reason': reason,
             'used': state['used'] if state['source'] != 'free' else db.count_user_documents(user['id'], mode),
-            'limit': None if user['is_admin'] else (user['credits'] if state['source'] == 'recharge' else state['limit'] if state['source'] != 'free' else parse_limit(settings[f'free_{mode}_limit'])),
+            'limit': None if user['is_admin'] or not db.public_plans_enabled(settings) else (user['credits'] if state['source'] == 'recharge' else state['limit'] if state['source'] != 'free' else parse_limit(settings[f'free_{mode}_limit'])),
         }
     return summary
 
@@ -187,6 +192,8 @@ def _reason_message(reason, summary):
 def plans():
     user = current_user()
     settings = db.get_settings()
+    if not user['is_admin'] and not db.public_plans_enabled(settings):
+        return redirect(url_for('show_form'))
     summary = access_summary(user, settings)
 
     catalog = db.plan_catalog(settings)
@@ -215,6 +222,8 @@ def plans():
         reason_message=_reason_message(request.args.get('reason'), summary),
         sent=request.args.get('sent') == '1',
         error=request.args.get('error'),
+        payment_csrf_token=session.setdefault('payment_csrf_token', secrets.token_urlsafe(32)),
+        payment_messages=binance_payments.MESSAGES,
     )
 
 
@@ -223,6 +232,9 @@ def plans():
 def pay():
     user = current_user()
     settings = db.get_settings()
+    if not user['is_admin'] and not db.public_plans_enabled(settings):
+        abort(403)
+    _check_payment_csrf()
     method = request.form.get('method', '')
     reference = request.form.get('reference', '').strip()
 
@@ -243,5 +255,43 @@ def pay():
     if db.reference_in_use(method, reference):
         return fail('Esa referencia ya fue reportada.')
 
-    db.create_payment(user['id'], method, reference, float(catalog[plan_id]['price']), plan_id)
+    try:
+        payment_id = db.create_payment(user['id'], method, reference, float(catalog[plan_id]['price']), plan_id, snapshot=catalog[plan_id])
+    except ValueError as exc:
+        return fail(str(exc))
+    if method == 'binance':
+        result = binance_payments.verify_payment(payment_id)
+        return redirect(url_for('plans.plans', plan=plan_id, error=result['message'] if result['status'] == 'rejected' else None,
+                                sent=0 if result['status'] == 'rejected' else 1))
     return redirect(url_for('plans.plans', sent=1))
+
+
+def _check_payment_csrf():
+    token = session.get('payment_csrf_token')
+    if not token or not hmac.compare_digest(token, request.form.get('csrf_token', '')):
+        abort(400)
+
+
+@plans_bp.route('/plans/payments/<int:payment_id>/verify', methods=['POST'])
+@login_required
+def verify_payment(payment_id):
+    user = current_user()
+    if not user['is_admin'] and not db.public_plans_enabled():
+        abort(403)
+    _check_payment_csrf()
+    payment = db.get_payment(payment_id)
+    if not payment or payment['user_id'] != user['id'] or payment['method'] != 'binance':
+        abort(404)
+    return jsonify(binance_payments.verify_payment(payment_id))
+
+
+@plans_bp.route('/plans/payments/<int:payment_id>/correct', methods=['POST'])
+@login_required
+def correct_payment(payment_id):
+    user = current_user()
+    if not user['is_admin'] and not db.public_plans_enabled():
+        abort(403)
+    _check_payment_csrf()
+    if not db.cancel_missing_payment(payment_id, user['id']):
+        return redirect(url_for('plans.plans', error='Espera a que termine la comprobación. Solo puedes corregir un ID que Binance no haya encontrado.'))
+    return redirect(url_for('plans.plans'))

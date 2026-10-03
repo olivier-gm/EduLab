@@ -316,8 +316,8 @@ def test_dashboard_stats_zero_days_timezone_and_approved_revenue(client, monkeyp
     conn.execute('UPDATE users SET is_admin = 1 WHERE id = ?', (uid,))
     conn.commit()
     approved = db.create_payment(uid, 'binance', 'ok', 5)
-    db.create_payment(uid, 'binance', 'pending', 9)
     db.review_payment(approved, True, uid, 30)
+    db.create_payment(uid, 'binance', 'pending', 9)
     stats, daily = db.get_dashboard_stats(7)
     assert daily[-2]['documents'] == 2 and daily[-1]['documents'] == 0
     assert stats['period_tokens'] == stats['average_tokens'] == 1200

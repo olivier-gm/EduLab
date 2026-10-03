@@ -37,7 +37,7 @@
       dialog.innerHTML = '<button type="button" class="pwa-dialog__close" aria-label="Cerrar instrucciones">×</button>' +
         '<div class="pwa-dialog__brand"><img src="/static/img/icon-192.png" alt=""><strong>Edu<span>Lab</span></strong></div>' +
         '<h2 id="pwa-title">EduLab en tu pantalla de inicio</h2><p>Ábrelo como una app, con su propio icono. Necesitas internet para generar tus documentos.</p>' +
-        '<details data-platform="android"><summary>Android</summary><ol><li>Abre el menú del navegador <strong>⋮</strong>.</li><li>Elige <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong>.</li><li>Confirma con <strong>Instalar</strong> o <strong>Añadir</strong>.</li></ol></details>' +
+        '<details data-platform="android"><summary>Android</summary><ol><li>Abre el menú del navegador <strong>⋮</strong></li><li>Elige <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong>.</li><li>Confirma con <strong>Instalar</strong> o <strong>Añadir</strong>.</li></ol></details>' +
         '<details data-platform="ios"><summary>iPhone o iPad</summary><ol><li>Toca <strong>Compartir</strong> en el navegador.</li><li>Selecciona <strong>Añadir a pantalla de inicio</strong>.</li><li>Confirma con <strong>Añadir</strong>. Si la opción no aparece, abre EduLab en Safari.</li></ol></details>' +
         '<details data-platform="desktop"><summary>Computadora</summary><ol><li>Busca el icono de instalación en la barra de direcciones o <strong>Instalar EduLab</strong> en el menú de Chrome o Edge.</li><li>Confirma con <strong>Instalar</strong>.</li></ol><p>En Safari para Mac: Archivo → Añadir al Dock.</p></details>' +
         '<button type="button" class="pwa-dialog__install" data-native-install hidden>Instalar EduLab</button>';
@@ -59,6 +59,6 @@
     dialog.showModal();
   });
   if ('serviceWorker' in navigator && window.isSecureContext) {
-    window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+    window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () { }); });
   }
 })();

@@ -75,7 +75,9 @@
 .pay-card .field { margin-bottom: 14px; text-align: left; }
 .pay-card .btn { width: 100%; }
 
-.pay-history { margin-top: 26px; }
+.pay-history { margin-top: 26px; overflow-x: auto; }
+
+[data-verification-correct] { margin-top: 10px; }
 .pay-history h3 { font-size: 0.95rem; margin-bottom: 10px; }
 .pay-history table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
 .pay-history th, .pay-history td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--stroke); }
