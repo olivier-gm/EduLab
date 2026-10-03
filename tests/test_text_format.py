@@ -193,7 +193,8 @@ def test_cada_capa_solo_revisa_sus_cambios_y_tiene_contexto(model, monkeypatch):
         key = 'title' if state['aspect'] == 'case' else 's0'
         assert list(questions) == [key]
         expected = [{'original': 'ucv', 'proposed': 'UCV'}] if key == 'title' else [
-            {'original': 'Fundacion', 'proposed': 'Fundación', 'accent_positions': [8], 'accented_vowels': ['ó']}]
+            {'original': 'Fundacion', 'proposed': 'Fundación', 'accent_positions': [8], 'accented_vowels': ['ó'],
+             'diaeresis_positions': []}]
         assert state['items'][key]['changes'] == expected
 
 

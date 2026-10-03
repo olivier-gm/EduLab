@@ -147,7 +147,9 @@ def _jev_questions(keys, aspect):
                 '(a verb, not the anatomical noun). "habitat" -> "hábitat", "miologia" -> "miología", '
                 '"jose" -> "josé" (the person) and "que es" -> "qué es" (a question heading) are correct. '
                 'An interrogative heading does not need question marks to keep its accent. '
-                'Each change includes accent_positions (1-based character positions) and accented_vowels. '
+                'Each change includes accent_positions and diaeresis_positions (1-based character positions). '
+                'A diaeresis on u is separate from a stress accent: use güe/güi when the u is pronounced, '
+                'as in pingüino or vergüenza; "pingúino" and "agüa" are wrong. '
                 'Check WHICH vowel is accented: hábitat has the FIRST a accented (position 2), never i '
                 '(position 4) or the second a (position 6); cráneo accents a (position 3), not o (position 6).')
         correct = {
@@ -189,6 +191,7 @@ def _jev_approved(changed, aspect, context, *, review=False):
             if aspect == 'accents':
                 change['accent_positions'] = [i + 1 for i, c in enumerate(new) if c.lower() in 'áéíóú']
                 change['accented_vowels'] = [c for c in new if c.lower() in 'áéíóú']
+                change['diaeresis_positions'] = [i + 1 for i, c in enumerate(new) if c.lower() == 'ü']
             words.append(change)
         items[key] = {'original': original, 'proposed': proposed, 'changes': words}
     state = {'aspect': aspect, 'context': context, 'items': items}
