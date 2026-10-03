@@ -245,7 +245,8 @@
     show($('#ia-block'), !glossary && mode === 'ia');
     show($('#manual-block'), !glossary && mode === 'standard');
     show($('#writer-options'), !glossary);
-    show($('#scan-block'), !glossary);
+    show($('#scan-block'), !glossary && mode === 'ia');
+    show($('#glossary-source-block'), glossary);
     show($('#glossary-block'), glossary);
     $('#f-incluir-intro').disabled = glossary;
     $('#f-incluir-concl').disabled = glossary;
@@ -253,12 +254,12 @@
     $('#f-incluir-concl').hidden = glossary;
     show($('label[for="f-incluir-intro"]'), !glossary);
     show($('label[for="f-incluir-concl"]'), !glossary);
-    setText($('#title-label'), glossary ? 'Título o tema del glosario' : 'Título del trabajo');
-    setText($('#title-help'), glossary ? 'Indica el tema que da contexto a las definiciones, por ejemplo: Biología celular.'
-      : 'Sé específico: mientras más claro el título, mejor queda el desarrollo.');
+    show($('#intro-option'), !glossary);
+    show($('#conclusion-option'), !glossary);
+    setText($('#sections-title'), glossary ? 'Bibliografía por término' : 'Secciones del informe');
     setText($('#bibliography-help'), glossary
-      ? 'Opcional: cada término llevará su propia fuente, sin una página de bibliografía al final.'
-      : 'Opcional: la bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.');
+      ? 'Cada término llevará su propia fuente, junto a su definición.'
+      : 'La bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.');
     setText($('#document-note'), glossary
       ? 'Recibirás Word y PDF con portada y glosario en orden alfabético, sin introducción ni conclusión.'
       : 'Recibirás Word y PDF con índice y páginas separadas para cada sección.');
@@ -276,8 +277,14 @@
 
   function applyGlossarySource() {
     var list = ($('#glossary-list') || {}).checked;
+    var glossary = isGlossary();
     show($('#glossary-count-wrap'), !list);
     show($('#glossary-list-wrap'), list);
+    setText($('#title-label'), glossary ? (list ? 'Título del glosario' : 'Tema del glosario') : 'Título del trabajo');
+    $('#f-title').placeholder = glossary ? 'Ej. Biología celular' : 'Ej. El sistema nervioso';
+    setText($('#title-help'), glossary
+      ? (list ? 'Da contexto a tu lista y aparecerá en la portada.' : 'La IA elegirá los términos relacionados con este tema.')
+      : 'Sé específico: mientras más claro el título, mejor queda el desarrollo.');
   }
 
   $$('input[name="glossary_source"]').forEach(function (r) {
@@ -335,7 +342,17 @@
   function applySections() {
     show($('#wrap-introduccion'), chkIntro.checked);
     show($('#wrap-conclusion'), chkConcl.checked);
-    show($('#wrap-bibliografia'), $('#f-incluir-bib').checked);
+    var bibliography = $('#f-incluir-bib').checked;
+    show($('#wrap-bibliografia'), bibliography);
+    var sections = [];
+    if (isGlossary()) {
+      setText($('#sections-summary'), bibliography ? 'Activada · una fuente junto a cada definición' : 'Opcional · desactivada');
+      return;
+    }
+    if (chkIntro.checked) sections.push('Introducción');
+    if (chkConcl.checked) sections.push('conclusión');
+    setText($('#sections-summary'), (sections.length ? sections.join(' y ') : 'Solo desarrollo') +
+      (bibliography ? ' · con bibliografía' : ' · sin bibliografía'));
   }
 
   chkIntro.addEventListener('change', applySections);
@@ -475,7 +492,10 @@
       input.placeholder = 'Tema ' + (idx + 1) + ' a desarrollar';
     });
     addTopic.disabled = $$('.topic-row', topicsBox).length >= MAX_TOPICS;
-    show($('#topics-empty'), $$('.topic-row', topicsBox).length === 0);
+    var count = $$('.topic-row', topicsBox).length;
+    show($('#topics-empty'), count === 0);
+    setText($('#topics-summary'), count ? count + (count === 1 ? ' tema añadido' : ' temas añadidos') : 'Opcional · la IA organiza el desarrollo');
+    if (count) $('#ia-block').open = true;
   }
 
   function buildTopicRow() {
@@ -722,7 +742,8 @@
       w.classList.toggle('is-done', i < step);
     });
 
-    btnPrev.style.visibility = step === 1 ? 'hidden' : 'visible';
+    $('.form-nav').classList.toggle('is-first', step === 1);
+    show(btnPrev, step > 1);
     show(btnNext, step < TOTAL_STEPS);
     show(btnSubmit, step === TOTAL_STEPS);
 
@@ -733,6 +754,7 @@
     var el = $(sel);
     if (!el) { return; }
     el.classList.toggle('is-error', on);
+    el.setAttribute('aria-invalid', String(on));
     var box = el.parentNode.querySelector('.err-msg');
     if (box) {
       box.classList.toggle('is-on', on);
@@ -774,6 +796,12 @@
     }
     return true;
   }
+
+  ['#f-title', '#f-glossary-count', '#f-glossary-terms'].forEach(function (sel) {
+    $(sel).addEventListener('input', function () {
+      if (this.classList.contains('is-error')) fieldError(sel, false);
+    });
+  });
 
   btnNext.addEventListener('click', function () { goTo(step + 1); });
   btnPrev.addEventListener('click', function () { goTo(step - 1, true); });

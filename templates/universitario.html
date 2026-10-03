@@ -254,128 +254,140 @@
         </section>
 
         <!-- ==================== PASO 3 ==================== -->
-        <section class="panel" data-panel="3">
+        <section class="panel content-panel" data-panel="3">
           <h2 class="panel__title"><i class="bx bx-edit-alt"></i> Contenido del documento</h2>
-          <p class="panel__hint">Elige un trabajo con desarrollo o un glosario de definiciones breves.</p>
+          <p class="panel__hint">Elige el formato e indica qué necesitas. Puedes personalizarlo después.</p>
 
-          <div class="block">
-            <div class="seg-group">
-              <span>¿Qué quieres crear?</span>
-              <div class="seg">
+          <fieldset class="block content-group">
+            <legend>¿Qué quieres crear?</legend>
+            <div class="content-choices content-choices--kind">
                 <input type="radio" id="kind-report" name="document_kind" value="report" checked>
-                <label for="kind-report"><i class="bx bx-file"></i> Trabajo normal</label>
+                <label for="kind-report"><i class="bx bx-file" aria-hidden="true"></i><span><strong>Informe</strong><small>Desarrollo por secciones</small></span></label>
                 <input type="radio" id="kind-glossary" name="document_kind" value="glossary" {% if not access.ai.ok or not glossary_allowed %}disabled{% endif %}>
-                <label for="kind-glossary"><i class="bx bx-book-open"></i> Glosario</label>
-                {% if not glossary_allowed %}<span class="help">La recarga incluye informes en Word. Los glosarios están disponibles con un plan mensual.</span>{% endif %}
-              </div>
-              {% if not access.ai.ok %}<span class="help">Los glosarios requieren acceso a EduLab AI. <a href="{{ url_for('plans.plans') }}">Ver planes</a></span>{% endif %}
+                <label for="kind-glossary"><i class="bx bx-book-open" aria-hidden="true"></i><span><strong>Glosario</strong><small>Definiciones breves y ordenadas</small></span></label>
             </div>
+            {% if not glossary_allowed %}<span class="help">La recarga incluye informes en Word. Los glosarios están disponibles con un plan mensual.</span>{% endif %}
+            {% if not access.ai.ok %}<span class="help">Los glosarios requieren acceso a EduLab AI. <a href="{{ url_for('plans.plans') }}">Ver planes</a></span>{% endif %}
+          </fieldset>
+
+          <div class="block" id="writer-options">
+            <fieldset class="content-group">
+              <legend>¿Quién escribe el contenido?</legend>
+              <div class="seg seg--compact">
+                <input type="radio" id="mode-ia" name="global-mode" value="ia" {% if access.ai.ok %}checked{% else %}disabled{% endif %}>
+                <label for="mode-ia"><i class="bx bx-shape-triangle" aria-hidden="true"></i> EduLab AI</label>
+                <input type="radio" id="mode-standard" name="global-mode" value="standard" {% if not access.manual.ok %}disabled{% elif not access.ai.ok %}checked{% endif %}>
+                <label for="mode-standard"><i class="bx bx-pencil" aria-hidden="true"></i> Lo escribo yo</label>
+              </div>
+            </fieldset>
+            {% if not access.ai.ok or not access.manual.ok %}
+            <span class="help mode-lock">
+              <i class="bx bx-lock-alt"></i>
+              {{ 'EduLab AI' if not access.ai.ok else 'Escribirlo tú' }} requiere el plan.
+              <a href="{{ url_for('plans.plans') }}">Ver planes</a>
+            </span>
+            {% elif billing and billing.source != 'free' %}
+            <span class="help">{{ 'Generaciones disponibles con tu plan Pro' if billing.source == 'pro' else (billing.remaining|string + ' generaciones disponibles' + (' en tu recarga' if billing.source == 'recharge' else ' en este período')) }}. Informes, glosarios y documentos manuales comparten el mismo cupo.</span>
+            {% elif access.ai.limit is not none or access.manual.limit is not none %}
+            <span class="help">
+              {% if access.ai.limit is not none %}Con IA: {{ [access.ai.limit - access.ai.used, 0]|max }} restante(s). {% endif %}
+              {% if access.manual.limit is not none %}Manuales: {{ [access.manual.limit - access.manual.used, 0]|max }} restante(s).{% endif %}
+            </span>
+            {% endif %}
           </div>
 
-          <div class="block" id="scan-block">
-            <div class="field">
-              <label for="f-scan-photo">Foto de tu consigna o guía <span class="opt">· opcional</span></label>
-              <input class="input" id="f-scan-photo" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" {% if not access.ai.ok %}disabled{% endif %}>
-              <span class="help">Sube una foto de la asignación: EduLab AI lee el tema y los puntos que piden y rellena el título y los temas. Revísalos antes de generar. PNG, JPG o WebP, hasta 10 MB.</span>
-              <button class="add-btn" type="button" id="scan-photo" {% if not access.ai.ok %}disabled{% endif %}><i class="bx bx-camera"></i> Leer consigna de la foto</button>
-              <span class="help" id="scan-status" role="status" aria-live="polite"></span>
+          <fieldset class="block content-group" id="glossary-source-block" style="display:none;">
+            <legend>¿Cómo quieres elegir los términos?</legend>
+            <div class="content-choices glossary-source">
+              <input type="radio" id="glossary-topic" name="glossary_source" value="topic" checked>
+              <label for="glossary-topic"><i class="bx bx-bulb" aria-hidden="true"></i><span><strong>Por tema y cantidad</strong><small>La IA elige los términos</small></span></label>
+              <input type="radio" id="glossary-list" name="glossary_source" value="list">
+              <label for="glossary-list"><i class="bx bx-list-ul" aria-hidden="true"></i><span><strong>Mis términos</strong><small>Pega tu lista o sube un archivo</small></span></label>
             </div>
-          </div>
+          </fieldset>
 
           <div class="block">
             <div class="field">
               <label for="f-title" id="title-label">Título del trabajo</label>
               <input class="input" type="text" id="f-title" name="title" maxlength="300"
-                placeholder="Ej. El impacto de la inteligencia artificial en la educación">
+                placeholder="Ej. El sistema nervioso" aria-describedby="title-help">
               <span class="err-msg"></span>
               <span class="help" id="title-help">Sé específico: mientras más claro el título, mejor queda el desarrollo.</span>
             </div>
           </div>
 
-          <div class="block">
-            <div class="seg-row">
-              <div class="seg-group" id="writer-options">
-                <span>¿Quién escribe el contenido?</span>
-                <div class="seg">
-                  <input type="radio" id="mode-ia" name="global-mode" value="ia" {% if access.ai.ok %}checked{% else %}disabled{% endif %}>
-                  <label for="mode-ia"><i class="bx bx-shape-triangle"></i> EduLab AI</label>
-                  <input type="radio" id="mode-standard" name="global-mode" value="standard" {% if not access.manual.ok %}disabled{% elif not access.ai.ok %}checked{% endif %}>
-                  <label for="mode-standard"><i class="bx bx-pencil"></i> Lo escribo yo</label>
-                </div>
-                {% if not access.ai.ok or not access.manual.ok %}
-                <span class="help mode-lock">
-                  <i class="bx bx-lock-alt"></i>
-                  {{ 'EduLab AI' if not access.ai.ok else 'Escribirlo tú' }} requiere el plan.
-                  <a href="{{ url_for('plans.plans') }}">Ver planes</a>
-                </span>
-                {% elif billing and billing.source != 'free' %}
-                <span class="help">{{ 'Generaciones disponibles con tu plan Pro' if billing.source == 'pro' else (billing.remaining|string + ' generaciones disponibles' + (' en tu recarga' if billing.source == 'recharge' else ' en este período')) }}. Informes, glosarios y documentos manuales comparten el mismo cupo.</span>
-                {% elif access.ai.limit is not none or access.manual.limit is not none %}
-                <span class="help">
-                  {% if access.ai.limit is not none %}Con IA: {{ [access.ai.limit - access.ai.used, 0]|max }} restante(s). {% endif %}
-                  {% if access.manual.limit is not none %}Manuales: {{ [access.manual.limit - access.manual.used, 0]|max }} restante(s).{% endif %}
-                </span>
-                {% endif %}
-              </div>
-
-              <div class="seg-group">
-                <span>Secciones a incluir</span>
-                <div class="seg">
-                  <input type="checkbox" id="f-incluir-intro" name="incluir_introduccion" value="1" checked>
-                  <label for="f-incluir-intro"><i class="bx bx-align-left"></i> Introducción</label>
-                  <input type="checkbox" id="f-incluir-concl" name="incluir_conclusion" value="1" checked>
-                  <label for="f-incluir-concl"><i class="bx bx-flag"></i> Conclusión</label>
-                  <input type="checkbox" id="f-incluir-bib" name="incluir_bibliografia" value="1">
-                  <label for="f-incluir-bib"><i class="bx bx-library"></i> Bibliografía</label>
-                </div>
-                <span class="help" id="bibliography-help">Opcional: la bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.</span>
-              </div>
+          <details class="block content-disclosure" id="scan-block">
+            <summary><i class="bx bx-camera" aria-hidden="true"></i><span><strong>Leer una foto de la consigna</strong><small>Opcional · rellena el título y los temas</small></span><i class="bx bx-chevron-down" aria-hidden="true"></i></summary>
+            <div class="content-disclosure__body field">
+              <label for="f-scan-photo">Foto de tu consigna o guía</label>
+              <input class="input" id="f-scan-photo" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" {% if not access.ai.ok %}disabled{% endif %}>
+              <span class="help">PNG, JPG o WebP, hasta 10 MB. Revisa el título y los temas después de leer la foto.</span>
+              <button class="add-btn" type="button" id="scan-photo" {% if not access.ai.ok %}disabled{% endif %}><i class="bx bx-camera"></i> Leer consigna de la foto</button>
+              <span class="help" id="scan-status" role="status" aria-live="polite"></span>
             </div>
-          </div>
+          </details>
 
           <div class="block" id="glossary-block" style="display:none;">
-            <div class="note"><i class="bx bx-sort-a-z"></i><span>Hasta <strong>{{ glossary_limit }} términos en orden alfabético</strong>, con definiciones de 1 o 2 frases breves. Siempre incluye portada; no lleva introducción ni conclusión. Si activas bibliografía, la fuente irá junto a cada término.</span></div>
-            <div class="seg glossary-source">
-              <input type="radio" id="glossary-topic" name="glossary_source" value="topic" checked>
-              <label for="glossary-topic">Por tema y cantidad</label>
-              <input type="radio" id="glossary-list" name="glossary_source" value="list">
-              <label for="glossary-list">Mis términos / archivo</label>
-            </div>
             <div class="field" id="glossary-count-wrap">
               <label for="f-glossary-count">Cantidad de términos</label>
-              <input class="input" id="f-glossary-count" name="glossary_count" type="number" min="1" max="{{ glossary_limit }}" value="20">
+              <input class="input" id="f-glossary-count" name="glossary_count" type="number" min="1" max="{{ glossary_limit }}" value="{{ [20, glossary_limit]|min }}" aria-describedby="glossary-count-help">
               <span class="err-msg"></span>
-              <span class="help">La IA elige los términos a partir del título y los ordena alfabéticamente.</span>
+              <span class="help" id="glossary-count-help">De 1 a {{ glossary_limit }} términos, elegidos por la IA según tu tema.</span>
             </div>
             <div id="glossary-list-wrap" style="display:none;">
+              <details class="content-disclosure" id="terms-upload">
+                <summary><i class="bx bx-upload" aria-hidden="true"></i><span><strong>Importar términos de un archivo</strong><small>Imagen, PDF, Word o TXT · opcional</small></span><i class="bx bx-chevron-down" aria-hidden="true"></i></summary>
+                <div class="content-disclosure__body field">
+                  <label for="f-terms-file">Tu asignación o lista de términos</label>
+                  <input class="input" id="f-terms-file" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.txt">
+                  <span class="help">Puede incluir portada, membrete e instrucciones: se leen solo los términos. Admite PDF escaneado. Máximo 10 MB; el archivo no se guarda.</span>
+                  <button class="add-btn" type="button" id="extract-terms"><i class="bx bx-scan"></i> Leer términos del archivo</button>
+                  <span class="help" id="terms-status" role="status" aria-live="polite"></span>
+                </div>
+              </details>
               <div class="field">
-                <label for="f-terms-file">Imagen o documento con tu asignación o lista <span class="opt">· opcional</span></label>
-                <input class="input" id="f-terms-file" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.txt">
-                <span class="help">Puedes subir la asignación completa: se omiten la portada, el membrete y las instrucciones para leer solo los términos. PNG, JPG, WebP, PDF (también escaneado), Word o TXT. Máximo 10 MB. El archivo no se guarda.</span>
-                <button class="add-btn" type="button" id="extract-terms"><i class="bx bx-scan"></i> Leer términos del archivo</button>
-                <span class="help" id="terms-status" role="status" aria-live="polite"></span>
-              </div>
-              <div class="field">
-                <label for="f-glossary-terms">Revisa o pega tus términos · uno por línea</label>
-                <textarea class="textarea" id="f-glossary-terms" name="glossary_terms" maxlength="{{ glossary_limit * 200 }}" placeholder="Átomo&#10;Célula&#10;Energía"></textarea>
+                <label for="f-glossary-terms">Tu lista de términos</label>
+                <span class="help" id="terms-help">Pega un término por línea o revisa los importados. Se usarán todos, sin añadir otros.</span>
+                <textarea class="textarea" id="f-glossary-terms" name="glossary_terms" maxlength="{{ glossary_limit * 200 }}" placeholder="Átomo&#10;Célula&#10;Energía" aria-describedby="terms-help terms-count"></textarea>
                 <span class="err-msg"></span>
                 <span class="help" id="terms-count" aria-live="polite">0 de {{ glossary_limit }} términos</span>
-                <span class="help">Se definirán todos los términos de esta lista, sin añadir otros. Revisa la lectura del archivo antes de generar.</span>
               </div>
             </div>
+            <p class="content-caption"><i class="bx bx-sort-a-z" aria-hidden="true"></i> En orden alfabético, con definiciones de 1 o 2 frases breves.</p>
           </div>
 
           <!-- ---- Modo IA: temas específicos (subtitle_1..subtitle_8) ---- -->
-          <div class="block" id="ia-block">
-            <div class="block__label">Temas específicos · opcional</div>
-            <div class="topics" id="topics"></div>
-            <div class="students-empty" id="topics-empty">
-              Sin temas añadidos: la IA organiza el desarrollo por su cuenta.
+          <details class="block content-disclosure" id="ia-block">
+            <summary><i class="bx bx-list-ul" aria-hidden="true"></i><span><strong>Personalizar los temas</strong><small id="topics-summary">Opcional · la IA organiza el desarrollo</small></span><i class="bx bx-chevron-down" aria-hidden="true"></i></summary>
+            <div class="content-disclosure__body">
+              <div class="topics" id="topics"></div>
+              <p class="help" id="topics-empty">Añade hasta 8 temas que quieras incluir en el desarrollo.</p>
+              <button type="button" class="add-btn" id="add-topic" style="margin-top: 12px;">
+                <i class="bx bx-plus"></i> Añadir tema
+              </button>
             </div>
-            <button type="button" class="add-btn" id="add-topic" style="margin-top: 12px;">
-              <i class="bx bx-plus"></i> Añadir tema
-            </button>
-          </div>
+          </details>
+
+          <details class="block content-disclosure" id="sections-options">
+            <summary><i class="bx bx-layer" aria-hidden="true"></i><span><strong id="sections-title">Secciones del informe</strong><small id="sections-summary">Introducción y conclusión · sin bibliografía</small></span><i class="bx bx-chevron-down" aria-hidden="true"></i></summary>
+            <div class="content-disclosure__body">
+              <div class="section-toggles">
+                <div class="section-option" id="intro-option">
+                  <input type="checkbox" id="f-incluir-intro" name="incluir_introduccion" value="1" checked>
+                  <label for="f-incluir-intro">Introducción</label>
+                </div>
+                <div class="section-option" id="conclusion-option">
+                  <input type="checkbox" id="f-incluir-concl" name="incluir_conclusion" value="1" checked>
+                  <label for="f-incluir-concl">Conclusión</label>
+                </div>
+                <div class="section-option">
+                  <input type="checkbox" id="f-incluir-bib" name="incluir_bibliografia" value="1">
+                  <label for="f-incluir-bib">Bibliografía</label>
+                </div>
+              </div>
+              <p class="help" id="bibliography-help">La bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.</p>
+            </div>
+          </details>
 
           <!-- ---- Modo manual ----
                Si el usuario desmarca "Introducción" o "Conclusión" arriba,
@@ -407,23 +419,23 @@
             </div>
           </div>
 
-          <div class="note note--gold" style="margin-top: 20px;">
-            <i class="bx bx-bulb"></i>
+          <div class="content-caption content-output">
+            <i class="bx bx-file" aria-hidden="true"></i>
             <span id="document-note">Al generar, se crean a la vez el <strong>Word</strong> y el <strong>PDF</strong>, con índice y páginas separadas para cada sección.</span>
           </div>
         </section>
 
         <!-- ---------- Navegación ---------- -->
-        <div class="form-nav">
-          <button type="button" class="btn btn--ghost" id="btn-prev" style="visibility: hidden;">
+        <div class="form-nav is-first">
+          <button type="button" class="btn btn--ghost" id="btn-prev" style="display: none;">
             <i class="bx bx-chevron-left"></i> Atrás
           </button>
           <div class="form-nav__spacer"></div>
           <button type="button" class="btn btn--primary" id="btn-next">
             Continuar <i class="bx bx-chevron-right"></i>
           </button>
-          <button type="submit" class="btn btn--gold" id="btn-submit" style="display: none;">
-            <i class="bx bx-rocket"></i> Generar documento
+          <button type="submit" class="btn btn--gold" id="btn-submit" style="display: none;" aria-label="Generar documento">
+            <i class="bx bx-rocket" aria-hidden="true"></i><span class="btn-submit__full">Generar documento</span><span class="btn-submit__short" aria-hidden="true">Generar</span>
           </button>
         </div>
       </form>
