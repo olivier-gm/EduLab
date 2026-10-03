@@ -124,7 +124,16 @@ def _call(provider, model, key, config, contents, values):
     return _openrouter(model, key, config, contents)
 
 
-def generate_content(*, model, config, contents, fallback_config=None, fallback_contents=None):
+def _light_values(values):
+    """Ajustes con el modelo LIGERO de cada proveedor en lugar del principal (si no hay
+    uno elegido en el panel admin, se queda el principal)."""
+    values = dict(values)
+    for prefix in ('gemini', 'openrouter'):
+        values[f'{prefix}_model'] = values.get(f'{prefix}_light_model') or values[f'{prefix}_model']
+    return values
+
+
+def generate_content(*, model, config, contents, fallback_config=None, fallback_contents=None, light=False):
     """Genera con el proveedor activo; si falla y el fallback está activado, con el otro.
 
     fallback_config / fallback_contents: versión de la petición para el otro
@@ -134,6 +143,8 @@ def generate_content(*, model, config, contents, fallback_config=None, fallback_
     """
     import IA
     values = settings()
+    if light:       # tareas pequeñas (p. ej. mayúsculas y tildes): modelo ligero del admin
+        values = _light_values(values)
     provider, selected_model, key = configuration(model, values)
     if not key:
         raise IA.GenerationError('auth', 'Falta la clave API del proveedor seleccionado. Configúrala desde el panel admin.')

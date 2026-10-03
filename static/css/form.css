@@ -1070,12 +1070,29 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
     gap: 16px;
   }
 }
-/* Modo bloqueado por el plan */
-.glossary-source { margin: 18px 0; flex-wrap: wrap; }
-#glossary-block .field { margin-top: 16px; }
-#f-glossary-count { max-width: 150px; }
 
-#f-terms-file { padding: 8px; color: var(--text-soft); cursor: pointer; }
+/* Modo bloqueado por el plan */
+.glossary-source {
+  margin: 18px 0;
+  flex-wrap: wrap;
+}
+
+#glossary-block .field {
+  margin-top: 16px;
+}
+
+#f-glossary-count {
+  max-width: 150px;
+}
+
+#f-scan-photo,
+#f-terms-file {
+  padding: 8px;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+#f-scan-photo::file-selector-button,
 #f-terms-file::file-selector-button {
   margin-right: 12px;
   padding: 11px 16px;
@@ -1088,7 +1105,11 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
   cursor: pointer;
   transition: filter 0.2s ease;
 }
-#f-terms-file:hover::file-selector-button { filter: brightness(1.15); }
+
+#f-scan-photo:hover::file-selector-button,
+#f-terms-file:hover::file-selector-button {
+  filter: brightness(1.15);
+}
 
 .seg input:disabled+label {
   opacity: 0.4;

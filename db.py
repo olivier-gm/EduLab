@@ -141,6 +141,9 @@ SETTING_DEFAULTS = {
     'openrouter_search_enabled': '1',
     'gemini_model': '',  # Vacío conserva el modelo del entorno actual.
     'openrouter_model': 'google/gemini-3.8-flash',
+    # Modelos más ligeros para tareas pequeñas (mayúsculas y tildes del título). Vacío = el principal.
+    'gemini_light_model': '',
+    'openrouter_light_model': '',
     'gemini_api_key': '',  # Cifradas; nunca se rellenan en el HTML.
     'openrouter_api_key': '',
 }

@@ -141,6 +141,10 @@ def save_ai_settings():
         if len(model) > 160 or not model.startswith(expected) or not re.fullmatch(r'[A-Za-z0-9._/-]+', model):
             return back(f'Escribe el ID de Gemini correcto: {expected}…')
         values[f'{prefix}_model'] = model
+        light = (request.form.get(f'{prefix}_light_model') or '').strip()
+        if light and (len(light) > 160 or not light.startswith(expected) or not re.fullmatch(r'[A-Za-z0-9._/-]+', light)):
+            return back(f'Escribe el ID del modelo ligero correcto: {expected}… (o déjalo vacío para usar el principal).')
+        values[f'{prefix}_light_model'] = light
         key = (request.form.get(f'{prefix}_api_key') or '').strip()
         if key:
             if len(key) > 512 or any(char.isspace() for char in key):

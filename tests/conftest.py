@@ -50,3 +50,15 @@ def _validar_sql_postgres_si_se_pide():
         import db
         db._VALIDATE_PG = True
     yield
+
+
+@pytest.fixture(autouse=True)
+def _sin_correccion_de_texto_con_ia(monkeypatch):
+    """Ninguna prueba debe llamar al modelo real para corregir mayúsculas y tildes
+    (gastaría tokens y cambiaría los totales). Cae al respaldo; las pruebas de
+    text_format simulan el modelo a propósito."""
+    import text_format
+
+    def no_model(texts, usage_sink):
+        raise RuntimeError('sin IA en las pruebas')
+    monkeypatch.setattr(text_format, '_propose', no_model)

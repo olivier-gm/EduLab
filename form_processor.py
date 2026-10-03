@@ -53,8 +53,22 @@ class FormProcessor:
 
             # Llamar al método para crear el nuevo título con subtítulos
         self.subtitles = self.create_subtitles()
+        self.title_corrected = False
 
                 # Llamar al método para crear el nuevo título con subtítulos
+        self.formatted_title = self.create_title_with_subtitles()
+
+    def apply_formatted_texts(self, formatted):
+        """Aplica el resultado de text_format.format_texts: título y subtítulos con sus
+        mayúsculas y tildes. Debe llamarse antes de process()."""
+        self.original_title = self.title
+        self.title = formatted['title']
+        self.title_corrected = formatted['title_corrected']
+        names = [f'subtitle_{i}' for i in range(1, 9) if getattr(self, f'subtitle_{i}')]
+        names = [name for name in names if self.clean_subtitle(getattr(self, name))]
+        for name, text in zip(names, formatted['subtitles']):
+            setattr(self, name, text)
+        self.subtitles = self.create_subtitles()
         self.formatted_title = self.create_title_with_subtitles()
 
     def create_title_with_subtitles(self):
@@ -207,7 +221,9 @@ class FormProcessor:
         return string
 
     def generate_replacements(self):
-        head_title = self.capitalizar_frases(self.title)
+        # Con el título ya corregido por text_format se respetan siglas y nombres propios
+        # (capitalizar_frases pasaría 'UCV' a 'Ucv'); si no, el formato de siempre.
+        head_title = self.title if getattr(self, 'title_corrected', False) else self.capitalizar_frases(self.title)
         new_date = self.fecha(self.date)
 
         if self.route == 'bach':

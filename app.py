@@ -21,6 +21,7 @@ from form_processor import FormProcessor
 from algorythms import Document_process
 from IA import generate_essay_content, generate_introduction, generate_conclusion, GenerationError
 from title_check import check_title, check_glossary
+from text_format import format_texts
 from glossary import extract_terms, parse_terms, generate_glossary, generate_bibliography
 from report_scan import extract_assignment
 
@@ -344,6 +345,11 @@ def process_form():
         return form_error(title_error)
 
     processor = FormProcessor(form_data, 'uni')
+    # Mayúsculas y tildes del título y subtítulos (modelo ligero + control de código + JEV).
+    # Nunca falla: ante cualquier problema queda la primera letra en mayúscula.
+    usage_sink = []
+    processor.apply_formatted_texts(
+        format_texts(processor.title, processor.subtitles, usage_sink=usage_sink))
     processor.process()
     replacements, head_title = processor.generate_replacements()
 
@@ -360,10 +366,9 @@ def process_form():
     glossary_entries = None
     # Lista compartida donde cada llamada a Gemini anota sus tokens
     # (ver IA._record_usage); se suma al final para guardarla en la BD.
-    usage_sink = []
     usage_sink.append(session.pop('scan_extraction_tokens', 0))   # lectura de foto previa, si hubo
     prevalidated = session.pop('validated_title', {})
-    title_validated = (prevalidated.get('title') == processor.title.strip().casefold()
+    title_validated = (prevalidated.get('title') == processor.original_title.strip().casefold()
                        and 0 <= time.time() - prevalidated.get('at', 0) < 300)
     if title_validated:
         usage_sink.append(prevalidated.get('tokens', 0))

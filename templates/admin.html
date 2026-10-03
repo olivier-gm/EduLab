@@ -102,6 +102,9 @@
             <label>Nombre del modelo
               <input class="input" name="gemini_model" maxlength="160" value="{{ settings['gemini_model'] or gemini_default_model }}" placeholder="gemini-3.8-flash" required>
             </label>
+            <label>Modelo ligero (mayúsculas y tildes del título)
+              <input class="input" name="gemini_light_model" maxlength="160" value="{{ settings['gemini_light_model'] }}" placeholder="Vacío = el mismo de arriba">
+            </label>
             <label>Clave API de Google
               <input class="input" type="password" name="gemini_api_key" maxlength="512" autocomplete="new-password" placeholder="Nueva clave · vacío conserva la actual">
             </label>
@@ -114,6 +117,9 @@
             <label>ID del modelo de Gemini
               <input class="input" name="openrouter_model" maxlength="160" value="{{ settings['openrouter_model'] }}" placeholder="google/gemini-3.8-flash" required>
             </label>
+            <label>Modelo ligero (mayúsculas y tildes del título)
+              <input class="input" name="openrouter_light_model" maxlength="160" value="{{ settings['openrouter_light_model'] }}" placeholder="Vacío = el mismo de arriba">
+            </label>
             <label>Clave API de OpenRouter
               <input class="input" type="password" name="openrouter_api_key" maxlength="512" autocomplete="new-password" placeholder="Nueva clave · vacío conserva la actual">
             </label>
@@ -122,6 +128,7 @@
             <label class="check"><input type="checkbox" name="openrouter_search_enabled" {% if settings['openrouter_search_enabled'] == '1' %}checked{% endif %}> Usar búsqueda web (información actual)</label>
           </fieldset>
         </div>
+        <p class="admin-form__hint">El modelo ligero corrige las mayúsculas y tildes del título y los subtítulos antes de generar (una llamada muy corta): conviene uno más rápido y barato que el principal. Se usa el del proveedor activo, o el del otro si el fallback entra en acción.</p>
         <p class="admin-form__hint">Con la búsqueda activada, el desarrollo y la bibliografía usan información actual de internet. Si la búsqueda falla (por ejemplo, sin cuota) se genera igual sin ella: el desarrollo avisa al usuario y la bibliografía usa referencias de IA; en ambos casos queda un aviso en el registro del servidor. En OpenRouter se solicita búsqueda nativa; la búsqueda se cobra aparte del texto generado.</p>
         <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar configuración de IA</button>
       </form>
