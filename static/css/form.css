@@ -627,14 +627,55 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
   background: var(--glass);
   border: 1px solid var(--stroke-strong);
   border-radius: 9px;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.section-option:has(input:checked) {
+  border-color: rgba(32, 228, 218, 0.4);
+  background: rgba(32, 228, 218, 0.06);
 }
 
 .section-option input {
-  width: 18px;
-  height: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
-  accent-color: var(--purple-light);
+  border: 1px solid #789095;
+  border-radius: 6px;
+  background: #08191e;
   cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.section-option input::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 3px;
+  width: 5px;
+  height: 10px;
+  border: solid #041014;
+  border-width: 0 2px 2px 0;
+  opacity: 0;
+  transform: rotate(45deg) scale(0.6);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.section-option input:checked {
+  background: var(--brand-cyan);
+  border-color: var(--brand-cyan);
+}
+
+.section-option input:checked::after {
+  opacity: 1;
+  transform: rotate(45deg) scale(1);
+}
+
+.section-option input:focus-visible {
+  outline: 2px solid var(--brand-cyan);
+  outline-offset: 3px;
 }
 
 .section-option label {
@@ -676,8 +717,22 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .content-disclosure>summary>i:last-child {
+  .content-disclosure>summary>i:last-child,
+  .section-option,
+  .section-option input,
+  .section-option input::after {
     transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .section-option input {
+    appearance: auto;
+    -webkit-appearance: auto;
+  }
+
+  .section-option input::after {
+    display: none;
   }
 }
 
