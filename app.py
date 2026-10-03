@@ -27,6 +27,7 @@ from report_scan import extract_assignment
 
 import db
 import ai_provider
+import rate_limit
 from auth import auth_bp, current_user, login_required
 from admin import admin_bp
 import plans
@@ -70,6 +71,7 @@ def _share_serializer():
 
 
 db.init_app(app)
+rate_limit.init_app(app)
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(plans_bp)
@@ -107,6 +109,7 @@ def inject_current_user():
 
 @app.route('/validate_title', methods=['POST'])
 @login_required
+@rate_limit.rate_limit(10, 60, key_func=rate_limit.per_user)
 def validate_document_title():
     allowed, reason = plans.generation_access(current_user(), 'ai')
     if not allowed:
@@ -202,6 +205,7 @@ def show_form_bach():
 
 @app.route('/process_form_bach', methods=['POST'])
 @login_required
+@rate_limit.rate_limit(10, 60, key_func=rate_limit.per_user)
 @plans.with_generation_quota
 def process_form_bach():
     user = current_user()
@@ -279,6 +283,7 @@ def show_form():
 
 @app.route('/glossary/terms', methods=['POST'])
 @login_required
+@rate_limit.rate_limit(6, 60, key_func=rate_limit.per_user)
 def glossary_terms():
     if not plans.glossary_access(current_user()):
         return jsonify(error='La recarga no incluye glosarios. Elige un plan mensual.'), 403
@@ -305,6 +310,7 @@ SCAN_MIN_INTERVAL = 3      # segundos entre lecturas de foto: cada una gasta tok
 
 @app.route('/report/scan', methods=['POST'])
 @login_required
+@rate_limit.rate_limit(6, 60, key_func=rate_limit.per_user)
 def report_scan():
     """Lee la foto de una consigna y devuelve el título y los temas para el formulario."""
     allowed, _ = plans.generation_access(current_user(), 'ai')
@@ -337,6 +343,7 @@ def upload_too_large(error):
 
 @app.route('/process_form', methods=['POST'])
 @login_required
+@rate_limit.rate_limit(10, 60, key_func=rate_limit.per_user)
 @plans.with_generation_quota
 def process_form():
     user = current_user()
@@ -547,6 +554,7 @@ def choose_file(filename):
 
 @app.route('/download_file/<filename>/<filetype>')
 @login_required
+@rate_limit.rate_limit(30, 60, key_func=rate_limit.per_ip)
 def download_file(filename, filetype):
     if 'file_generated' not in session:
         return form_error('Esa descarga ya no está disponible en tu sesión. '
@@ -595,6 +603,7 @@ def my_documents():
 
 @app.route('/my_documents/<int:doc_id>/<filetype>')
 @login_required
+@rate_limit.rate_limit(30, 60, key_func=rate_limit.per_ip)
 def my_document_download(doc_id, filetype):
     """Descarga de un informe propio. Comprueba que sea del usuario y siga vigente."""
     doc = db.get_user_document(current_user()['id'], doc_id)
@@ -612,6 +621,7 @@ def my_document_download(doc_id, filetype):
 
 
 @app.route('/s/<token>/<filetype>')
+@rate_limit.rate_limit(30, 60, key_func=rate_limit.per_ip)
 def shared_file(token, filetype):
     """Descarga pública mediante enlace firmado (sin login, caduca junto con el archivo)."""
     if filetype not in SHARE_FILETYPES:

@@ -21,6 +21,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import db
+import rate_limit
 import mail_service
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,7 @@ def _send_registration(email, name, password_hash, purpose='register'):
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
+@rate_limit.rate_limit(10, 60, key_func=rate_limit.per_ip)
 def register():
     if session.get('user_id'):
         return redirect(url_for('welcome'))
@@ -198,6 +200,7 @@ def verify_registration():
 
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+@rate_limit.rate_limit(10, 60, key_func=rate_limit.per_ip)
 def forgot_password():
     if session.get('user_id'):
         return redirect(url_for('welcome'))
@@ -263,6 +266,7 @@ def reset_password():
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@rate_limit.rate_limit(10, 60, key_func=rate_limit.per_ip)
 def login():
     if session.get('user_id'):
         return redirect(url_for('welcome'))

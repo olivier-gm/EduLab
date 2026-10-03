@@ -110,4 +110,5 @@
 }
 .verification-code { text-align: center; font-size: 1.6rem; letter-spacing: .35em; }
 .auth-card .verification-resend { margin-top: 16px; }
+.verification-resend button:disabled { opacity: .5; cursor: not-allowed; }
 .auth-card__sub strong { overflow-wrap: anywhere; }

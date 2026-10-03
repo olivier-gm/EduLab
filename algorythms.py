@@ -286,7 +286,7 @@ class Document_process:
         return ' '.join(palabras_capitalizadas)
 
     @staticmethod
-    def generate_random_code(length=6):
+    def generate_random_code(length=3):
         letters_and_digits = string.ascii_letters + string.digits
         return ''.join(random.choice(letters_and_digits) for i in range(length))
 

@@ -24,6 +24,7 @@ os.environ['BINANCE_VERIFY_TOKEN'] = ''
 for _name in ('R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET',
               'R2_PREFIX', 'S3_ENDPOINT_URL'):
     os.environ[_name] = ''
+os.environ['RATE_LIMIT_ENABLED'] = '0'
 
 
 @pytest.fixture(autouse=True)

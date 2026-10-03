@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
+  {% if verify %}<script defer src="{{ url_for('static', filename='js/verification-countdown.js') }}"></script>{% endif %}
 </head>
 
 <body>
@@ -66,11 +67,12 @@
         </div>
         <button type="submit" class="btn btn--primary btn--block">Verificar y crear cuenta</button>
       </form>
-      <form class="verification-resend" method="POST" action="{{ url_for('auth.verify_registration') }}">
+      <form class="verification-resend" method="POST" action="{{ url_for('auth.verify_registration') }}" data-resend-wait="{{ resend_wait }}">
         <input type="hidden" name="csrf_token" value="{{ session.registration_csrf }}">
         <input type="hidden" name="action" value="resend">
         <button class="btn btn--ghost btn--block" type="submit">Reenviar código</button>
-        {% if resend_wait %}<span class="help">Podrás solicitar otro código en {{ resend_wait }} segundos.</span>{% endif %}
+        <span class="help" data-resend-countdown>{% if resend_wait %}Podrás solicitar otro código en {{ resend_wait }} segundos.{% else %}Ya puedes solicitar otro código.{% endif %}</span>
+        <span class="sr-only" role="status" aria-live="polite" data-resend-announcement></span>
       </form>
       <p class="auth-card__foot"><a href="{{ url_for('auth.register', restart=1) }}">Cambiar correo o datos</a></p>
       {% else %}
