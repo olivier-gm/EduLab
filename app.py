@@ -90,9 +90,14 @@ def clear_ai_settings(_error):
 @app.context_processor
 def inject_current_user():
     user = current_user()
+    settings = db.get_settings()
+    free_ai_limit = plans.parse_limit(settings['free_ai_limit'])
+    can_start_free = not db.public_plans_enabled(settings) or (
+        settings['free_ai_enabled'] == '1' and (free_ai_limit is None or free_ai_limit > 0))
     hours = db.billing_state(user)['hours'] if user and not user['is_admin'] else db.get_retention_hours()
     from glossary import max_terms
     return {'current_user': current_user(), 'retention_hours': hours,
+            'can_start_free': can_start_free,
             'plans_visible': db.public_plans_enabled() or bool(user and user['is_admin']),
             'retention_text': db.format_duration(hours), 'glossary_limit': max_terms(),
             'billing': db.billing_state(user) if user else None,
