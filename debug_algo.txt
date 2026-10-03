@@ -1,0 +1,10 @@
+
+        # Buscar el logo con distintas extensiones
+        for ext in ['png', 'jpg', 'jpeg', 'webp']:
+            candidate = os.path.join(logo_dir, f'{normalized}.{ext}')
+            if os.path.isfile(candidate):
+                logo_path = candidate
+                break
+
+        if logo_path is None:
+            logger.info('Logo no encontrado para universidad: %s (buscado como: %s)',

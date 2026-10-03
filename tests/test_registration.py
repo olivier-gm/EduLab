@@ -144,6 +144,7 @@ def test_email_gmail_tls_logo_html_and_plaintext(monkeypatch):
     sent = []
     monkeypatch.setenv('GMAIL_USER', 'sender@example.test')
     monkeypatch.setenv('GMAIL_APP_PASSWORD', 'abcd efgh ijkl mnop')
+    monkeypatch.delenv('MAIL_LOGO_URL', raising=False)
     class SMTP:
         def __init__(self, host, port, timeout, context):
             assert (host, port, timeout) == ('smtp.gmail.com', 465, 15)
@@ -161,13 +162,19 @@ def test_email_gmail_tls_logo_html_and_plaintext(monkeypatch):
     message = sent[0]
     assert '012345' in message.get_body(preferencelist=('plain',)).get_content()
     html = message.get_body(preferencelist=('html',)).get_content()
-    assert '012345' in html and '#20e4da' in html and 'cid:edulab-logo' in html
+    assert '012345' in html and '#20e4da' in html and 'https://edulab.wiki/static/img/icon-192.png' in html
     assert '&lt;script&gt;' in html and '<script>Ana' not in html
-    assert any(part.get('Content-ID') == '<edulab-logo>' for part in message.walk())
+    assert message.get_content_type() == 'multipart/alternative'
+    assert not list(message.iter_attachments())
+    assert not any(part.get_content_maintype() == 'image' or part.get_filename() for part in message.walk())
+    assert 'cid:' not in html and message['Date'] and message['Message-ID']
+    monkeypatch.setenv('MAIL_LOGO_URL', 'https://edulab.wiki/static/img/icon.png')
     with app.app_context():
         mail_service.send_verification('new@example.test', 'Ana', '654321', purpose='reset')
     assert 'Recupera tu contraseña' in sent[-1]['Subject']
     assert 'nueva contraseña' in sent[-1].get_body(preferencelist=('html',)).get_content()
+    assert 'https://edulab.wiki/static/img/icon.png' in sent[-1].get_body(preferencelist=('html',)).get_content()
+    assert not list(sent[-1].iter_attachments())
 
 
 def test_registration_six_characters_and_confirmation(registration):
