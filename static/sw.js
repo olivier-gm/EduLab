@@ -1,7 +1,7 @@
 'use strict';
-const CACHE = 'edulab-pwa-v1';
+const CACHE = 'edulab-pwa-v2';
 const OFFLINE = '/static/offline.html';
-const SHELL = [OFFLINE, '/static/img/icon-192.png'];
+const SHELL = [OFFLINE, '/static/img/icon_trans.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
 });

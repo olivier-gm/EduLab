@@ -1,5 +1,5 @@
-<link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
-<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icon.png') }}">
+<link rel="icon" href="{{ url_for('static', filename='img/icon.png', v='2') }}" type="image/png">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icon.png', v='2') }}">
 <meta name="theme-color" content="#050e12">
 <meta name="application-name" content="EduLab">
 <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
@@ -8,9 +8,9 @@
 <script defer src="{{ url_for('static', filename='js/pwa.js') }}"></script>
 <meta name="apple-mobile-web-app-title" content="EduLab">
 <meta property="og:site_name" content="EduLab">
-<meta property="og:image" content="{{ url_for('static', filename='img/icon.png', _external=True) }}">
+<meta property="og:image" content="{{ url_for('static', filename='img/icon.png', v='2', _external=True) }}">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:alt" content="Icono de EduLab: cerebro turquesa sobre fondo oscuro">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="{{ url_for('static', filename='img/icon.png', _external=True) }}">
+<meta name="twitter:image" content="{{ url_for('static', filename='img/icon.png', v='2', _external=True) }}">
 <meta name="twitter:image:alt" content="Icono de EduLab">
