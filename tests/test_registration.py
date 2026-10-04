@@ -160,6 +160,8 @@ def test_email_gmail_tls_logo_html_and_plaintext(monkeypatch):
     with app.app_context():
         mail_service.send_verification('new@example.test', '<script>Ana</script>', '012345')
     message = sent[0]
+    assert str(message['Subject']).startswith('012345 es tu código de verificación')
+    assert str(message['From']) == 'EduLab <sender@example.test>'
     assert '012345' in message.get_body(preferencelist=('plain',)).get_content()
     html = message.get_body(preferencelist=('html',)).get_content()
     assert '012345' in html and '#20e4da' in html and 'https://edulab.wiki/static/img/icon-192.png' in html
@@ -168,10 +170,13 @@ def test_email_gmail_tls_logo_html_and_plaintext(monkeypatch):
     assert not list(message.iter_attachments())
     assert not any(part.get_content_maintype() == 'image' or part.get_filename() for part in message.walk())
     assert 'cid:' not in html and message['Date'] and message['Message-ID']
+    assert 'Tu código de EduLab es <strong>012345</strong>' in html
+    assert 'name="color-scheme" content="dark"' in html
+    assert 'display:none' not in html and 'display: none' not in html
     monkeypatch.setenv('MAIL_LOGO_URL', 'https://edulab.wiki/static/img/icon.png')
     with app.app_context():
         mail_service.send_verification('new@example.test', 'Ana', '654321', purpose='reset')
-    assert 'Recupera tu contraseña' in sent[-1]['Subject']
+    assert str(sent[-1]['Subject']).startswith('654321 es tu código para recuperar tu contraseña')
     assert 'nueva contraseña' in sent[-1].get_body(preferencelist=('html',)).get_content()
     assert 'https://edulab.wiki/static/img/icon.png' in sent[-1].get_body(preferencelist=('html',)).get_content()
     assert not list(sent[-1].iter_attachments())

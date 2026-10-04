@@ -17,12 +17,13 @@ def send_verification(email, name, code, purpose='register'):
     password = os.environ['GMAIL_APP_PASSWORD'].replace(' ', '').strip()
     message = EmailMessage()
     reset = purpose == 'reset'
-    message['Subject'] = 'Recupera tu contraseña · EduLab' if reset else 'Tu código de verificación · EduLab'
+    message['Subject'] = (f'{code} es tu código para recuperar tu contraseña · EduLab' if reset else
+                          f'{code} es tu código de verificación · EduLab')
     message['From'] = formataddr(('EduLab', sender))
     message['To'] = email
     message['Date'] = formatdate(usegmt=True)
     message['Message-ID'] = make_msgid(domain=sender.rsplit('@', 1)[-1])
-    message.set_content(f'Hola, {name}.\n\nTu código de EduLab es: {code}\n'
+    message.set_content(f'Tu código de EduLab es: {code}. Vence en 10 minutos.\n\nHola, {name}.\n\n'
                         + ('Vence en 10 minutos. Úsalo para elegir una nueva contraseña.\n' if reset else
                            'Vence en 10 minutos. Tu cuenta solo se creará al verificarlo.\n') +
                         'Si no hiciste esta solicitud, ignora este correo. No compartas el código.')
