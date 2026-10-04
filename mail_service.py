@@ -19,7 +19,7 @@ def send_verification(email, name, code, purpose='register'):
     reset = purpose == 'reset'
     message['Subject'] = (f'{code} es tu código para recuperar tu contraseña · EduLab' if reset else
                           f'{code} es tu código de verificación · EduLab')
-    message['From'] = formataddr(('EduLab', sender))
+    message['From'] = formataddr(('Edu Lab', sender))
     message['To'] = email
     message['Date'] = formatdate(usegmt=True)
     message['Message-ID'] = make_msgid(domain=sender.rsplit('@', 1)[-1])
@@ -27,9 +27,8 @@ def send_verification(email, name, code, purpose='register'):
                         + ('Vence en 10 minutos. Úsalo para elegir una nueva contraseña.\n' if reset else
                            'Vence en 10 minutos. Tu cuenta solo se creará al verificarlo.\n') +
                         'Si no hiciste esta solicitud, ignora este correo. No compartas el código.')
-    logo_url = os.getenv('MAIL_LOGO_URL', '').strip() or 'https://edulab.wiki/static/img/icon-192.png'
     message.add_alternative(current_app.jinja_env.get_template('emails/verification.html').render(
-        name=name, code=code, reset=reset, logo_url=logo_url), subtype='html')
+        name=name, code=code, reset=reset), subtype='html')
     with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=15, context=ssl.create_default_context()) as smtp:
         smtp.login(sender, password)
         refused = smtp.send_message(message)

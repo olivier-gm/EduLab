@@ -140,7 +140,7 @@ def test_hourly_send_limit_and_single_winner_for_simultaneous_verification(regis
     assert sum(uid is not None for uid in results) == 1
 
 
-def test_email_gmail_tls_logo_html_and_plaintext(monkeypatch):
+def test_email_gmail_tls_sender_html_and_plaintext(monkeypatch):
     sent = []
     monkeypatch.setenv('GMAIL_USER', 'sender@example.test')
     monkeypatch.setenv('GMAIL_APP_PASSWORD', 'abcd efgh ijkl mnop')
@@ -161,10 +161,11 @@ def test_email_gmail_tls_logo_html_and_plaintext(monkeypatch):
         mail_service.send_verification('new@example.test', '<script>Ana</script>', '012345')
     message = sent[0]
     assert str(message['Subject']).startswith('012345 es tu código de verificación')
-    assert str(message['From']) == 'EduLab <sender@example.test>'
+    assert str(message['From']) == 'Edu Lab <sender@example.test>'
     assert '012345' in message.get_body(preferencelist=('plain',)).get_content()
     html = message.get_body(preferencelist=('html',)).get_content()
-    assert '012345' in html and '#20e4da' in html and 'https://edulab.wiki/static/img/icon-192.png' in html
+    assert '012345' in html and '#20e4da' in html
+    assert '<img' not in html.lower() and 'logo_url' not in html
     assert '&lt;script&gt;' in html and '<script>Ana' not in html
     assert message.get_content_type() == 'multipart/alternative'
     assert not list(message.iter_attachments())
@@ -178,7 +179,9 @@ def test_email_gmail_tls_logo_html_and_plaintext(monkeypatch):
         mail_service.send_verification('new@example.test', 'Ana', '654321', purpose='reset')
     assert str(sent[-1]['Subject']).startswith('654321 es tu código para recuperar tu contraseña')
     assert 'nueva contraseña' in sent[-1].get_body(preferencelist=('html',)).get_content()
-    assert 'https://edulab.wiki/static/img/icon.png' in sent[-1].get_body(preferencelist=('html',)).get_content()
+    reset_html = sent[-1].get_body(preferencelist=('html',)).get_content()
+    assert '<img' not in reset_html.lower() and 'https://edulab.wiki/static/img/icon.png' not in reset_html
+    assert str(sent[-1]['From']) == 'Edu Lab <sender@example.test>'
     assert not list(sent[-1].iter_attachments())
 
 
