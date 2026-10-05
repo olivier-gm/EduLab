@@ -112,3 +112,45 @@
 .auth-card .verification-resend { margin-top: 16px; }
 .verification-resend button:disabled { opacity: .5; cursor: not-allowed; }
 .auth-card__sub strong { overflow-wrap: anywhere; }
+
+.password-control {
+  position: relative;
+  width: 100%;
+}
+
+.password-control .input {
+  padding-right: 52px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  transform: translateY(-50%);
+  color: var(--text-soft);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.password-toggle:hover {
+  color: var(--brand-cyan);
+  background: rgba(32, 213, 204, 0.09);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--brand-cyan);
+  outline-offset: 1px;
+}
+
+.password-toggle i {
+  font-size: 1.3rem;
+  line-height: 1;
+}

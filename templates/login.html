@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/password-visibility.js') }}"></script>
 </head>
 
 <body>
@@ -66,7 +67,10 @@
 
         <div class="field">
           <label for="f-password">Contraseña</label>
-          <input class="input" type="password" id="f-password" name="password" required placeholder="••••••••" autocomplete="current-password">
+          <div class="password-control">
+            <input class="input" type="password" id="f-password" name="password" required placeholder="••••••••" autocomplete="current-password">
+            <button class="password-toggle" type="button" data-password-toggle aria-label="Mostrar contraseña" aria-pressed="false"><i class="bx bx-show" aria-hidden="true"></i></button>
+          </div>
         </div>
 
         <button type="submit" class="btn btn--primary btn--block">
