@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/form.css') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='js/builder.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/builder.js', v='university-aliases-4') }}"></script>
 </head>
 
 <body>
@@ -80,7 +80,8 @@
            (/process_form → FormProcessor). No cambiar.
            ============================================================ -->
       <form id="docForm" action="{{ url_for('process_form') }}" method="POST" novalidate data-max-terms="{{ glossary_limit }}" data-title-url="{{ url_for('validate_document_title') }}" data-terms-url="{{ url_for('glossary_terms') }}" data-scan-url="{{ url_for('report_scan') }}"
-        data-universities="{{ url_for('static', filename='txt/lista_imagenes.txt') }}"
+        data-universities="{{ url_for('static', filename='txt/lista_imagenes.txt', v='accents-2') }}"
+        data-university-aliases="{{ url_for('static', filename='txt/siglas_universidades.json') }}"
         data-logo-base="{{ url_for('static', filename='logos') }}">
 
         <!-- ---------- Indicador de pasos ---------- -->

@@ -616,20 +616,31 @@
      9. AUTOCOMPLETE DE INSTITUCIONES
      ========================================================== */
   var listUrl = form.getAttribute('data-universities');
+  var aliasesUrl = form.getAttribute('data-university-aliases');
+  var universityAliases = Object.create(null);
   var acInput = $('#f-u');
   var acList = $('#ac-list');
   var acItems = [];       // all university names
   var acActive = -1;      // keyboard-highlighted index
   var acPicked = false;   // suppress reopen after selection
 
-  function escapeRe(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function normalizeUniversitySearch(text) {
+    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
   function highlightMatch(text, query) {
-    if (!query) { return text; }
-    var re = new RegExp('(' + escapeRe(query) + ')', 'gi');
-    return text.replace(re, '<mark>$1</mark>');
+    var fragment = document.createDocumentFragment();
+    var start = normalizeUniversitySearch(text).indexOf(normalizeUniversitySearch(query));
+    if (!query || start < 0) {
+      fragment.appendChild(document.createTextNode(text));
+      return fragment;
+    }
+    fragment.appendChild(document.createTextNode(text.slice(0, start)));
+    var mark = document.createElement('mark');
+    mark.textContent = text.slice(start, start + query.length);
+    fragment.appendChild(mark);
+    fragment.appendChild(document.createTextNode(text.slice(start + query.length)));
+    return fragment;
   }
 
   function renderAc(query) {
@@ -640,9 +651,13 @@
       return;
     }
 
-    var lq = query.toLowerCase();
+    var lq = normalizeUniversitySearch(query);
     var matches = acItems.filter(function (name) {
-      return name.toLowerCase().indexOf(lq) !== -1;
+      var normalizedName = normalizeUniversitySearch(name);
+      return normalizedName.indexOf(lq) !== -1 ||
+        (universityAliases[normalizedName] || []).some(function (alias) {
+          return normalizeUniversitySearch(alias).indexOf(lq) !== -1;
+        });
     });
 
     if (matches.length === 0) {
@@ -654,7 +669,7 @@
     matches.slice(0, 12).forEach(function (name) {
       var div = document.createElement('div');
       div.className = 'ac-item';
-      div.innerHTML = highlightMatch(name, query);
+      div.appendChild(highlightMatch(name, query));
       div.addEventListener('mousedown', function (e) {
         e.preventDefault(); // prevent blur before value is set
         acPicked = true;
@@ -710,13 +725,31 @@
   }
 
   if (listUrl) {
-    fetch(listUrl)
+    fetch(listUrl, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.text() : ''; })
       .then(function (txt) {
         if (!txt) { return; }
         acItems = txt.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+        if (document.activeElement === acInput) { renderAc(acInput.value.trim()); }
       })
       .catch(function () { /* la lista es opcional */ });
+  }
+
+  if (aliasesUrl) {
+    fetch(aliasesUrl, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (aliases) {
+        Object.keys(aliases).forEach(function (name) {
+          var values = aliases[name];
+          if (typeof values === 'string') { values = [values]; }
+          if (!Array.isArray(values)) { return; }
+          universityAliases[normalizeUniversitySearch(name)] = values.filter(function (alias) {
+            return typeof alias === 'string' && alias.trim();
+          });
+        });
+        if (document.activeElement === acInput) { renderAc(acInput.value.trim()); }
+      })
+      .catch(function () { /* Las siglas son opcionales; la búsqueda por nombre sigue funcionando. */ });
   }
 
   /* ==========================================================
