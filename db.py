@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS pending_registrations (
 
 # Valores por defecto de los ajustes. Vacío en un límite = sin límite.
 SETTING_DEFAULTS = {
+    'landing_universities': '["universidad_central_de_venezuela", "universidad_de_los_andes", "universidad_simon_bolivar"]',
+    'landing_titles': 'El impacto de la inteligencia artificial\nEl cuerpo humano y sus sistemas\nLa biodiversidad de Venezuela\nLa importancia de la salud mental\nLas energías renovables y el futuro',
     # Mientras se preparan los cobros, todo es gratuito salvo la vista admin.
     'plans_public_enabled': '0',
     'file_retention_hours': str(FILE_RETENTION_HOURS),

@@ -67,6 +67,23 @@
 
     {% if msg %}<div class="admin-msg" role="status"><i class="bx bx-info-circle"></i> {{ msg }}</div>{% endif %}
 
+    <section class="admin-section" id="portada-muestra">
+      <h2 class="admin-section__title"><i class="bx bx-image"></i> Portada de muestra del inicio</h2>
+      <form method="POST" action="{{ url_for('admin.save_landing_settings') }}" class="card admin-form">
+        <input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}">
+        <p class="admin-form__hint">Marca las universidades que alternarán con su logo cada 6 segundos. Con una sola, la portada permanece fija; sin selección muestra una institución genérica.</p>
+        {% for university in landing_universities %}
+        <label class="check"><input type="checkbox" name="landing_universities" value="{{ university.id }}" {% if university.id in landing_selected %}checked{% endif %}> {{ university.name }}</label>
+        {% endfor %}
+        <p class="admin-form__hint">Para añadir otra opción, agrega su nombre a static/txt/lista_imagenes.txt y su logo a static/logos/ con el nombre normalizado, como en el formulario. Aparecerá aquí al recargar.</p>
+        <label>Títulos de muestra · uno por línea
+          <textarea class="input" name="landing_titles" rows="5" maxlength="4000" required>{{ settings.landing_titles }}</textarea>
+        </label>
+        <p class="admin-form__hint">Hasta 30 títulos de 120 caracteres. El título elegido cambia cada 4 horas y se muestra al cargar o recargar el inicio. Una página ya abierta conserva su título. Esta muestra no consume tokens.</p>
+        <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar portada de muestra</button>
+      </form>
+    </section>
+
     <section class="admin-section" id="retencion">
       <h2 class="admin-section__title"><i class="bx bx-time-five"></i> Conservación sin plan y para admins</h2>
       <form method="POST" action="{{ url_for('admin.save_retention_settings') }}" class="card admin-form">

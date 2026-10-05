@@ -12,6 +12,8 @@ from decimal import Decimal, InvalidOperation
 from flask import Blueprint, render_template, request, redirect, url_for, session
 
 import db
+import landing
+import json
 import ai_provider
 import IA
 import binance_payments
@@ -65,6 +67,8 @@ def dashboard():
         users=db.list_users(),
         documents=db.list_documents(limit=100),
         settings=values,
+        landing_universities=landing.universities(),
+        landing_selected=landing.selected_ids(values),
         catalog=db.plan_catalog(values),
         gemini_default_model=IA.MODEL_NAME,
         key_status=key_status,
@@ -76,6 +80,26 @@ def dashboard():
         plan_expiry=db.plan_expiry,
         msg=request.args.get('msg'),
     )
+
+
+@admin_bp.route('/landing-settings', methods=['POST'])
+@admin_required
+def save_landing_settings():
+    def back(message):
+        return redirect(url_for('admin.dashboard', msg=message) + '#portada-muestra')
+    token = session.get('ai_csrf_token')
+    if not token or not hmac.compare_digest(token, request.form.get('csrf_token', '')):
+        return back('Recarga el panel antes de guardar la portada de muestra.')
+    selected = request.form.getlist('landing_universities')
+    available = {item['id'] for item in landing.universities()}
+    if any(value not in available for value in selected):
+        return back('Selecciona universidades que tengan un logo disponible.')
+    titles = list(dict.fromkeys(line.strip() for line in request.form.get('landing_titles', '').splitlines() if line.strip()))
+    if not 1 <= len(titles) <= 30 or any(len(title) > 120 for title in titles):
+        return back('Añade entre 1 y 30 títulos, de máximo 120 caracteres cada uno.')
+    db.set_settings({'landing_universities': json.dumps(list(dict.fromkeys(selected))),
+                     'landing_titles': '\n'.join(titles)})
+    return back('Portada de muestra guardada. Los cambios se ven al recargar la página de inicio.')
 
 
 @admin_bp.route('/catalog-settings', methods=['POST'])

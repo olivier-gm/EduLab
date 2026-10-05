@@ -14,9 +14,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css', v='preview-rotation-1') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/landing-preview.js', v='1') }}"></script>
 </head>
 
 <body>
@@ -42,12 +43,15 @@
 
       <div class="nav__actions">
         {% if current_user %}
-        <a class="btn btn--ghost btn--sm btn--icon" href="{{ url_for('auth.logout') }}" aria-label="Cerrar sesión" title="Cerrar sesión"><i class="bx bx-log-out" aria-hidden="true"></i></a>
+        <a class="btn btn--ghost btn--sm btn--icon" href="{{ url_for('auth.logout') }}" aria-label="Cerrar sesión"
+          title="Cerrar sesión"><i class="bx bx-log-out" aria-hidden="true"></i></a>
         <a class="btn btn--primary btn--sm btn--nav-cta" href="{{ url_for('show_form') }}">
           <i class="bx bx-rocket"></i> Crear documento
         </a>
         {% else %}
-        <a class="btn btn--ghost btn--sm btn--login" href="{{ url_for('auth.login') }}" aria-label="Iniciar sesión" title="Iniciar sesión"><i class="bx bx-user nav-login__icon" aria-hidden="true"></i><span class="nav-login__label">Iniciar sesión</span></a>
+        <a class="btn btn--ghost btn--sm btn--login" href="{{ url_for('auth.login') }}" aria-label="Iniciar sesión"
+          title="Iniciar sesión"><i class="bx bx-user nav-login__icon" aria-hidden="true"></i><span
+            class="nav-login__label">Iniciar sesión</span></a>
         <a class="btn btn--primary btn--sm btn--nav-cta" href="{{ url_for('auth.register') }}">
           <i class="bx bx-rocket"></i> {{ 'Empezar gratis' if can_start_free else 'Crear mi documento' }}
         </a>
@@ -91,11 +95,13 @@
             </a>
           </div>
 
-          <button class="btn btn--ghost btn--sm hero__install" type="button" data-install-app><i class="bx bx-download" aria-hidden="true"></i> Descargar app</button>
+          <button class="btn btn--ghost btn--sm hero__install" type="button" data-install-app><i class="bx bx-download"
+              aria-hidden="true"></i> Descargar app</button>
 
           <div class="hero__facts">
             <span class="hero__fact"><i class="bx bx-check-shield"></i> Portada al formato oficial</span>
-            <span class="hero__fact"><i class="bx bx-sort-a-z"></i> Glosarios de hasta {{ public_glossary_limit }} términos</span>
+            <span class="hero__fact"><i class="bx bx-sort-a-z"></i> Glosarios de hasta {{ public_glossary_limit }}
+              términos</span>
             <span class="hero__fact"><i class="bx bx-group"></i> Hasta 8 integrantes</span>
           </div>
         </div>
@@ -106,9 +112,16 @@
             <b>REPÚBLICA BOLIVARIANA DE VENEZUELA</b>
             <b>MINISTERIO DEL PODER POPULAR</b>
             <b>PARA LA EDUCACIÓN UNIVERSITARIA</b>
-            <b>UNIVERSIDAD CENTRAL DE VENEZUELA</b>
-            <div class="pm-crest"></div>
-            <div class="pm-title">EL IMPACTO DE LA<br>INTELIGENCIA ARTIFICIAL</div>
+            <div class="pm-university" data-preview-university>
+              <b class="pm-university__name">{{ preview_universities[0].name|upper if preview_universities else 'TU
+                INSTITUCIÓN EDUCATIVA' }}</b>
+              <div class="pm-crest">
+                {% if preview_universities %}<img
+                  src="{{ url_for('static', filename=preview_universities[0].filename) }}" alt="" decoding="async">{%
+                endif %}
+              </div>
+            </div>
+            <div class="pm-title">{{ preview_title|upper }}</div>
             <div class="pm-cols">
               <div>
                 <u>DOCENTE:</u>
@@ -128,6 +141,7 @@
           <span class="float-chip float-chip--word"><i class="bx bxs-file-doc"></i> .docx editable</span>
           <span class="float-chip float-chip--pdf"><i class="bx bxs-file-pdf"></i> .pdf listo</span>
         </div>
+        <script id="preview-universities" type="application/json">{{ preview_universities|tojson }}</script>
       </div>
     </section>
 
@@ -198,7 +212,8 @@
           <article class="card feat card--wide reveal">
             <div class="feat__icon is-gold"><i class="bx bx-sort-a-z"></i></div>
             <h3>Glosarios de términos con IA</h3>
-            <p>Hasta <strong>{{ public_glossary_limit }} términos en orden alfabético</strong>, con definiciones breves y portada.
+            <p>Hasta <strong>{{ public_glossary_limit }} términos en orden alfabético</strong>, con definiciones breves
+              y portada.
               Puedes indicar un tema y la cantidad, o subir tu asignación completa en una imagen, PDF, Word o TXT
               para leer los términos y revisarlos antes de generar. Sin introducción ni conclusión;
               si activas bibliografía, cada término lleva su referencia.</p>
@@ -281,7 +296,8 @@
           <details class="faq__item">
             <summary class="faq__q">¿También puedo crear un glosario de términos? <i class="bx bx-plus"></i></summary>
             <p class="faq__a">Sí. En Contenido, elige <strong>Glosario</strong>. Puedes indicar el tema y una
-              cantidad de 1 a {{ public_glossary_limit }} términos, o pegar tu lista y subir una imagen o documento con la asignación.
+              cantidad de 1 a {{ public_glossary_limit }} términos, o pegar tu lista y subir una imagen o documento con
+              la asignación.
               La lectura omite portada, membrete e instrucciones para extraer los términos: revisa la lista
               antes de generar. El resultado incluye portada y definiciones breves en orden alfabético,
               sin introducción ni conclusión. La bibliografía es opcional y va junto a cada término.</p>
@@ -309,7 +325,8 @@
 
           <details class="faq__item">
             <summary class="faq__q">¿Por cuánto tiempo puedo descargarlo? <i class="bx bx-plus"></i></summary>
-            <p class="faq__a">El archivo queda disponible unas horas después de generarse. Pasado ese tiempo se
+            <p class="faq__a">El archivo queda disponible unas horas después de generarse. Con el plan Pro puedes
+              extenderlo hasta 1 año. Pasado ese tiempo se
               elimina del servidor, así que descárgalo apenas esté listo.</p>
           </details>
 

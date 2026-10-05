@@ -26,6 +26,7 @@ from glossary import extract_terms, parse_terms, generate_glossary, generate_bib
 from report_scan import extract_assignment
 
 import db
+import landing
 import ai_provider
 import rate_limit
 from auth import auth_bp, current_user, login_required
@@ -175,7 +176,8 @@ def form_error(message, endpoint='show_form'):
 
 @app.route('/')
 def welcome():
-    return render_template('main_page.html')
+    universities, title = landing.preview(db.get_settings())
+    return render_template('main_page.html', preview_universities=universities, preview_title=title)
 
 
 @app.route('/sw.js')
