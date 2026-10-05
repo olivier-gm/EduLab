@@ -745,7 +745,7 @@ class Document_process:
         logo_path = None
 
         # Buscar el logo con distintas extensiones
-        for ext in ['png', 'jpg', 'jpeg', 'webp']:
+        for ext in ['png', 'jpg', 'jpeg', 'webp', 'svg']:
             candidate = os.path.join(logo_dir, f'{normalized}.{ext}')
             if os.path.isfile(candidate):
                 logo_path = candidate
@@ -757,6 +757,21 @@ class Document_process:
             return False
 
         try:
+            # Word necesita imágenes raster compatibles; conservar transparencia.
+            image_source = logo_path
+            extension = os.path.splitext(logo_path)[1].lower()
+            if extension in ('.webp', '.svg'):
+                from io import BytesIO
+                if extension == '.svg':
+                    import resvg_py
+                    image_source = BytesIO(resvg_py.svg_to_bytes(svg_path=logo_path, width=600))
+                else:
+                    from PIL import Image
+                    image_source = BytesIO()
+                    with Image.open(logo_path) as image:
+                        image.convert('RGBA').save(image_source, format='PNG')
+                    image_source.seek(0)
+
             # Insertar el logo al principio del documento, centrado
             # Tomamos el primer párrafo y lo usamos como ancla
             first_para = document.paragraphs[0]
@@ -777,7 +792,7 @@ class Document_process:
             from docx.text.paragraph import Paragraph
             inserted_para = Paragraph(new_para, document)
             run = inserted_para.add_run()
-            run.add_picture(logo_path, width=Cm(3))
+            run.add_picture(image_source, width=Cm(3))
 
             logger.info('Logo insertado: %s', logo_path)
             return True

@@ -132,7 +132,7 @@
 
   /* ---- Escudo / logo de la institución ---- */
   var logoBase = form.getAttribute('data-logo-base') || '/static/logos';
-  var LOGO_EXT = ['png', 'jpg', 'jpeg', 'webp'];
+  var LOGO_EXT = ['png', 'jpg', 'jpeg', 'webp', 'svg'];
 
   function slugify(name) {
     return name.normalize('NFD')
