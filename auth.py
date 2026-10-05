@@ -155,6 +155,12 @@ def register():
             error = 'Las contraseñas no coinciden.'
         elif db.get_user_by_email(email):
             error = 'Ya existe una cuenta con ese correo. Inicia sesión.'
+        elif email in db.ADMIN_EMAILS:
+            user_id = db.create_configured_admin(email, name, generate_password_hash(password))
+            if user_id:
+                _log_in_as(user_id)
+                return redirect(url_for('welcome'))
+            error = 'Ya existe una cuenta con ese correo. Inicia sesión.'
         else:
             error = _send_registration(email, name, generate_password_hash(password))
             if session.get('registration_token'):

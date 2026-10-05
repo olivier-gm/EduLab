@@ -520,6 +520,23 @@ def create_user(email, name, password_hash=None, google_id=None):
     return user_id
 
 
+def create_configured_admin(email, name, password_hash):
+    """Crea una cuenta sin OTP solo si el correo está autorizado en ADMIN_EMAILS."""
+    email = email.strip().lower()
+    if email not in ADMIN_EMAILS:
+        return None
+    with transaction() as conn:
+        created = conn.execute(
+            'INSERT INTO users (email, name, password_hash) VALUES (?, ?, ?) '
+            'ON CONFLICT (email) DO NOTHING RETURNING id', (email, name, password_hash)
+        ).fetchall()
+        if not created:
+            return None
+        user_id = created[0][0]
+        _sync_admin_flag(conn, user_id, email)
+        return user_id
+
+
 def get_user_by_email(email):
     db = get_db()
     return db.execute(
