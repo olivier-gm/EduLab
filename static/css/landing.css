@@ -480,6 +480,23 @@
   transform: rotate(45deg);
 }
 
+.faq__plan-link {
+  color: var(--teal, #16d5cc);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.faq__plan-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.faq__plan-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
 .faq__a {
   padding: 0 22px 20px;
   color: var(--text-soft);

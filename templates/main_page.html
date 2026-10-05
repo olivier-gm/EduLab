@@ -113,8 +113,7 @@
             <b>MINISTERIO DEL PODER POPULAR</b>
             <b>PARA LA EDUCACIÓN UNIVERSITARIA</b>
             <div class="pm-university" data-preview-university>
-              <b class="pm-university__name">{{ preview_universities[0].name|upper if preview_universities else 'TU
-                INSTITUCIÓN EDUCATIVA' }}</b>
+              <b class="pm-university__name">{{ preview_universities[0].name|upper if preview_universities else 'TU INSTITUCIÓN EDUCATIVA' }}</b>
               <div class="pm-crest">
                 {% if preview_universities %}<img
                   src="{{ url_for('static', filename=preview_universities[0].filename) }}" alt="" decoding="async">{%
@@ -325,7 +324,7 @@
 
           <details class="faq__item">
             <summary class="faq__q">¿Por cuánto tiempo puedo descargarlo? <i class="bx bx-plus"></i></summary>
-            <p class="faq__a">El archivo queda disponible unas horas después de generarse. Con el plan Pro puedes
+            <p class="faq__a">El archivo queda disponible unas horas después de generarse. Con el <a class="faq__plan-link" href="{{ url_for('plans.plans', plan='pro') }}">plan Pro</a> puedes
               extenderlo hasta 1 año. Pasado ese tiempo se
               elimina del servidor, así que descárgalo apenas esté listo.</p>
           </details>
