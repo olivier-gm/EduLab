@@ -111,6 +111,29 @@ def test_topic_fills_duplicates_between_batches(monkeypatch):
     assert len(calls) == 5 and calls[-1]['count'] == 1
 
 
+def test_reference_format_and_clickable_link_in_documents():
+    reference = glossary.format_source({
+        'author': 'Artola, I. y Artola, R.', 'year': '2005',
+        'title': 'Croquis de un tatami', 'publisher': 'El Camarote Ediciones',
+        'url': 'https://example.org/obra'})
+    assert reference.startswith('Artola, I. y Artola, R. (2005). *Croquis de un tatami*.')
+    for glossary_mode in (False, True):
+        document = Document()
+        if glossary_mode:
+            Document_process.add_glossary(document, [
+                {'term': 'Tatami', 'definition': 'Superficie tradicional.', 'reference': reference}])
+        else:
+            Document_process.parrafos(reference, document, 'Bibliografía', False, False)
+        paragraph = document.paragraphs[-1]
+        assert any(run.italic and run.text == 'Croquis de un tatami' for run in paragraph.runs)
+        assert paragraph._p.xpath('.//w:br')
+        hyperlinks = paragraph._p.xpath('.//w:hyperlink')
+        assert len(hyperlinks) == 1
+        from docx.oxml.ns import qn
+        relation = paragraph.part.rels[hyperlinks[0].get(qn('r:id'))]
+        assert relation.target_ref == 'https://example.org/obra'
+
+
 def test_bibliography_uses_grounded_sources_per_term(monkeypatch):
     monkeypatch.setattr(IA, '_search_blocked_until', 0)
     web = SimpleNamespace(uri='https://example.org/biologia', title='Biología')
@@ -120,7 +143,7 @@ def test_bibliography_uses_grounded_sources_per_term(monkeypatch):
     entries = [{'term': 'Átomo', 'definition': 'Unidad de materia.', 'source': 0}]
     monkeypatch.setattr(glossary, '_json_generate', lambda *a, **k: entries)
     result = glossary.generate_glossary('Química', 1, ['Átomo'], bibliography=True)
-    assert result[0]['reference'].startswith('Biología. https://example.org/biologia')
+    assert result[0]['reference'].startswith('*Biología*. (s. f.). example.org.\nhttps://example.org/biologia')
     assert 'example.org' in glossary.generate_bibliography('Química', 'Átomo')
     entries[0]['source'] = 99
     with pytest.raises(IA.GenerationError):

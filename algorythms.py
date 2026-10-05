@@ -977,6 +977,11 @@ class Document_process:
             run.bold = True
             run.font.color.rgb = RGBColor(0, 0, 0)
 
+        if topic == 'Bibliografía' and not detect_subtitles:
+            for reference in re.split(r'\n\s*\n', body.strip()):
+                Document_process._add_reference(document, reference)
+            return
+
         # ── Cuerpo ──
         for block in Document_process._split_blocks(body):
             text = Document_process._clean_markdown(block)
@@ -1080,6 +1085,46 @@ class Document_process:
     # ── Main orchestration ─────────────────────────────────────────────
 
     @staticmethod
+    def _add_reference(document, reference, prefix='', size=12):
+        """Referencia con cursiva y URL clicable en la línea siguiente."""
+        from docx.opc.constants import RELATIONSHIP_TYPE as RT
+        paragraph = document.add_paragraph()
+        paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+        paragraph.paragraph_format.space_after = Pt(12)
+        paragraph.paragraph_format.keep_together = True
+        paragraph.paragraph_format.line_spacing = Pt(21 if size == 12 else 14)
+        if prefix:
+            paragraph.add_run(prefix).font.size = Pt(size)
+        position = 0
+        for match in re.finditer(r'https?://[^\s<>]+', reference):
+            before = reference[position:match.start()].rstrip()
+            Document_process._add_inline(paragraph, before, size=Pt(size))
+            paragraph.add_run().add_break()
+            url = match.group().rstrip('.,;')
+            hyperlink = OxmlElement('w:hyperlink')
+            hyperlink.set(qn('r:id'), paragraph.part.relate_to(url, RT.HYPERLINK, is_external=True))
+            run = OxmlElement('w:r')
+            props = OxmlElement('w:rPr')
+            color = OxmlElement('w:color')
+            color.set(qn('w:val'), '0563C1')
+            props.append(color)
+            underline = OxmlElement('w:u')
+            underline.set(qn('w:val'), 'single')
+            props.append(underline)
+            font_size = OxmlElement('w:sz')
+            font_size.set(qn('w:val'), str(size * 2))
+            props.append(font_size)
+            run.append(props)
+            text = OxmlElement('w:t')
+            text.text = url
+            run.append(text)
+            hyperlink.append(run)
+            paragraph._p.append(hyperlink)
+            position = match.end()
+        Document_process._add_inline(paragraph, reference[position:], size=Pt(size))
+        return paragraph
+
+    @staticmethod
     def add_glossary(document, entries):
         """Término y definición juntos; la fuente opcional va debajo de cada uno."""
         document.add_page_break()
@@ -1094,11 +1139,7 @@ class Document_process:
             Document_process._add_inline(paragraph, entry['definition'])
             if entry.get('reference'):
                 paragraph.paragraph_format.keep_with_next = True
-                source = document.add_paragraph('Fuente: ' + entry['reference'])
-                source.paragraph_format.space_after = Pt(12)
-                source.paragraph_format.keep_together = True
-                for run in source.runs:
-                    run.font.size = Pt(10)
+                Document_process._add_reference(document, entry['reference'], prefix='Fuente: ', size=10)
 
     @staticmethod
     def fill_placeholders(docx_output, template_path, template_path2, replacements,
