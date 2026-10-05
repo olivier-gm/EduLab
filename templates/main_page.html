@@ -324,7 +324,7 @@
 
           <details class="faq__item">
             <summary class="faq__q">¿Por cuánto tiempo puedo descargarlo? <i class="bx bx-plus"></i></summary>
-            <p class="faq__a">El archivo queda disponible unas horas después de generarse. Con el <a class="faq__plan-link" href="{{ url_for('plans.plans', plan='pro') }}">plan Pro</a> puedes
+            <p class="faq__a">El archivo queda disponible unas horas después de generarse. Con el {% if plans_visible %}<a class="faq__plan-link" href="{{ url_for('plans.plans', plan='pro') }}">plan Pro</a>{% else %}<strong>plan Pro</strong>{% endif %} puedes
               extenderlo hasta 1 año. Pasado ese tiempo se
               elimina del servidor, así que descárgalo apenas esté listo.</p>
           </details>

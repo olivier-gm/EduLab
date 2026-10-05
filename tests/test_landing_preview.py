@@ -72,3 +72,17 @@ def test_non_admin_cannot_change_preview(client):
     response = client.post('/admin/landing-settings', data={'landing_titles': 'No permitido'})
     assert response.status_code in (302, 403)
     assert db.get_settings() == before
+
+
+def test_pro_faq_link_respects_plan_visibility(client):
+    db.set_settings({'plans_public_enabled': '0'})
+    assert 'class="faq__plan-link"' not in client.get('/').get_data(as_text=True)
+    uid = db.create_user('ordinary@example.invalid', 'Usuario')
+    with client.session_transaction() as session:
+        session['user_id'] = uid
+    assert 'class="faq__plan-link"' not in client.get('/').get_data(as_text=True)
+    db.set_settings({'plans_public_enabled': '1'})
+    assert 'href="/plans?plan=pro"' in client.get('/').get_data(as_text=True)
+    db.set_settings({'plans_public_enabled': '0'})
+    login_admin(client)
+    assert 'href="/plans?plan=pro"' in client.get('/').get_data(as_text=True)
