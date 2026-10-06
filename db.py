@@ -392,6 +392,13 @@ def public_plans_enabled(settings=None):
     return (settings or get_settings())['plans_public_enabled'] == '1'
 
 
+FREE_MODE_LIMIT = 5
+
+
+def free_mode_used(user):
+    return sum(count_user_documents(user['id'], mode) for mode in ('ai', 'manual')) + user['free_pending']
+
+
 def reserve_generation(user_id, allow_free=False):
     with transaction() as conn:
         user = conn.execute('SELECT * FROM users WHERE id = ?' + (' FOR UPDATE' if conn._pg else ''), (user_id,)).fetchone()
@@ -400,6 +407,11 @@ def reserve_generation(user_id, allow_free=False):
             return {**state, 'source': 'admin', 'hours': get_retention_hours(),
                     'terms': max(p['terms'] for p in plan_catalog().values())}
         if state['source'] == 'free':
+            if not public_plans_enabled():
+                if free_mode_used(user) >= FREE_MODE_LIMIT:
+                    return None
+                conn.execute('UPDATE users SET free_pending = free_pending + 1 WHERE id = ?', (user_id,))
+                return {**state, 'free_reserved': True}
             return state if allow_free else None
         if state['remaining'] <= 0:
             return None
@@ -412,7 +424,9 @@ def reserve_generation(user_id, allow_free=False):
 
 
 def refund_generation(user_id, ticket):
-    if ticket['source'] == 'recharge':
+    if ticket.get('free_reserved'):
+        get_db().execute('UPDATE users SET free_pending = free_pending - 1 WHERE id = ? AND free_pending > 0', (user_id,))
+    elif ticket['source'] == 'recharge':
         get_db().execute('UPDATE users SET credits = credits + 1 WHERE id = ?', (user_id,))
     elif ticket['source'] in ('premium', 'pro'):
         get_db().execute('UPDATE users SET plan_used = plan_used - 1 WHERE id = ? '
@@ -441,7 +455,8 @@ def _migrate(conn):
     columns = lambda table: _columns(conn, table)      # noqa: E731
     for table, additions in {
         'users': {'auth_version': 'INTEGER NOT NULL DEFAULT 0', 'credits': 'INTEGER NOT NULL DEFAULT 0', 'plan_started_at': 'TEXT',
-                  'plan_cycle_at': 'TEXT', 'plan_used': 'INTEGER NOT NULL DEFAULT 0'},
+                  'plan_cycle_at': 'TEXT', 'plan_used': 'INTEGER NOT NULL DEFAULT 0',
+                  'free_pending': 'INTEGER NOT NULL DEFAULT 0'},
         'payments': {'plan_id': "TEXT NOT NULL DEFAULT 'premium'", 'plan_snapshot': 'TEXT',
                      'order_reference': 'TEXT', 'provider_status': "TEXT NOT NULL DEFAULT ''",
                      'verify_after': 'INTEGER NOT NULL DEFAULT 0', 'verify_attempt': 'TEXT'},
@@ -678,6 +693,8 @@ def record_document(user_id, title, doc_type, tokens_used, mode='manual', file_s
         (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at.strftime(DATETIME_FMT),
          ticket['source'] if ticket else 'free'),
     )
+    if ticket and ticket.get('free_reserved'):
+        db.execute('UPDATE users SET free_pending = free_pending - 1 WHERE id = ? AND free_pending > 0', (user_id,))
     db.commit()
     if ticket:
         ticket['done'] = True

@@ -281,7 +281,9 @@ def process_form_bach():
 def show_form():
     session.pop('file_generated', None)
     access = plans.access_summary(current_user())
-    if not access['ai']['ok'] and not access['manual']['ok']:
+    if access['ai']['reason'] == 'free_mode_limit':
+        flash('Alcanzaste tus 5 generaciones gratuitas. Próximamente estarán disponibles los planes.', 'warning')
+    if not access['ai']['ok'] and not access['manual']['ok'] and access['ai']['reason'] != 'free_mode_limit':
         # Ningún modo disponible: no tiene sentido mostrar el formulario.
         return plans.redirect_to_plans(access['ai']['reason'])
     return render_template('universitario.html', access=access)

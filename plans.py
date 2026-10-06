@@ -100,13 +100,14 @@ def generation_access(user, mode, settings=None):
     if user['is_admin'] or getattr(g, 'generation_ticket', None):
         return True, None
 
+    settings = settings or db.get_settings()
+    if not db.public_plans_enabled(settings):
+        return (True, None) if db.free_mode_used(user) < db.FREE_MODE_LIMIT else (False, 'free_mode_limit')
     state = db.billing_state(user)
     if state['source'] != 'free':
         return (True, None) if state['remaining'] else (False, 'monthly_limit')
 
     settings = settings or db.get_settings()
-    if not db.public_plans_enabled(settings):
-        return True, None
     if settings[f'free_{mode}_enabled'] != '1':
         return False, f'{mode}_disabled'
 
@@ -129,6 +130,8 @@ def access_summary(user, settings=None):
             'used': state['used'] if state['source'] != 'free' else db.count_user_documents(user['id'], mode),
             'limit': None if user['is_admin'] or not db.public_plans_enabled(settings) else (user['credits'] if state['source'] == 'recharge' else state['limit'] if state['source'] != 'free' else parse_limit(settings[f'free_{mode}_limit'])),
         }
+        if not user['is_admin'] and not db.public_plans_enabled(settings):
+            summary[mode].update(used=db.free_mode_used(user), limit=db.FREE_MODE_LIMIT)
     return summary
 
 
@@ -147,7 +150,7 @@ def with_generation_quota(view):
             return redirect_to_plans(reason)
         ticket = db.reserve_generation(user['id'], allow_free=db.billing_state(user)['source'] == 'free')
         if ticket is None:
-            return redirect_to_plans('monthly_limit')
+            return redirect_to_plans('monthly_limit' if db.public_plans_enabled() else 'free_mode_limit')
         g.generation_ticket = ticket
         try:
             if request.form.get('document_kind') == 'glossary' and not glossary_access(user):
@@ -183,6 +186,8 @@ def glossary_bibliography_access(user):
 
 
 def redirect_to_plans(reason):
+    if reason == 'free_mode_limit':
+        return redirect(url_for('show_form'))
     return redirect(url_for('plans.plans', reason=reason))
 
 

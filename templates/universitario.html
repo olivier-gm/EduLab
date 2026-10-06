@@ -268,7 +268,7 @@
                 <label for="kind-glossary"><i class="bx bx-book-open" aria-hidden="true"></i><span><strong>Glosario</strong><small>Definiciones breves y ordenadas</small></span></label>
             </div>
             {% if not glossary_allowed %}<span class="help">La recarga incluye informes en Word. Los glosarios están disponibles con un plan mensual.</span>{% endif %}
-            {% if not access.ai.ok %}<span class="help">Los glosarios requieren acceso a EduLab AI. <a href="{{ url_for('plans.plans') }}">Ver planes</a></span>{% endif %}
+            {% if not access.ai.ok and access.ai.reason != 'free_mode_limit' %}<span class="help">Los glosarios requieren acceso a EduLab AI. <a href="{{ url_for('plans.plans') }}">Ver planes</a></span>{% endif %}
           </fieldset>
 
           <div class="block" id="writer-options">
@@ -281,12 +281,16 @@
                 <label for="mode-standard"><i class="bx bx-pencil" aria-hidden="true"></i> Lo escribo yo</label>
               </div>
             </fieldset>
-            {% if not access.ai.ok or not access.manual.ok %}
+            {% if access.ai.reason == 'free_mode_limit' %}
+            <span class="help mode-lock" role="status">Alcanzaste tus 5 generaciones gratuitas. Próximamente estarán disponibles los planes.</span>
+            {% elif not access.ai.ok or not access.manual.ok %}
             <span class="help mode-lock">
               <i class="bx bx-lock-alt"></i>
               {{ 'EduLab AI' if not access.ai.ok else 'Escribirlo tú' }} requiere el plan.
               <a href="{{ url_for('plans.plans') }}">Ver planes</a>
             </span>
+            {% elif not plans_visible %}
+            <span class="help">Te quedan {{ [access.ai.limit - access.ai.used, 0]|max }} de 5 generaciones gratuitas. Informes, glosarios y documentos manuales comparten el mismo cupo.</span>
             {% elif billing and billing.source != 'free' %}
             <span class="help">{{ 'Generaciones disponibles con tu plan Pro' if billing.source == 'pro' else (billing.remaining|string + ' generaciones disponibles' + (' en tu recarga' if billing.source == 'recharge' else ' en este período')) }}. Informes, glosarios y documentos manuales comparten el mismo cupo.</span>
             {% elif access.ai.limit is not none or access.manual.limit is not none %}

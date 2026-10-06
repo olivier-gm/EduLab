@@ -207,6 +207,50 @@ def add_docs(uid, mode, n):
         db.record_document(uid, 'T', 'uni', 0, mode=mode)
 
 
+def test_free_mode_shared_limit_reservation_refund_and_notice(client):
+    db.set_settings({'plans_public_enabled': '0'})
+    uid = make_user()
+    add_docs(uid, 'ai', 2)
+    add_docs(uid, 'manual', 2)
+    assert plans.access_summary(user(uid))['ai']['used'] == 4
+    ticket = db.reserve_generation(uid, allow_free=True)
+    assert ticket is not None
+    assert db.reserve_generation(uid, allow_free=True) is None
+    db.refund_generation(uid, ticket)
+    assert plans.generation_access(user(uid), 'manual') == (True, None)
+    from flask import g
+    g.generation_ticket = db.reserve_generation(uid, allow_free=True)
+    db.record_document(uid, 'Glosario', 'uni', 0, mode='ai')
+    assert g.generation_ticket['done']
+    g.pop('generation_ticket')
+    assert user(uid)['free_pending'] == 0
+    for mode in ('ai', 'manual'):
+        assert plans.generation_access(user(uid), mode) == (False, 'free_mode_limit')
+    login(client, uid)
+    response = client.get('/form')
+    assert response.status_code == 200
+    assert 'Próximamente estarán disponibles los planes.' in response.get_data(as_text=True)
+    assert client.post('/process_form', data={'global-mode': 'standard'}).status_code == 302
+    admin = make_user('admin@x.com', admin=True)
+    add_docs(admin, 'ai', 5)
+    assert plans.generation_access(user(admin), 'ai') == (True, None)
+
+
+def test_free_mode_last_generation_is_atomic(client):
+    from concurrent.futures import ThreadPoolExecutor
+    db.set_settings({'plans_public_enabled': '0'})
+    uid = make_user()
+    add_docs(uid, 'ai', 4)
+
+    def reserve(_):
+        with app_module.app.app_context():
+            return db.reserve_generation(uid, allow_free=True)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tickets = list(pool.map(reserve, range(2)))
+    assert sum(ticket is not None for ticket in tickets) == 1
+
+
 # ── Reglas de acceso ──────────────────────────────────────────────────
 
 def test_por_defecto_sin_plan_puede_generar(ctx):
