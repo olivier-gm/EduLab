@@ -1,0 +1,151 @@
+/* ============================================================
+   EDULAB · Overlay de progreso al generar un documento
+   Lo usan el formulario (builder.js) y la página de espera (generating.html).
+   ============================================================ */
+
+/* ---------------- OVERLAY DE CARGA ---------------- */
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: none;
+  place-items: center;
+  padding: 24px;
+  background: rgba(16, 16, 34, 0.9);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.loader.is-on {
+  display: grid;
+  animation: fadeUp 0.35s var(--ease) both;
+}
+
+.loader__box {
+  width: min(520px, 100%);
+  background: rgba(16, 16, 36, 0.95);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--r-xl);
+  box-shadow: var(--sh-lg);
+  padding: clamp(26px, 5vw, 40px);
+  text-align: center;
+}
+
+.loader__ring {
+  width: 82px;
+  height: 82px;
+  margin: 0 auto 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(from 0deg, transparent 0deg, var(--purple-light) 120deg, var(--gold) 300deg, transparent 360deg);
+  animation: spin 1.25s linear infinite;
+  position: relative;
+}
+
+.loader__ring::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: #141430;
+}
+
+.loader__ring i {
+  position: relative;
+  z-index: 1;
+  font-size: 2rem;
+  color: var(--gold);
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+.loader__title {
+  font-size: 1.3rem;
+  margin-bottom: 8px;
+}
+
+.loader__msg {
+  color: var(--text-soft);
+  font-size: 0.94rem;
+  min-height: 46px;
+}
+
+.bar {
+  height: 10px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin: 20px 0 10px;
+  position: relative;
+}
+
+.bar__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: var(--r-full);
+  background: linear-gradient(90deg, var(--purple) 0%, var(--purple-light) 55%, var(--gold) 100%);
+  transition: width 0.5s var(--ease);
+  position: relative;
+  overflow: hidden;
+}
+
+.bar__fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+.bar__pct {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--gold);
+}
+
+.loader__steps {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--stroke);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.loader__step {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  transition: color 0.3s ease;
+}
+
+.loader__step i {
+  font-size: 1.15rem;
+}
+
+.loader__step.is-active {
+  color: #fff;
+}
+
+.loader__step.is-active i {
+  color: var(--purple-light);
+}
+
+.loader__step.is-done {
+  color: var(--text-soft);
+}
+
+.loader__step.is-done i {
+  color: var(--gold);
+}
+
+.loader__foot {
+  margin-top: 18px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}

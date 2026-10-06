@@ -57,22 +57,33 @@ def cleanup_expired_files(now=None):
     return cleaned
 
 
-def _loop():
+def _loop(app=None):
     while True:
         try:
             cleanup_expired_files()
         except Exception:
             logger.exception('Falló la limpieza automática de archivos')
+        if app is not None:
+            try:
+                # Generaciones cuyo proceso murió: se cierran devolviendo el cupo aunque nadie vuelva
+                # a su página de espera; los trabajos ya terminados se borran a los 2 días.
+                with app.app_context():
+                    reaped = db.reap_stale_jobs()
+                    db.purge_old_jobs()
+                if reaped:
+                    logger.warning('%d generación(es) interrumpida(s) cerradas y con el cupo devuelto', reaped)
+            except Exception:
+                logger.exception('Falló la limpieza de generaciones interrumpidas')
         time.sleep(SWEEP_INTERVAL)
 
 
 _started = False
 
 
-def start_background_cleanup():
+def start_background_cleanup(app=None):
     """Arranca (una sola vez por proceso) el hilo de limpieza."""
     global _started
     if _started:
         return
     _started = True
-    threading.Thread(target=_loop, name='file-retention', daemon=True).start()
+    threading.Thread(target=_loop, args=(app,), name='file-retention', daemon=True).start()

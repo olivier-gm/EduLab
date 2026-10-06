@@ -31,10 +31,11 @@ RESEARCH_WORKERS = 4       # investigaciones de fuentes en paralelo en los glosa
 
 
 def max_terms():
+    # La generación corre en un hilo sin petición: allí el tope lo da la reserva de cupo del trabajo.
+    ticket = getattr(g, 'generation_ticket', None) if has_app_context() else None
+    if ticket:
+        return ticket['terms']
     if has_request_context():
-        ticket = getattr(g, 'generation_ticket', None)
-        if ticket:
-            return ticket['terms']
         from auth import current_user
         user = current_user()
         if user:

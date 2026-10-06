@@ -117,6 +117,15 @@ python tools/fix_logos.py --check  # solo informa, sin modificar nada
 
 El script recorta los márgenes vacíos del logo (en Word todos se dibujan con el mismo alto, 3 cm, y un margen vacío haría que se vea más pequeño que los demás), limita su altura a 600 px y crea su **miniatura web** en `static/logos/thumbs/` (WebP sin pérdida, máximo 320 × 180 px, misma proporción). La landing usa solo las miniaturas: pesan ~25 KB en vez de ~180 KB y el cambio de logo de la portada de muestra no se traba. Si falta una miniatura la web usa el logo completo y todo funciona, solo que más pesado; `pytest` avisa cuando alguna falta o quedó desactualizada.
 
+## ⏱️ Generación en segundo plano
+
+Generar un documento puede tardar varios minutos (modelos lentos, búsquedas, bibliografía), y los proxies cortan las peticiones largas: Azure responde `504 GatewayTimeout` a los ~230 s aunque el servidor termine bien. Por eso `POST /process_form` solo valida y termina al instante; el documento se genera en un hilo (`jobs.py`) y la página `/generating/<token>` consulta su avance real (tabla `generation_jobs`), pasa sola a la descarga y, si el usuario cierra la página, el documento aparece igual en *Mis informes*.
+
+- Un documento a la vez por usuario, y como máximo `GENERATION_MAX_CONCURRENT` (8) a la vez por proceso.
+- Mientras corre, el hilo late cada 30 s. Si el proceso muere (reinicio, despliegue), a los 3 minutos el trabajo se cierra como interrumpido **y el cupo se devuelve** (una sola vez).
+- El registro del servidor muestra el tiempo de cada etapa (`Generación a1b2c3d4: etapa "content" a los 12.0 s`), útil para ver dónde se va el tiempo.
+- Con varias instancias funciona igual: el avance está en la base de datos, no en memoria.
+
 ## 🚀 Ejecución del Servidor de Desarrollo
 
 Una vez completada la instalación, inicia el servidor local:

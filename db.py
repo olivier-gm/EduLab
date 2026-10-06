@@ -88,6 +88,25 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
 
+-- Generaciones de documentos en segundo plano: la petición HTTP termina enseguida (un proxy corta las
+-- que pasan de ~230 s) y la página consulta el avance con `token`.
+CREATE TABLE IF NOT EXISTS generation_jobs (
+    id            {PK},
+    token         TEXT NOT NULL UNIQUE,
+    user_id       INTEGER NOT NULL REFERENCES users(id),
+    status        TEXT NOT NULL DEFAULT 'running',   -- running | done | error
+    stage         TEXT NOT NULL DEFAULT 'prepare',
+    message       TEXT NOT NULL DEFAULT '',
+    document_kind TEXT NOT NULL DEFAULT 'report',
+    result_stem   TEXT,
+    warnings      TEXT NOT NULL DEFAULT '[]',
+    ticket        TEXT NOT NULL DEFAULT '{}',        -- reserva de cupo, para devolverla si falla
+    created_at    TEXT NOT NULL DEFAULT {NOW},
+    updated_at    TEXT NOT NULL DEFAULT {NOW}
+);
+
+CREATE INDEX IF NOT EXISTS idx_generation_jobs_user_id ON generation_jobs(user_id);
+
 -- Solicitudes de registro: nunca son usuarios ni permiten iniciar sesión.
 CREATE TABLE IF NOT EXISTS pending_registrations (
     email TEXT PRIMARY KEY,
@@ -1100,6 +1119,124 @@ def get_dashboard_stats(days=30):
     totals['period_manual'] = sum(row['manual'] for row in daily)
     totals['average_tokens'] = round(totals['period_tokens'] / totals['period_ai']) if totals['period_ai'] else 0
     return totals, daily
+
+
+# ── Generaciones en segundo plano ─────────────────────────────────────
+#
+# La petición que las inicia termina enseguida. Mientras una generación corre, su hilo "late"
+# (set_job_stage / touch_job); si el proceso muere (reinicio, despliegue) deja de latir y pasados
+# JOB_STALE_SECONDS cualquiera que consulte el trabajo lo da por fallido y devuelve el cupo.
+# Solo quien logra pasar el estado de 'running' a 'done'/'error' cierra el trabajo y, si falló,
+# devuelve el cupo: así un cupo nunca se devuelve dos veces.
+
+JOB_STALE_SECONDS = 180
+JOB_KEEP_HOURS = 48
+TICKET_KEYS = ('source', 'cycle', 'hours', 'terms', 'free_reserved')
+
+
+def job_ticket(ticket):
+    """Solo lo necesario de la reserva de cupo, serializable."""
+    return {key: ticket[key] for key in TICKET_KEYS if ticket and key in ticket}
+
+
+def create_job(user_id, document_kind, ticket):
+    token = uuid.uuid4().hex
+    now = _utcnow().strftime(DATETIME_FMT)
+    db = get_db()
+    db.execute(
+        'INSERT INTO generation_jobs (token, user_id, document_kind, ticket, created_at, updated_at) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+        (token, user_id, document_kind, json.dumps(job_ticket(ticket)), now, now))
+    db.commit()
+    return token
+
+
+def get_job(token):
+    return get_db().execute('SELECT * FROM generation_jobs WHERE token = ?', (token,)).fetchone()
+
+
+def active_job(user_id):
+    """El trabajo en curso (y vivo) del usuario, si lo hay: solo se genera un documento a la vez."""
+    cutoff = (_utcnow() - timedelta(seconds=JOB_STALE_SECONDS)).strftime(DATETIME_FMT)
+    return get_db().execute(
+        "SELECT * FROM generation_jobs WHERE user_id = ? AND status = 'running' AND updated_at > ? "
+        'ORDER BY id DESC LIMIT 1', (user_id, cutoff)).fetchone()
+
+
+def set_job_stage(token, stage):
+    db = get_db()
+    db.execute("UPDATE generation_jobs SET stage = ?, updated_at = ? WHERE token = ? AND status = 'running'",
+               (stage, _utcnow().strftime(DATETIME_FMT), token))
+    db.commit()
+
+
+def touch_job(token):
+    db = get_db()
+    db.execute("UPDATE generation_jobs SET updated_at = ? WHERE token = ? AND status = 'running'",
+               (_utcnow().strftime(DATETIME_FMT), token))
+    db.commit()
+
+
+def complete_job(token, result_stem, warnings):
+    """True si este trabajo seguía en curso y quedó terminado."""
+    db = get_db()
+    cursor = db.execute(
+        "UPDATE generation_jobs SET status = 'done', stage = 'done', result_stem = ?, warnings = ?, updated_at = ? "
+        "WHERE token = ? AND status = 'running'",
+        (result_stem, json.dumps(warnings, ensure_ascii=False), _utcnow().strftime(DATETIME_FMT), token))
+    db.commit()
+    return cursor.rowcount == 1
+
+
+def fail_job(token, message, refund=True):
+    """Marca el trabajo como fallido y devuelve el cupo reservado. True si este llamado lo cerró."""
+    job = get_job(token)
+    if job is None:
+        return False
+    # Cierre y devolución del cupo en una sola transacción: nadie ve el trabajo fallido sin que el cupo
+    # esté devuelto, y si el proceso muere a medias no se pierde (el trabajo sigue 'running' y se reintenta).
+    with transaction() as conn:
+        cursor = conn.execute(
+            "UPDATE generation_jobs SET status = 'error', stage = 'error', message = ?, updated_at = ? "
+            "WHERE token = ? AND status = 'running'",
+            (message, _utcnow().strftime(DATETIME_FMT), token))
+        if cursor.rowcount != 1:
+            return False
+        if refund:
+            refund_generation(job['user_id'], json.loads(job['ticket'] or '{}') or {'source': 'free'})
+    return True
+
+
+STALE_MESSAGE = ('La generación se interrumpió porque el servidor se reinició o dejó de responder. '
+                 'No se te descontó ningún documento: inténtalo de nuevo.')
+
+
+def reap_stale_jobs():
+    """Cierra como fallidos los trabajos que dejaron de latir. Devuelve cuántos cerró."""
+    cutoff = (_utcnow() - timedelta(seconds=JOB_STALE_SECONDS)).strftime(DATETIME_FMT)
+    rows = get_db().execute(
+        "SELECT token FROM generation_jobs WHERE status = 'running' AND updated_at <= ?", (cutoff,)).fetchall()
+    return sum(1 for row in rows if fail_job(row['token'], STALE_MESSAGE))
+
+
+def purge_old_jobs():
+    cutoff = (_utcnow() - timedelta(hours=JOB_KEEP_HOURS)).strftime(DATETIME_FMT)
+    db = get_db()
+    db.execute("DELETE FROM generation_jobs WHERE status != 'running' AND updated_at <= ?", (cutoff,))
+    db.commit()
+
+
+def consume_job_warnings(token):
+    """Los avisos del trabajo (una sola vez: no se repiten al recargar la página)."""
+    job = get_job(token)
+    if job is None:
+        return []
+    warnings = json.loads(job['warnings'] or '[]')
+    if warnings:
+        db = get_db()
+        db.execute("UPDATE generation_jobs SET warnings = '[]' WHERE token = ?", (token,))
+        db.commit()
+    return warnings
 
 
 # ── Limpieza de archivos vencidos (la usa retention.py) ───────────────

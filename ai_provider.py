@@ -1,6 +1,7 @@
 """Configuración de IA y adaptación de OpenRouter al flujo existente de Gemini."""
 import base64
 import copy
+import json
 import logging
 import os
 from contextvars import ContextVar
@@ -266,9 +267,14 @@ def _openrouter(model, key, config, contents, effort=None):
         body['reasoning'] = {'effort': effort}
         if body.get('max_tokens'):
             body['max_tokens'] += REASONING_HEADROOM[effort]
+    root_array_schema = bool(config.response_json_schema and config.response_json_schema.get('type') == 'array')
     if config.response_json_schema:
+        schema = config.response_json_schema
+        if root_array_schema:
+            # OpenAI-compatible strict structured outputs reject an array at the schema root.
+            schema = {'type': 'object', 'properties': {'items': schema}, 'required': ['items']}
         body['response_format'] = {'type': 'json_schema', 'json_schema': {
-            'name': 'document', 'strict': True, 'schema': _strict_schema(config.response_json_schema)}}
+            'name': 'document', 'strict': True, 'schema': _strict_schema(schema)}}
     if config.tools:
         body['tools'] = [{'type': 'openrouter:web_search', 'parameters': {'engine': 'native'}}]
         body['max_tool_calls'] = 3
@@ -303,6 +309,14 @@ def _openrouter(model, key, config, contents, effort=None):
     text = message.get('content') or ''
     if isinstance(text, list):
         text = '\n'.join(p.get('text', '') for p in text if p.get('type') == 'text')
+    if root_array_schema:
+        try:
+            wrapped = json.loads(text)
+            if not isinstance(wrapped, dict) or not isinstance(wrapped.get('items'), list):
+                raise ValueError('La respuesta no incluye el arreglo esperado.')
+            text = json.dumps(wrapped['items'], ensure_ascii=False)
+        except (TypeError, ValueError) as exc:
+            raise IA.GenerationError('empty', 'OpenRouter devolvió una respuesta estructurada ilegible.') from exc
     chunks = []
     for annotation in message.get('annotations') or []:
         if annotation.get('type') == 'url_citation':

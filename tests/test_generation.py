@@ -509,8 +509,8 @@ def test_unified_form_uses_selected_institution(client, monkeypatch, fake_docume
     data = {'instituto': institution, 'title': 'Biología', 'u': 'Institución de prueba',
             'global-mode': 'standard' if kind == 'manual' else 'ia', 'body': 'Texto manual.',
             'document_kind': 'glossary' if kind == 'glossary' else 'report', 'glossary_count': '1', 'fuente': 'tnr'}
-    response = client.post('/process_form', data=data)
-    assert '/choose_file/' in response.location
+    response = client.post('/process_form', data=data, follow_redirects=True)
+    assert '/choose_file/' in response.request.path                    # generación -> espera -> descarga
     assert captured['template'] == template and captured['doc_type'] == expected_type
     assert captured['font_name'] == 'Times New Roman'
     assert ('[estado]' in captured['replacements']) == (expected_type == 'bach')

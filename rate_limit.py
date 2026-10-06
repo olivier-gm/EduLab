@@ -198,6 +198,9 @@ def init_app(app):
         # Archivos estáticos no cuentan.
         if request.path.startswith('/static/'):
             return None
+        # El avance de una generación se consulta cada pocos segundos: tiene su propio límite por usuario.
+        if request.endpoint == 'generation_status':
+            return None
         key = f'global:{_client_ip()}'
         allowed, retry_after = _hit(key, global_limit, 60)
         if not allowed:

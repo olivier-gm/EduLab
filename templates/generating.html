@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Generando tu documento · EduLab</title>
+  <!-- Sin JavaScript la página se recarga sola: en cuanto el documento está listo, redirige a la descarga. -->
+  <noscript><meta http-equiv="refresh" content="6"></noscript>
+
+  {% include "app_icons.html" %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
+
+  <script defer src="{{ url_for('static', filename='js/generating.js', v='1') }}"></script>
+</head>
+
+<body>
+
+  <!-- Mismo aspecto que el overlay del formulario, para que el paso de una pantalla a otra no se note. -->
+  <div class="loader is-on" id="loader" role="status" aria-live="polite"
+    data-status-url="{{ url_for('generation_status', token=token) }}" data-kind="{{ kind }}"
+    data-documents-url="{{ url_for('my_documents') }}">
+    <div class="loader__box">
+      <div class="loader__ring"><i class="bx bx-shape-triangle"></i></div>
+
+      <h2 class="loader__title">Generando tu documento</h2>
+      <p class="loader__msg" id="loader-msg">Ordenando los datos de tu portada…</p>
+
+      <div class="bar">
+        <div class="bar__fill" id="loader-bar"></div>
+      </div>
+      <span class="bar__pct" id="loader-pct">0%</span>
+
+      <div class="loader__steps">
+        {% if kind == 'glossary' %}
+        <div class="loader__step" data-lstep="1"><i class="bx bx-circle"></i> Preparando la portada</div>
+        <div class="loader__step" data-lstep="2"><i class="bx bx-circle"></i> Revisando los términos</div>
+        <div class="loader__step" data-lstep="3"><i class="bx bx-circle"></i> Definiendo los términos</div>
+        <div class="loader__step" data-lstep="4"><i class="bx bx-circle"></i> Comprobando el glosario</div>
+        <div class="loader__step" data-lstep="5"><i class="bx bx-circle"></i> Armando el Word y el PDF</div>
+        {% else %}
+        <div class="loader__step" data-lstep="1"><i class="bx bx-circle"></i> Preparando la portada</div>
+        <div class="loader__step" data-lstep="2"><i class="bx bx-circle"></i> Validando el título</div>
+        <div class="loader__step" data-lstep="3"><i class="bx bx-circle"></i> Redactando el desarrollo</div>
+        <div class="loader__step" data-lstep="4"><i class="bx bx-circle"></i> Introducción, conclusión y bibliografía</div>
+        <div class="loader__step" data-lstep="5"><i class="bx bx-circle"></i> Armando el Word y el PDF</div>
+        {% endif %}
+      </div>
+
+      <p class="loader__foot" id="loader-foot">
+        Puede tardar unos minutos. Si cierras esta página el documento sigue generándose y aparece en
+        <a href="{{ url_for('my_documents') }}">Mis informes</a>.
+      </p>
+    </div>
+  </div>
+
+</body>
+
+</html>

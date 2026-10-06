@@ -159,7 +159,9 @@ def with_generation_quota(view):
                 return redirect_to_plans('glossary_bibliography_unavailable')
             return view(*args, **kwargs)
         finally:
-            if not ticket.get('done'):
+            # 'handed_off': la generación quedó en un trabajo en segundo plano, que cierra el cupo
+            # (lo consume al terminar o lo devuelve si falla); aquí ya no se toca.
+            if not ticket.get('done') and not ticket.get('handed_off'):
                 db.refund_generation(user['id'], ticket)
             g.pop('generation_ticket', None)
     return run

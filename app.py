@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, send_file, session, flash, jsonify, abort
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from flask import g
@@ -26,6 +26,7 @@ from glossary import extract_terms, parse_terms, generate_glossary, generate_bib
 from report_scan import extract_assignment
 
 import db
+import jobs
 import landing
 import ai_provider
 import rate_limit
@@ -43,6 +44,8 @@ app = Flask(__name__)
 # que es lo que protege las acciones del panel admin de peticiones falsas.
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024
+# Las generaciones corren en segundo plano (jobs.py); bajo pytest, en el acto y dentro de la petición.
+app.config['GENERATION_INLINE'] = 'pytest' in sys.modules
 app.secret_key = os.getenv('SECRET_KEY', '7f8b9a2c3d4e5f608192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8')
 
 
@@ -353,25 +356,37 @@ def upload_too_large(error):
         return jsonify(error='El archivo supera el límite de 10 MB.'), 413
     return form_error('El archivo o el formulario es demasiado grande (máximo 10 MB por archivo).')
 
+class JobFailed(Exception):
+    """La generación no pudo completarse; el mensaje es lo que se le muestra al usuario."""
+
+
+def _stage(token, stage, started):
+    """Etapa que ve el usuario en la página de espera; queda también en el registro con su tiempo,
+    para saber dónde se va el tiempo cuando una generación tarda."""
+    db.set_job_stage(token, stage)
+    logging.info('Generación %s: etapa "%s" a los %.1f s', token[:8], stage, time.time() - started)
+
+
 @app.route('/process_form', methods=['POST'])
 @login_required
 @rate_limit.rate_limit(10, 60, key_func=rate_limit.per_user)
 @plans.with_generation_quota
 def process_form():
+    """Valida lo barato y deja la generación corriendo en segundo plano (ver jobs.py): la petición
+    termina al instante, así ningún proxy la corta por lenta que sea la IA."""
     user = current_user()
 
     form_data = request.form
     institution = form_data.get('instituto', 'universidad')
     if institution not in ('universidad', 'bachiller'):
         return form_error('Elige universidad o bachillerato.')
-    document_type = 'bach' if institution == 'bachiller' else 'uni'
     document_kind = form_data.get('document_kind', 'report')
     if document_kind not in ('report', 'glossary'):
         return form_error('Elige trabajo normal o glosario.')
     is_glossary = document_kind == 'glossary'
     manual_mode = not is_glossary and form_data.get('global-mode') == 'standard'
 
-    # Se valida ANTES de llamar a Gemini: un usuario sin permiso no debe
+    # Se valida ANTES de llamar a la IA: un usuario sin permiso no debe
     # gastar tokens. Con IA y manual hay reglas distintas (ver plans.py).
     allowed, reason = plans.generation_access(user, 'manual' if manual_mode else 'ai')
     if not allowed:
@@ -382,6 +397,65 @@ def process_form():
     title_error = validate_title_field(form_data.get('title'))
     if title_error:
         return form_error(title_error)
+
+    # Un documento a la vez por usuario: un segundo envío (o recargar) vuelve al avance del que ya corre.
+    db.reap_stale_jobs()
+    running = db.active_job(user['id'])
+    if running is not None:
+        return redirect(url_for('generating', token=running['token']))
+    if not jobs.try_acquire():
+        return form_error('Hay muchos documentos generándose en este momento. Inténtalo de nuevo en un minuto.')
+
+    try:
+        inputs = {
+            'form': form_data.to_dict(flat=True),
+            'document_type': 'bach' if institution == 'bachiller' else 'uni',
+            'document_kind': document_kind,
+            # Lo guardado en la sesión se toma aquí: el hilo de fondo no tiene sesión.
+            'scan_tokens': session.pop('scan_extraction_tokens', 0),    # lectura de foto previa, si hubo
+            'glossary_tokens': session.pop('glossary_extraction_tokens', 0) if is_glossary else 0,
+            'prevalidated': session.pop('validated_title', {}),
+        }
+        ticket = g.generation_ticket
+        token = db.create_job(user['id'], document_kind, ticket)
+        ticket['handed_off'] = True            # el trabajo cierra el cupo (lo consume o lo devuelve)
+    except Exception:
+        jobs.release()
+        raise
+    job_ticket = db.job_ticket(ticket)
+    jobs.start(app, token, lambda: _run_generation(token, user['id'], inputs, job_ticket))
+    return redirect(url_for('generating', token=token))
+
+
+def _run_generation(token, user_id, inputs, ticket):
+    """Corre en un hilo, sin petición HTTP: genera el documento y deja el resultado en el trabajo."""
+    g.generation_ticket = ticket                 # tope de términos y registro del documento
+    ai_provider.generation_trace.set([])
+    started = time.time()
+    try:
+        stem, warnings = _generate_document(token, user_id, inputs, started)
+    except JobFailed as exc:
+        db.fail_job(token, str(exc), refund=not ticket.get('done'))
+        logging.info('Generación %s fallida a los %.1f s: %s', token[:8], time.time() - started, exc)
+    except Exception:
+        logging.exception('Error inesperado generando el documento (trabajo %s)', token[:8])
+        db.fail_job(token, 'Ocurrió un error inesperado generando el documento. Inténtalo de nuevo; '
+                           'si se repite, avisa al administrador.', refund=not ticket.get('done'))
+    else:
+        if db.complete_job(token, stem, warnings):
+            logging.info('Generación %s terminada en %.1f s', token[:8], time.time() - started)
+        else:
+            logging.warning('La generación %s terminó a los %.1f s, pero ya estaba cerrada como interrumpida.',
+                            token[:8], time.time() - started)
+
+
+def _generate_document(token, user_id, inputs, started):
+    """El trabajo pesado de process_form. Devuelve (nombre del archivo, avisos) o lanza JobFailed."""
+    form_data = inputs['form']
+    document_type = inputs['document_type']
+    document_kind = inputs['document_kind']
+    is_glossary = document_kind == 'glossary'
+    manual_mode = not is_glossary and form_data.get('global-mode') == 'standard'
 
     processor = FormProcessor(form_data, document_type)
     # Mayúsculas y tildes del título y subtítulos (modelo ligero + control de código + JEV).
@@ -403,10 +477,10 @@ def process_form():
     conclusion = ''
     bibliography = ''
     glossary_entries = None
-    # Lista compartida donde cada llamada a Gemini anota sus tokens
+    # Lista compartida donde cada llamada a la IA anota sus tokens
     # (ver IA._record_usage); se suma al final para guardarla en la BD.
-    usage_sink.append(session.pop('scan_extraction_tokens', 0))   # lectura de foto previa, si hubo
-    prevalidated = session.pop('validated_title', {})
+    usage_sink.append(inputs['scan_tokens'])
+    prevalidated = inputs['prevalidated']
     title_validated = (prevalidated.get('title') == processor.original_title.strip().casefold()
                        and 0 <= time.time() - prevalidated.get('at', 0) < 300)
     if title_validated:
@@ -429,21 +503,24 @@ def process_form():
                     raise ValueError(f'El glosario debe tener entre 1 y {max_terms()} términos.')
             else:
                 raise ValueError('Elige el tema o una lista de términos para el glosario.')
-            usage_sink.append(session.pop('glossary_extraction_tokens', 0))
+            usage_sink.append(inputs['glossary_tokens'])
+            _stage(token, 'terms', started)
             check_glossary(processor.title, terms, usage_sink=usage_sink,
                            include_title=not title_validated)
+            _stage(token, 'definitions', started)
             glossary_entries = generate_glossary(processor.title, count, terms=terms,
                 bibliography=incluir_bibliografia, usage_sink=usage_sink)
             # Las listas grandes por tema ya se validan antes de definirlas;
             # el generador exige después conservar exactamente esa lista.
             if terms is None and count <= 25:
+                _stage(token, 'check', started)
                 check_glossary(processor.title, [entry['term'] for entry in glossary_entries],
                                usage_sink=usage_sink, include_title=False)
             body = ''
         except ValueError as exc:
-            return form_error(str(exc))
+            raise JobFailed(str(exc))
         except GenerationError as exc:
-            return form_error(f'No se pudo generar el glosario. {exc.user_message}')
+            raise JobFailed(f'No se pudo generar el glosario. {exc.user_message}')
     elif manual_mode:
         body = processor.body
         if incluir_introduccion:
@@ -461,24 +538,28 @@ def process_form():
         #    título y antes se trataba igual (volvía al inicio sin decir nada).
         try:
             if not title_validated:
+                _stage(token, 'validate', started)
                 verdict = check_title(processor.title, usage_sink=usage_sink)
                 if not verdict.valid:
-                    return form_error(verdict.message(processor.title))
+                    raise JobFailed(verdict.message(processor.title))
         except GenerationError as e:
-            return form_error(f'No se pudo validar el título. {e.user_message}')
+            raise JobFailed(f'No se pudo validar el título. {e.user_message}')
 
         # 2) Desarrollo del trabajo (con búsqueda en tiempo real si está disponible).
         try:
+            _stage(token, 'content', started)
             body = generate_essay_content(processor.title, processor.subtitles,
                                           usage_sink=usage_sink, warnings=warnings)
         except GenerationError as e:
-            return form_error(f'No se pudo generar el desarrollo del trabajo. {e.user_message}')
+            raise JobFailed(f'No se pudo generar el desarrollo del trabajo. {e.user_message}')
 
         # 3) La introducción y la conclusión solo dependen del título y del
         #    cuerpo ya generado, no una de la otra, así que se piden en
-        #    paralelo en vez de esperar una llamada tras otra a Gemini.
+        #    paralelo en vez de esperar una llamada tras otra a la IA.
         #    Sólo se piden las que el usuario dejó activadas. Si una falla el
         #    documento se entrega igual, avisando cuál faltó y por qué.
+        if incluir_introduccion or incluir_conclusion:
+            _stage(token, 'sections', started)
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = {}
             if incluir_introduccion:
@@ -498,10 +579,12 @@ def process_form():
 
         if incluir_bibliografia:
             try:
+                _stage(token, 'bibliography', started)
                 bibliography = generate_bibliography(processor.title, body, usage_sink=usage_sink)
             except GenerationError as exc:
                 warnings.append(f'No se incluyó la bibliografía. {exc.user_message}')
 
+    _stage(token, 'build', started)
     input_doc = 'input/plantilla_bach.docx' if document_type == 'bach' else 'input/plantilla.docx'
     input_doc2 = 'input/plantilla_bachempty.docx' if document_type == 'bach' else 'input/plantillaempty.docx'
     # Check if the file exists
@@ -521,28 +604,70 @@ def process_form():
                                             font_name='Times New Roman' if form_data.get('fuente') == 'tnr' else 'Arial')
     except Exception:
         logging.exception('Error armando el documento "%s"', head_title)
-        return form_error('Ocurrió un error armando el documento. Inténtalo de nuevo; '
-                          'si se repite, avisa al administrador.')
+        raise JobFailed('Ocurrió un error armando el documento. Inténtalo de nuevo; '
+                        'si se repite, avisa al administrador.')
 
     if not os.path.isfile(docx_output):
-        return form_error('El documento no se pudo guardar. Inténtalo de nuevo.')
+        raise JobFailed('El documento no se pudo guardar. Inténtalo de nuevo.')
     if not os.path.isfile(docx_output[:-5] + '.pdf'):
         warnings.append('No se pudo generar el PDF; solo está disponible la versión Word.')
     try:
         storage.publish(full_stem)
     except storage.StorageError:
-        return form_error('No se pudo guardar el documento. Inténtalo de nuevo.')
+        raise JobFailed('No se pudo guardar el documento. Inténtalo de nuevo.')
 
-    db.record_document(user['id'], head_title, document_type, tokens_used=sum(usage_sink),
+    db.record_document(user_id, head_title, document_type, tokens_used=sum(usage_sink),
                        mode='manual' if manual_mode else 'ai',
                        file_stem=full_stem)
-    session['file_generated'] = True
-    session['document_kind'] = document_kind
-    for text in warnings:
-        flash(text, 'warning')
+    return full_stem, warnings
 
-    # Redirect to a new page or indicate success
-    return redirect(url_for('choose_file', filename=full_stem))
+
+def _own_job(token):
+    """El trabajo si es del usuario con sesión (404 si no). Si su proceso murió lo da por fallido."""
+    job = db.get_job(token)
+    if job is None or job['user_id'] != current_user()['id']:
+        abort(404)
+    if job['status'] == 'running':
+        db.reap_stale_jobs()
+        job = db.get_job(token)
+    return job
+
+
+@app.route('/generating/<token>')
+@login_required
+def generating(token):
+    """Página de espera: muestra el avance real y pasa sola a la descarga (o al error) al terminar."""
+    job = _own_job(token)
+    if job['status'] != 'running':
+        return redirect(url_for('finish_generation', token=token))
+    return render_template('generating.html', token=token, kind=job['document_kind'])
+
+
+@app.route('/generating/<token>/status')
+@login_required
+@rate_limit.rate_limit(90, 60, key_func=rate_limit.per_user)
+def generation_status(token):
+    job = _own_job(token)
+    response = jsonify(status=job['status'], stage=job['stage'], kind=job['document_kind'],
+                       next=url_for('finish_generation', token=token))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.route('/generating/<token>/finish')
+@login_required
+def finish_generation(token):
+    """Termina el flujo de la generación: a la descarga si salió bien, al formulario con el motivo si no."""
+    job = _own_job(token)
+    if job['status'] == 'running':
+        return redirect(url_for('generating', token=token))
+    if job['status'] == 'error':
+        return form_error(job['message'] or 'No se pudo generar el documento. Inténtalo de nuevo.')
+    session['file_generated'] = True
+    session['document_kind'] = job['document_kind']
+    for text in db.consume_job_warnings(token):
+        flash(text, 'warning')
+    return redirect(url_for('choose_file', filename=job['result_stem']))
 
 
 @app.route('/choose_file/<filename>')
@@ -681,7 +806,7 @@ logging.info('Base de datos: %s · Archivos: %s',
 # Limpieza automática de archivos vencidos (ver retention.py). No arranca bajo
 # pytest para que las pruebas no borren nada de output/.
 if 'pytest' not in sys.modules:
-    retention.start_background_cleanup()
+    retention.start_background_cleanup(app)
 
 
 if __name__ == '__main__':

@@ -59,7 +59,7 @@ def test_openrouter_search_failure_uses_ai_bibliography(monkeypatch):
         calls.append(json)
         if json.get('tools'):
             return NS(status_code=429, json=lambda: {'error': {'message': 'secret must not be logged'}})
-        return NS(status_code=200, json=lambda: {'choices': [{'message': {'content': '["OpenStax. Biology 2e."]'}}]})
+        return NS(status_code=200, json=lambda: {'choices': [{'message': {'content': '{"items":["OpenStax. Biology 2e."]}'}}]})
     monkeypatch.setattr(ai_provider.requests, 'post', post)
     try:
         assert glossary.generate_bibliography('Biología', 'Células') == 'OpenStax. Biology 2e.'
@@ -117,6 +117,24 @@ def test_gpt6_omits_unsupported_sampling_parameters(monkeypatch, model):
     assert result.text == 'Respuesta de prueba'
     assert bodies[0]['reasoning'] == {'effort': 'high'}
     assert bodies[0]['provider']['require_parameters'] is True
+
+
+def test_openrouter_wraps_root_array_schema_and_restores_array_response(monkeypatch):
+    bodies = []
+
+    def post(*args, **kwargs):
+        bodies.append(kwargs['json'])
+        return NS(status_code=200, json=lambda: {
+            'choices': [{'message': {'content': '{"items":["A","B"]}'}}]})
+
+    monkeypatch.setattr(ai_provider.requests, 'post', post)
+    schema = {'type': 'array', 'items': {'type': 'string'}}
+    response = ai_provider._openrouter('openai/gpt-6-luna', 'key',
+        types.GenerateContentConfig(response_json_schema=schema), ['Lista'])
+    submitted = bodies[0]['response_format']['json_schema']['schema']
+    assert submitted['type'] == 'object' and submitted['required'] == ['items']
+    assert submitted['properties']['items']['type'] == 'array'
+    assert json.loads(response.text) == ['A', 'B']
 
 
 def test_openrouter_404_explains_routing_without_claiming_model_missing(monkeypatch):
