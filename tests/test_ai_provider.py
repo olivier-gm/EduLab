@@ -98,3 +98,31 @@ def test_openrouter_errors_do_not_expose_provider_body(monkeypatch, status, code
         ai_provider._openrouter('google/gemini-3.8-flash', 'key', types.GenerateContentConfig(), ['Hola'])
     assert 'secret-api-key' not in str(exc.value)
     assert IA.classify_error(exc.value).code == code
+
+
+@pytest.mark.parametrize('model', ['openai/gpt-6-sol', 'openai/gpt-6-luna'])
+def test_gpt6_omits_unsupported_sampling_parameters(monkeypatch, model):
+    bodies = []
+
+    def post(*args, **kwargs):
+        body = kwargs['json']
+        bodies.append(body)
+        assert 'temperature' not in body and 'top_p' not in body
+        return NS(status_code=200, json=lambda: {
+            'choices': [{'message': {'content': 'Respuesta de prueba'}}]})
+
+    monkeypatch.setattr(ai_provider.requests, 'post', post)
+    result = ai_provider._openrouter(model, 'key', types.GenerateContentConfig(
+        temperature=0.7, top_p=0.9, max_output_tokens=1000), ['Hola'], 'high')
+    assert result.text == 'Respuesta de prueba'
+    assert bodies[0]['reasoning'] == {'effort': 'high'}
+    assert bodies[0]['provider']['require_parameters'] is True
+
+
+def test_openrouter_404_explains_routing_without_claiming_model_missing(monkeypatch):
+    monkeypatch.setattr(ai_provider.requests, 'post', lambda *a, **k: NS(
+        status_code=404, json=lambda: {'error': {'message': 'No endpoints found'}}))
+    with pytest.raises(IA.GenerationError) as exc:
+        ai_provider._openrouter('openai/gpt-6-sol', 'key', types.GenerateContentConfig(), ['Hola'])
+    assert 'proveedor disponible' in exc.value.user_message
+    assert 'no existe' not in exc.value.user_message

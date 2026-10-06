@@ -243,6 +243,9 @@ def _openrouter(model, key, config, contents, effort=None):
     body = {'model': model, 'messages': messages, 'provider': {'require_parameters': True}}
     for name, value in [('temperature', config.temperature), ('top_p', config.top_p),
                         ('max_tokens', config.max_output_tokens)]:
+        # GPT-6 no anuncia estos parámetros; require_parameters descartaría todos sus proveedores.
+        if model.startswith('openai/gpt-6') and name in ('temperature', 'top_p'):
+            continue
         if value is not None:
             body[name] = value
     if effort in REASONING_HEADROOM:
@@ -270,6 +273,11 @@ def _openrouter(model, key, config, contents, effort=None):
         raise IA.GenerationError('unavailable', 'OpenRouter devolvió una respuesta ilegible.')
     if response.status_code >= 400 or data.get('error'):
         code = response.status_code if response.status_code >= 400 else data['error'].get('code', 502)
+        if code == 404:
+            raise IA.GenerationError('bad_request',
+                'OpenRouter no encontró un proveedor disponible para ese modelo y esa configuración. '
+                'Revisa el ID del modelo, los parámetros y las restricciones de tu cuenta.',
+                f'OpenRouter HTTP 404; modelo={model}')
         error = requests.HTTPError(f'OpenRouter HTTP {code}')
         error.code = code
         raise error
