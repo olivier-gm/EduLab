@@ -43,7 +43,8 @@ def test_openrouter_search_json_files_and_tokens(monkeypatch):
         assert parts[0]['file']['file_data'].startswith('data:application/pdf;base64,')
         assert parts[1]['image_url']['url'].startswith('data:image/png;base64,')
         assert calls[-1]['plugins'][0]['pdf']['engine'] == 'native'
-        assert calls[-1]['response_format']['json_schema']['schema'] == schema
+        # Se envía en modo estricto (lo exigen los modelos de OpenAI): sin propiedades extra y todas requeridas.
+        assert calls[-1]['response_format']['json_schema']['schema'] == {**schema, 'additionalProperties': False, 'required': ['terms']}
         assert json.loads(IA._extract_text(response))['terms'] == ['Célula']
     finally:
         ai_provider.request_settings.reset(token)

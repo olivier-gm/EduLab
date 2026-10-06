@@ -147,6 +147,10 @@ SETTING_DEFAULTS = {
     'gemini_model': '',  # Vacío conserva el modelo del entorno actual.
     'openrouter_model': 'google/gemini-3.8-flash',
     # Modelos más ligeros para tareas pequeñas (mayúsculas y tildes del título). Vacío = el principal.
+    # Proveedor del modelo ligero: 'same' (el activo), 'gemini' u 'openrouter'. Si falla, el fallback usa el otro.
+    'light_provider': 'same',
+    # Esfuerzo de razonamiento del modelo principal en OpenRouter: '' (el del modelo), low, medium, high o xhigh.
+    'openrouter_reasoning': '',
     'gemini_light_model': '',
     'openrouter_light_model': '',
     'gemini_api_key': '',  # Cifradas; nunca se rellenan en el HTML.

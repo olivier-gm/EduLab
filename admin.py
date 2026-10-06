@@ -150,6 +150,25 @@ def save_retention_settings():
     return redirect(url_for('admin.dashboard', msg=message) + '#retencion')
 
 
+_OPENROUTER_ID_RE = re.compile(r'[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*(:(floor|nitro))?', re.IGNORECASE)
+
+
+def _valid_model_id(prefix, model):
+    """Gemini directo: gemini-…  OpenRouter: proveedor/modelo (de cualquier proveedor), con
+    ':floor' (el precio más bajo) o ':nitro' (el más rápido) opcionales al final."""
+    if not model or len(model) > 160:
+        return False
+    if prefix == 'openrouter':
+        return _OPENROUTER_ID_RE.fullmatch(model) is not None
+    return model.startswith('gemini-') and re.fullmatch(r'[A-Za-z0-9._-]+', model) is not None
+
+
+def _model_id_error(prefix):
+    if prefix == 'openrouter':
+        return 'Escribe el ID del modelo de OpenRouter como proveedor/modelo, por ejemplo openai/gpt-6-luna o openai/gpt-6-luna:floor.'
+    return 'Escribe el ID del modelo de Gemini correcto: gemini-…'
+
+
 @admin_bp.route('/ai-settings', methods=['POST'])
 @admin_required
 def save_ai_settings():
@@ -164,13 +183,12 @@ def save_ai_settings():
     values = {'ai_provider': provider}
     for prefix, default in [('gemini', IA.MODEL_NAME), ('openrouter', 'google/gemini-3.8-flash')]:
         model = (request.form.get(f'{prefix}_model') or default).strip()
-        expected = 'google/gemini-' if prefix == 'openrouter' else 'gemini-'
-        if len(model) > 160 or not model.startswith(expected) or not re.fullmatch(r'[A-Za-z0-9._/-]+', model):
-            return back(f'Escribe el ID de Gemini correcto: {expected}…')
+        if not _valid_model_id(prefix, model):
+            return back(_model_id_error(prefix))
         values[f'{prefix}_model'] = model
         light = (request.form.get(f'{prefix}_light_model') or '').strip()
-        if light and (len(light) > 160 or not light.startswith(expected) or not re.fullmatch(r'[A-Za-z0-9._/-]+', light)):
-            return back(f'Escribe el ID del modelo ligero correcto: {expected}… (o déjalo vacío para usar el principal).')
+        if light and not _valid_model_id(prefix, light):
+            return back(_model_id_error(prefix) + ' El modelo ligero puede quedar vacío para usar el principal.')
         values[f'{prefix}_light_model'] = light
         key = (request.form.get(f'{prefix}_api_key') or '').strip()
         if key:
@@ -183,6 +201,14 @@ def save_ai_settings():
         elif request.form.get(f'clear_{prefix}_key'):
             values[f'{prefix}_api_key'] = ''
     values['fallback_enabled'] = '1' if request.form.get('fallback_enabled') else '0'
+    light_provider = request.form.get('light_provider') or 'same'
+    if light_provider not in ('same', 'gemini', 'openrouter'):
+        return back('Elige el proveedor del modelo ligero.')
+    values['light_provider'] = light_provider
+    reasoning = request.form.get('openrouter_reasoning') or ''
+    if reasoning not in ('', 'low', 'medium', 'high', 'xhigh'):
+        return back('Elige un esfuerzo de razonamiento de la lista.')
+    values['openrouter_reasoning'] = reasoning
     for prefix in ('gemini', 'openrouter'):
         values[f'{prefix}_search_enabled'] = '1' if request.form.get(f'{prefix}_search_enabled') else '0'
     proposed = {**db.get_settings(), **values}
@@ -194,6 +220,13 @@ def save_ai_settings():
         return back(exc.user_message)
     if not active_key:
         return back('Añade la clave API del proveedor que quieres activar antes de guardar.')
+    if light_provider != 'same' and light_provider != provider:
+        try:
+            _, _, light_key = ai_provider.configuration(values=proposed, provider=light_provider)
+        except IA.GenerationError as exc:
+            return back(exc.user_message)
+        if not light_key:
+            return back('Para usar ese proveedor en el modelo ligero necesitas su clave API. Añádela o elige otra opción.')
     if values['fallback_enabled'] == '1' and not other_key:
         return back('Para activar el fallback necesitas la clave API de los dos proveedores. '
                     'Añade la del otro proveedor o desactiva el fallback.')

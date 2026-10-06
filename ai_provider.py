@@ -121,7 +121,7 @@ def _call(provider, model, key, config, contents, values):
         config = _without_tools(config)
     if provider == 'gemini':
         return direct_client(key).models.generate_content(model=model, config=config, contents=contents)
-    return _openrouter(model, key, config, contents)
+    return _openrouter(model, key, config, contents, values.get('_reasoning_effort') or None)
 
 
 def _light_values(values):
@@ -142,9 +142,15 @@ def generate_content(*, model, config, contents, fallback_config=None, fallback_
     instrucciones ni ejemplos a la petición). Si no se pasan, se reusa la misma.
     """
     import IA
-    values = settings()
+    values = dict(settings())
+    # Razonamiento en OpenRouter: el del admin para el principal; las tareas pequeñas usan el mínimo
+    # común (un ligero que razona de más gasta su límite de tokens y devuelve vacío).
+    values['_reasoning_effort'] = 'low' if light else values.get('openrouter_reasoning', '')
     if light:       # tareas pequeñas (p. ej. mayúsculas y tildes): modelo ligero del admin
         values = _light_values(values)
+        if values.get('light_provider') in ('gemini', 'openrouter'):
+            # El ligero puede ir por otro proveedor que el principal; su fallback es el opuesto.
+            values['ai_provider'] = values['light_provider']
     provider, selected_model, key = configuration(model, values)
     if not key:
         raise IA.GenerationError('auth', 'Falta la clave API del proveedor seleccionado. Configúrala desde el panel admin.')
@@ -194,7 +200,27 @@ def _parts(parts):
     return result
 
 
-def _openrouter(model, key, config, contents):
+def _strict_schema(schema):
+    """Copia del esquema JSON apta para el modo estricto de OpenAI: todo objeto con
+    additionalProperties=false y todas sus propiedades en `required` (los modelos de
+    OpenAI rechazan el esquema si no; los de Google lo toleran)."""
+    if isinstance(schema, list):
+        return [_strict_schema(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    result = {key: _strict_schema(value) for key, value in schema.items()}
+    if result.get('type') == 'object' and isinstance(result.get('properties'), dict):
+        result['additionalProperties'] = False
+        result['required'] = list(result['properties'])
+    return result
+
+
+# Tokens extra de margen según el esfuerzo: en OpenRouter los tokens de razonamiento cuentan dentro de
+# max_tokens, y sin margen el texto final puede quedar cortado o vacío.
+REASONING_HEADROOM = {'low': 2000, 'medium': 6000, 'high': 16000, 'xhigh': 32000}
+
+
+def _openrouter(model, key, config, contents, effort=None):
     import IA
     messages = []
     if config.system_instruction:
@@ -213,9 +239,13 @@ def _openrouter(model, key, config, contents):
                         ('max_tokens', config.max_output_tokens)]:
         if value is not None:
             body[name] = value
+    if effort in REASONING_HEADROOM:
+        body['reasoning'] = {'effort': effort}
+        if body.get('max_tokens'):
+            body['max_tokens'] += REASONING_HEADROOM[effort]
     if config.response_json_schema:
         body['response_format'] = {'type': 'json_schema', 'json_schema': {
-            'name': 'document', 'strict': True, 'schema': config.response_json_schema}}
+            'name': 'document', 'strict': True, 'schema': _strict_schema(config.response_json_schema)}}
     if config.tools:
         body['tools'] = [{'type': 'openrouter:web_search', 'parameters': {'engine': 'native'}}]
         body['max_tool_calls'] = 3

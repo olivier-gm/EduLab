@@ -131,9 +131,17 @@
           </fieldset>
           <fieldset>
             <legend>OpenRouter</legend>
-            <label>ID del modelo de Gemini
-              <input class="input" name="openrouter_model" maxlength="160" value="{{ settings['openrouter_model'] }}" placeholder="google/gemini-3.8-flash" required>
+            <label>ID del modelo en OpenRouter
+              <input class="input" name="openrouter_model" maxlength="160" value="{{ settings['openrouter_model'] }}" placeholder="openai/gpt-6-luna:floor" required>
             </label>
+            <label>Esfuerzo de razonamiento (modelo principal)
+              <select class="input" name="openrouter_reasoning">
+                {% for value, label in [('', 'El predeterminado del modelo'), ('low', 'Bajo'), ('medium', 'Medio'), ('high', 'Alto'), ('xhigh', 'Máximo (xhigh)')] %}
+                <option value="{{ value }}" {% if settings['openrouter_reasoning'] == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <p class="admin-form__hint">Más razonamiento mejora la calidad pero gasta más tokens (y dinero) y tarda más. Se le suma margen al límite de salida para que el texto no se corte. Si el modelo no admite el nivel elegido, OpenRouter rechaza la petición.</p>
             <label>Modelo ligero (mayúsculas y tildes del título)
               <input class="input" name="openrouter_light_model" maxlength="160" value="{{ settings['openrouter_light_model'] }}" placeholder="Vacío = el mismo de arriba">
             </label>
@@ -145,6 +153,14 @@
             <label class="check"><input type="checkbox" name="openrouter_search_enabled" {% if settings['openrouter_search_enabled'] == '1' %}checked{% endif %}> Usar búsqueda web (información actual)</label>
           </fieldset>
         </div>
+        <label>Proveedor del modelo ligero
+          <select class="input" name="light_provider">
+            <option value="same" {% if settings['light_provider'] == 'same' %}selected{% endif %}>El mismo que el principal</option>
+            <option value="gemini" {% if settings['light_provider'] == 'gemini' %}selected{% endif %}>Gemini directo</option>
+            <option value="openrouter" {% if settings['light_provider'] == 'openrouter' %}selected{% endif %}>OpenRouter</option>
+          </select>
+        </label>
+        <p class="admin-form__hint">Con el fallback activado, si el ligero falla se reintenta con el modelo ligero del otro proveedor. En OpenRouter el ID puede ser de cualquier proveedor (proveedor/modelo) y terminar en <code>:floor</code> (precio más bajo) o <code>:nitro</code> (más rápido).</p>
         <p class="admin-form__hint">El modelo ligero corrige las mayúsculas y tildes del título y los subtítulos antes de generar (una llamada muy corta): conviene uno más rápido y barato que el principal. Se usa el del proveedor activo, o el del otro si el fallback entra en acción.</p>
         <p class="admin-form__hint">Con la búsqueda activada, el desarrollo y la bibliografía usan información actual de internet. Si la búsqueda falla (por ejemplo, sin cuota) se genera igual sin ella: el desarrollo avisa al usuario y la bibliografía usa referencias de IA; en ambos casos queda un aviso en el registro del servidor. En OpenRouter se solicita búsqueda nativa; la búsqueda se cobra aparte del texto generado.</p>
         <button class="btn btn--primary" type="submit"><i class="bx bx-save"></i> Guardar configuración de IA</button>
