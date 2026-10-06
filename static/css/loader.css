@@ -144,6 +144,16 @@
   color: var(--gold);
 }
 
+.loader__foot a {
+  color: var(--text-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.loader__foot a:hover {
+  color: var(--gold);
+}
+
 .loader__foot {
   margin-top: 18px;
   font-size: 0.78rem;
