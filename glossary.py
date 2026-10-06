@@ -7,6 +7,8 @@ import re
 import time
 import unicodedata
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -24,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 MAX_TERMS = 100
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+BATCH_SIZE = 25            # términos que se definen (y se investigan) por tanda
+RESEARCH_WORKERS = 4       # investigaciones de fuentes en paralelo en los glosarios grandes
 
 
 def max_terms():
@@ -75,7 +79,8 @@ def parse_terms(text):
 def _generate(contents, config, usage_sink):
     try:
         response = IA._with_retries(lambda: ai_provider.generate_content(
-            model=IA.MODEL_NAME, contents=contents, config=config), attempts=1 if config.tools else 3)
+            model=IA.MODEL_NAME, contents=contents, config=config, search_purpose='bibliography'),
+            attempts=1 if config.tools else 3)
         IA._record_usage(usage_sink, response)
         return response, IA._extract_text(response)
     except Exception as exc:
@@ -253,9 +258,9 @@ def format_source(source):
 def _source_context(title, text, usage_sink):
     # La bibliografía intenta buscar aunque la búsqueda del desarrollo esté apagada
     # (GEMINI_GOOGLE_SEARCH), pero respeta el interruptor del proveedor en el panel admin.
-    if not ai_provider.search_enabled():
-        logger.info('La búsqueda web está desactivada para el proveedor activo: la bibliografía usa referencias de IA.')
-        return [], '', 'La búsqueda web está desactivada para el proveedor activo.'
+    if not ai_provider.search_enabled(purpose='bibliography'):
+        logger.info('La búsqueda web de la bibliografía está desactivada para el proveedor activo: usa referencias de IA.')
+        return [], '', 'La búsqueda web de la bibliografía está desactivada para el proveedor activo.'
     if time.time() < IA._search_blocked_until:
         logger.info('Búsqueda en pausa por falta de cuota: la bibliografía usa referencias de IA.')
         return [], '', 'Google Search sin cuota disponible; reintento tras la pausa de 5 minutos.'
@@ -381,6 +386,37 @@ def _select_topic_terms(title, count, usage_sink, _excluded=()):
     raise IA.GenerationError('invalid', 'La IA no completó una lista de términos únicos. Inténtalo de nuevo.')
 
 
+def _research_batches(title, terms, usage_sink):
+    """Investiga las fuentes de cada tanda de BATCH_SIZE términos por separado, en paralelo.
+
+    Con una sola investigación para toda la lista, 300 términos compartían unas pocas fuentes
+    (con OpenRouter, como máximo 3 búsquedas por llamada). Así cada tanda busca las suyas.
+    Devuelve {posición del primer término de la tanda: contexto de _source_context}."""
+    starts = list(range(0, len(terms), BATCH_SIZE))
+
+    def research(start):
+        return _source_context(title, '\n'.join(terms[start:start + BATCH_SIZE]), usage_sink)
+
+    # La primera tanda va sola: si agota la cuota, las demás ven la pausa y no lanzan búsquedas
+    # que fallarían igual (todas a la vez gastarían intentos inútiles).
+    contexts = {starts[0]: research(starts[0])}
+    with ThreadPoolExecutor(max_workers=RESEARCH_WORKERS) as pool:
+        futures = [pool.submit(copy_context().run, research, start) for start in starts[1:]]
+        contexts.update({start: future.result() for start, future in zip(starts[1:], futures)})
+    return contexts
+
+
+def _record_batches_status(contexts):
+    """Una sola nota de origen para toda la bibliografía del glosario (la ve el admin)."""
+    values = list(contexts.values())
+    sources = [source for context in values for source in context[0]]
+    without = sum(1 for context in values if not context[0])
+    reason = next((context[2] for context in values if context[2]), '')
+    if sources and without:
+        reason = f'{without} de {len(values)} tandas usaron referencias de IA sin búsqueda. {reason}'.strip()
+    _bibliography_status(sources, reason)
+
+
 def generate_glossary(title, count, terms=None, bibliography=False, usage_sink=None, exclude_terms=None,
                       _context=None):
     if not isinstance(count, int) or not 1 <= count <= max_terms():
@@ -391,27 +427,32 @@ def generate_glossary(title, count, terms=None, bibliography=False, usage_sink=N
     elif count > 25:
         terms = _select_topic_terms(title, count, usage_sink)
     record_status = bibliography and _context is None
-    if record_status:
+    if record_status and count <= BATCH_SIZE:
         _context = _source_context(title, '\n'.join(terms) if terms else f'Glosario de {count} términos sobre {title}', usage_sink)
-    if count > 25:
+    if count > BATCH_SIZE:
         # Tandas de 25; cuatro reintentos adicionales ante respuestas incompletas.
+        # Con bibliografía, cada tanda investiga sus propias fuentes (en paralelo, antes de
+        # definir) y las conserva si hay que repetirla: un reintento no repite las búsquedas.
+        contexts = _research_batches(title, terms, usage_sink) if record_status else {}
         entries = []
         attempts = (count + 24) // 25 + 4
         for attempt in range(attempts):
             remaining = count - len(entries)
             if not remaining:
                 break
-            batch = terms[len(entries):len(entries) + 25] if terms is not None else None
+            start = len(entries)
+            batch = terms[start:start + BATCH_SIZE] if terms is not None else None
             try:
-                entries.extend(generate_glossary(title, min(25, remaining), batch, bibliography,
-                    usage_sink, exclude_terms=[entry['term'] for entry in entries], _context=_context))
+                entries.extend(generate_glossary(title, min(BATCH_SIZE, remaining), batch, bibliography,
+                    usage_sink, exclude_terms=[entry['term'] for entry in entries],
+                    _context=contexts.get(start, _context)))
             except IA.GenerationError as exc:
                 if exc.code != 'invalid' or attempt == attempts - 1:
                     raise
         if len(entries) != count:
             raise IA.GenerationError('invalid', 'La IA no completó todos los términos solicitados. Inténtalo de nuevo.')
         if record_status:
-            _bibliography_status(_context[0], _context[2])
+            _record_batches_status(contexts)
         return sorted(entries, key=lambda entry: alphabetic_key(entry['term']))
     sources, research, reason = _context or ([], '', '')
     ai_bibliography = bibliography and not sources

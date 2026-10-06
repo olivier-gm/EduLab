@@ -272,8 +272,9 @@ def test_bibliography_falls_back_for_reports_and_glossaries(monkeypatch, code):
     terms = [f'Término {i:03d}' for i in range(100)]
     entries = glossary.generate_glossary('Biología', 100, terms, bibliography=True)
     assert len(entries) == 100 and all(entry['reference'] == reference for entry in entries)
-    # Una búsqueda por documento, y ninguna durante la pausa tras agotar cuota.
-    assert len(searches) == (1 if code == 'quota' else 2)
+    # Una búsqueda para el informe y una por cada tanda de 25 términos del glosario (4 de 100);
+    # ninguna durante la pausa tras agotar cuota.
+    assert len(searches) == (1 if code == 'quota' else 1 + 4)
 
 
 def test_empty_grounding_falls_back_and_empty_ai_reference_is_rejected(monkeypatch):
@@ -315,3 +316,30 @@ def test_glossary_layout_and_bibliography_page(tmp_path, monkeypatch):
     assert headings[-2:] == ['Conclusión', 'Bibliografía']
     index = next(i for i, p in enumerate(doc.paragraphs) if p.text == 'Bibliografía')
     assert doc.paragraphs[index].paragraph_format.page_break_before is True
+
+
+def test_glosario_grande_investiga_las_fuentes_de_cada_tanda_y_no_repite_en_reintentos(monkeypatch):
+    monkeypatch.setattr(IA, '_search_blocked_until', 0)
+    monkeypatch.setattr(glossary, 'max_terms', lambda: 300)          # plan Pro
+    researched = []
+
+    def research(title, text, usage):
+        researched.append(text.splitlines())
+        return [{'title': f'Fuente {len(researched)}', 'url': f'https://ejemplo.org/{len(researched)}'}], 'investigación'
+    monkeypatch.setattr(glossary, '_research_sources', research)
+    failures = {'left': 1}
+
+    def generate(contents, schema, instruction, usage):
+        data = json.loads(contents[0])
+        if data['terms'][0] == 'Término 050' and failures['left']:      # una tanda falla una vez y se repite
+            failures['left'] -= 1
+            raise IA.GenerationError('invalid', 'respuesta incompleta')
+        assert len(data['sources']) == 1                                  # solo las fuentes de SU tanda
+        return [{'term': term, 'definition': 'Una definición breve.', 'source': 0} for term in data['terms']]
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    terms = [f'Término {i:03d}' for i in range(300)]
+    entries = glossary.generate_glossary('Biología', 300, terms, bibliography=True)
+    assert len(entries) == 300 and all(entry['reference'] for entry in entries)
+    assert len(researched) == 12                                          # 300 / 25, sin repetir por el reintento
+    assert sorted(t for batch in researched for t in batch) == sorted(terms)
+    assert all(len(batch) == 25 for batch in researched)

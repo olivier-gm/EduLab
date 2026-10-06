@@ -210,7 +210,9 @@ def save_ai_settings():
         return back('Elige un esfuerzo de razonamiento de la lista.')
     values['openrouter_reasoning'] = reasoning
     for prefix in ('gemini', 'openrouter'):
-        values[f'{prefix}_search_enabled'] = '1' if request.form.get(f'{prefix}_search_enabled') else '0'
+        for purpose in ('content', 'bibliography'):
+            name = f'{prefix}_search_{purpose}'
+            values[name] = '1' if request.form.get(name) else '0'
     proposed = {**db.get_settings(), **values}
     try:
         _, _, active_key = ai_provider.configuration(values=proposed)

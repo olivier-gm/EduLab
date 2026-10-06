@@ -127,7 +127,8 @@
             </label>
             <p class="admin-form__hint">{{ key_status['gemini'] }}. La clave completa no se muestra.</p>
             <label class="check"><input type="checkbox" name="clear_gemini_key"> Quitar la clave del panel y usar la del servidor</label>
-            <label class="check"><input type="checkbox" name="gemini_search_enabled" {% if settings['gemini_search_enabled'] == '1' %}checked{% endif %}> Usar Google Search (información actual)</label>
+            <label class="check"><input type="checkbox" name="gemini_search_content" {% if settings['gemini_search_content'] == '1' %}checked{% endif %}> Google Search en el contenido del informe</label>
+            <label class="check"><input type="checkbox" name="gemini_search_bibliography" {% if settings['gemini_search_bibliography'] == '1' %}checked{% endif %}> Google Search en la bibliografía (informes y glosarios)</label>
           </fieldset>
           <fieldset>
             <legend>OpenRouter</legend>
@@ -150,7 +151,8 @@
             </label>
             <p class="admin-form__hint">{{ key_status['openrouter'] }}. La clave completa no se muestra.</p>
             <label class="check"><input type="checkbox" name="clear_openrouter_key"> Quitar la clave del panel y usar la del servidor</label>
-            <label class="check"><input type="checkbox" name="openrouter_search_enabled" {% if settings['openrouter_search_enabled'] == '1' %}checked{% endif %}> Usar búsqueda web (información actual)</label>
+            <label class="check"><input type="checkbox" name="openrouter_search_content" {% if settings['openrouter_search_content'] == '1' %}checked{% endif %}> Búsqueda web en el contenido del informe</label>
+            <label class="check"><input type="checkbox" name="openrouter_search_bibliography" {% if settings['openrouter_search_bibliography'] == '1' %}checked{% endif %}> Búsqueda web en la bibliografía (informes y glosarios)</label>
           </fieldset>
         </div>
         <label>Proveedor del modelo ligero

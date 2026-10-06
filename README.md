@@ -106,6 +106,17 @@ Otro proveedor S3 (AWS, DigitalOcean Spaces, Backblaze, MinIO): define `S3_ENDPO
 - `VALIDATE_PG_SQL=1 pytest tests` valida con el parser real de PostgreSQL cada consulta que ejecute la app.
 - `TEST_DATABASE_URL=postgresql://... pytest tests` corre toda la suite contra un PostgreSQL de pruebas. **Borra el esquema `public` antes de cada prueba**: usa una base desechable.
 
+## 🏛️ Logos de universidades
+
+Cada logo vive en `static/logos/` con el nombre de la universidad en minúsculas, sin tildes y con guiones bajos (`universidad_de_los_andes.png`), y la universidad debe estar en `static/txt/lista_imagenes.txt`. Después de agregar o cambiar uno, corre:
+
+```powershell
+python tools/fix_logos.py          # arregla y crea las miniaturas
+python tools/fix_logos.py --check  # solo informa, sin modificar nada
+```
+
+El script recorta los márgenes vacíos del logo (en Word todos se dibujan con el mismo alto, 3 cm, y un margen vacío haría que se vea más pequeño que los demás), limita su altura a 600 px y crea su **miniatura web** en `static/logos/thumbs/` (WebP sin pérdida, máximo 320 × 180 px, misma proporción). La landing usa solo las miniaturas: pesan ~25 KB en vez de ~180 KB y el cambio de logo de la portada de muestra no se traba. Si falta una miniatura la web usa el logo completo y todo funciona, solo que más pesado; `pytest` avisa cuando alguna falta o quedó desactualizada.
+
 ## 🚀 Ejecución del Servidor de Desarrollo
 
 Una vez completada la instalación, inicia el servidor local:

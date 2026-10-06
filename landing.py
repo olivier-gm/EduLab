@@ -11,6 +11,16 @@ ROOT = Path(__file__).resolve().parent
 TITLE_PERIOD = 4 * 60 * 60
 
 
+def thumb_path(filename):
+    """Ruta (dentro de static) de la miniatura web de un logo, o el propio logo si todavía no la tiene.
+
+    tools/fix_logos.py crea static/logos/thumbs/<nombre>.webp (WebP sin pérdida, máximo 320 x 180 px).
+    La landing usa solo miniaturas: pesan ~25 KB en vez de ~180 KB y se decodifican en una fracción
+    del tiempo, que es lo que evita que el cambio de logo se vea trabado."""
+    candidate = f'logos/thumbs/{Path(filename).stem}.webp'
+    return candidate if (ROOT / 'static' / candidate).is_file() else filename
+
+
 def universities():
     """Instituciones con un logo local, usando la misma prioridad que Word."""
     names = (ROOT / 'static/txt/lista_imagenes.txt').read_text(encoding='utf-8').splitlines()
@@ -23,7 +33,7 @@ def universities():
         for extension in ('png', 'jpg', 'jpeg', 'webp', 'svg'):
             filename = f'logos/{slug}.{extension}'
             if (ROOT / 'static' / filename).is_file():
-                result.append({'id': slug, 'name': name, 'filename': filename})
+                result.append({'id': slug, 'name': name, 'filename': filename, 'thumb': thumb_path(filename)})
                 break
     return result
 

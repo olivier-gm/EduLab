@@ -142,8 +142,11 @@ SETTING_DEFAULTS = {
     'fallback_enabled': '0',
     # Google Search / búsqueda web de cada proveedor para el desarrollo y la
     # bibliografía. Si la búsqueda falla se genera igual sin ella.
-    'gemini_search_enabled': '1',
-    'openrouter_search_enabled': '1',
+    # Una casilla por proveedor y uso: el desarrollo del informe y su bibliografía (y la de los glosarios).
+    'gemini_search_content': '1',
+    'gemini_search_bibliography': '1',
+    'openrouter_search_content': '1',
+    'openrouter_search_bibliography': '1',
     'gemini_model': '',  # Vacío conserva el modelo del entorno actual.
     'openrouter_model': 'google/gemini-3.8-flash',
     # Modelos más ligeros para tareas pequeñas (mayúsculas y tildes del título). Vacío = el principal.
@@ -161,7 +164,7 @@ PLAN_IDS = ('recharge', 'premium', 'pro')
 for _id, _name, _price, _limit, _terms, _hours, _benefits in (
     ('recharge', 'Recarga', '2.99', 20, 100, 1, 'Informes con IA\nDocumentos manuales\nDescarga solo en Word\nSin acceso a glosarios\nSaldo sin vencimiento; se pausa con un plan mensual'),
     ('premium', 'Premium', '4.99', 400, 100, 72, 'Informes y glosarios con IA\nDocumentos manuales\nUniversitario y bachillerato\nDescarga en Word y PDF'),
-    ('pro', 'Pro', '14.99', 2000, 300, 8760, 'Generaciones ilimitadas\nInformes y glosarios con IA\nDocumentos manuales\nUniversitario y bachillerato\nDescarga en Word y PDF'),
+    ('pro', 'Pro', '14.99', 2000, 300, 8760, 'Generaciones ilimitadas\nInformes y glosarios con IA\nBibliografía con fuentes en cada término del glosario\nDocumentos manuales\nUniversitario y bachillerato\nDescarga en Word y PDF'),
 ):
     for _key, _value in {'name': _name, 'price': _price, 'limit': _limit, 'terms': _terms,
                          'hours': _hours, 'enabled': 1, 'benefits': _benefits}.items():
@@ -784,9 +787,16 @@ def get_settings():
     if cached is not None:
         return cached
     values = dict(SETTING_DEFAULTS)
-    for row in get_db().execute('SELECT key, value FROM settings'):
-        if row['key'] in values:
-            values[row['key']] = row['value']
+    stored = {row['key']: row['value'] for row in get_db().execute('SELECT key, value FROM settings')}
+    for key, value in stored.items():
+        if key in values:
+            values[key] = value
+    # Antes había una sola casilla de búsqueda por proveedor: se conserva su valor en las dos nuevas.
+    for prefix in ('gemini', 'openrouter'):
+        legacy = stored.get(f'{prefix}_search_enabled')
+        for purpose in ('content', 'bibliography'):
+            if legacy is not None and f'{prefix}_search_{purpose}' not in stored:
+                values[f'{prefix}_search_{purpose}'] = legacy
     _settings_cache.put(key, values)
     return values
 

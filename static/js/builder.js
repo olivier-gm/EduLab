@@ -154,15 +154,21 @@
       return;
     }
 
+    // Primero la miniatura web (static/logos/thumbs, la crea tools/fix_logos.py): pesa ~25 KB en vez
+    // de ~180 KB y la vista previa muestra el escudo a menos de 80 px. Si esa universidad todavía
+    // no la tiene, se prueba el logo completo como antes.
+    var candidates = [logoBase + '/thumbs/' + slug + '.webp'].concat(LOGO_EXT.map(function (ext) {
+      return logoBase + '/' + slug + '.' + ext;
+    }));
     var i = 0;
     var tryNext = function () {
       if (token !== logoToken) { return; }
-      if (i >= LOGO_EXT.length) {
+      if (i >= candidates.length) {
         pv.crest.classList.remove('is-on');
         return;
       }
       var probe = new Image();
-      var url = logoBase + '/' + slug + '.' + LOGO_EXT[i++];
+      var url = candidates[i++];
       probe.onload = function () {
         if (token !== logoToken) { return; }
         pv.crest.src = url;
@@ -263,6 +269,14 @@
     setText($('#document-note'), glossary
       ? 'Recibirás Word y PDF con portada y glosario en orden alfabético, sin introducción ni conclusión.'
       : 'Recibirás Word y PDF con índice y páginas separadas para cada sección.');
+    // La bibliografía por término de los glosarios es solo del plan Pro.
+    var bibBox = $('#f-incluir-bib');
+    var bibLocked = glossary && form.dataset.glossaryBib !== '1';
+    bibBox.disabled = bibLocked;
+    if (bibLocked) {
+      bibBox.checked = false;
+      setText($('#bibliography-help'), 'La bibliografía por término de los glosarios es exclusiva del plan Pro.');
+    }
     applySections();
     applyGlossarySource();
   }

@@ -195,13 +195,14 @@ def search_config():
 
 
 def test_search_is_enabled_by_default_for_both_providers_and_fallback_is_off():
-    assert db.SETTING_DEFAULTS['gemini_search_enabled'] == '1'
-    assert db.SETTING_DEFAULTS['openrouter_search_enabled'] == '1'
+    for provider in ('gemini', 'openrouter'):
+        for purpose in ('content', 'bibliography'):
+            assert db.SETTING_DEFAULTS[f'{provider}_search_{purpose}'] == '1'
     assert db.SETTING_DEFAULTS['fallback_enabled'] == '0'
 
 
 def test_search_toggle_strips_the_tool_for_that_provider(engines, caplog):
-    engines.use('gemini', gemini_search_enabled='0')
+    engines.use('gemini', gemini_search_content='0')
     with caplog.at_level(logging.INFO, logger='ai_provider'):
         ai_provider.generate_content(model='gemini-x', config=search_config(), contents=['Hola'])
     assert engines.gemini_calls[0]['config'].tools is None
@@ -215,7 +216,7 @@ def test_search_toggle_keeps_the_tool_when_enabled(engines):
 
 
 def test_each_provider_has_its_own_search_toggle_also_in_fallback(engines):
-    engines.use('gemini', fallback_enabled='1', openrouter_search_enabled='0')
+    engines.use('gemini', fallback_enabled='1', openrouter_search_content='0')
     engines.gemini = [ApiError(503)]
     ai_provider.generate_content(model='gemini-x', config=search_config(), contents=['Hola'])
     assert engines.gemini_calls[0]['config'].tools                 # el principal sí busca
@@ -224,11 +225,11 @@ def test_each_provider_has_its_own_search_toggle_also_in_fallback(engines):
 
 def test_essay_does_not_request_search_when_the_active_provider_has_it_off(engines):
     prompt = IA._FewShotPrompt('essay', 'gemini-x', 'Sé breve', [])
-    engines.use('gemini', gemini_search_enabled='0')
+    engines.use('gemini', gemini_search_content='0')
     prompt.generate('Tema: X', temperature=0.1, max_output_tokens=50, use_search=True)
     assert all(not call['config'].tools for call in engines.gemini_calls)
     engines.gemini_calls.clear()
-    engines.use('gemini', gemini_search_enabled='1')
+    engines.use('gemini', gemini_search_content='1')
     prompt.generate('Tema: X', temperature=0.1, max_output_tokens=50, use_search=True)
     assert engines.gemini_calls[0]['config'].tools
 
@@ -248,7 +249,7 @@ def test_failed_search_falls_back_to_no_search_and_is_logged(engines, caplog):
 
 
 def test_bibliography_respects_the_toggle_and_logs_a_search_failure(engines, caplog):
-    engines.use('gemini', gemini_search_enabled='0')
+    engines.use('gemini', gemini_search_bibliography='0')
     sources, _, reason = glossary._source_context('Biología', 'Células', [])
     assert sources == [] and 'desactivada' in reason and engines.gemini_calls == []
 
@@ -293,17 +294,18 @@ def stored(key):
 def test_admin_saves_the_fallback_and_search_toggles(admin, monkeypatch):
     monkeypatch.setenv('GEMINI_API_KEY', 'g')
     monkeypatch.setenv('OPENROUTER_API_KEY', 'o')
-    html = save(admin, fallback_enabled='on', gemini_search_enabled='on')
+    html = save(admin, fallback_enabled='on', gemini_search_content='on', openrouter_search_bibliography='on')
     assert 'Configuración de IA guardada' in html
     assert stored('fallback_enabled') == '1'
-    assert stored('gemini_search_enabled') == '1' and stored('openrouter_search_enabled') == '0'
+    assert [stored(f'{p}_search_{u}') for p in ('gemini', 'openrouter') for u in ('content', 'bibliography')] == [
+        '1', '0', '0', '1']
 
 
 def test_admin_unchecked_boxes_turn_the_options_off(admin, monkeypatch):
     monkeypatch.setenv('GEMINI_API_KEY', 'g')
     save(admin)
     assert stored('fallback_enabled') == '0'
-    assert stored('gemini_search_enabled') == '0' and stored('openrouter_search_enabled') == '0'
+    assert all(stored(f'{p}_search_{u}') == '0' for p in ('gemini', 'openrouter') for u in ('content', 'bibliography'))
 
 
 def test_admin_cannot_enable_the_fallback_without_the_other_providers_key(admin, monkeypatch):
@@ -317,4 +319,29 @@ def test_admin_cannot_enable_the_fallback_without_the_other_providers_key(admin,
 def test_admin_panel_shows_the_new_options(admin):
     html = admin.get('/admin/').get_data(as_text=True)
     assert 'name="fallback_enabled"' in html
-    assert 'name="gemini_search_enabled"' in html and 'name="openrouter_search_enabled"' in html
+    for name in ('gemini_search_content', 'gemini_search_bibliography',
+                 'openrouter_search_content', 'openrouter_search_bibliography'):
+        assert f'name="{name}"' in html
+
+
+def test_content_and_bibliography_search_are_independent(engines):
+    engines.use('gemini', gemini_search_content='0', gemini_search_bibliography='1')
+    ai_provider.generate_content(model='gemini-x', config=search_config(), contents=['Hola'])
+    assert engines.gemini_calls[0]['config'].tools is None                      # el contenido no busca
+    ai_provider.generate_content(model='gemini-x', config=search_config(), contents=['Hola'],
+                                 search_purpose='bibliography')
+    assert engines.gemini_calls[1]['config'].tools                              # la bibliografía sí
+    engines.use('gemini', gemini_search_content='1', gemini_search_bibliography='0')
+    ai_provider.generate_content(model='gemini-x', config=search_config(), contents=['Hola'],
+                                 search_purpose='bibliography')
+    assert engines.gemini_calls[2]['config'].tools is None
+
+
+def test_the_old_single_search_checkbox_is_kept_in_both_new_ones(admin):
+    with app_module.app.app_context():
+        db.get_db().execute("INSERT INTO settings (key, value) VALUES ('gemini_search_enabled', '0')")
+        db.get_db().commit()
+        db._settings_cache.clear()
+        values = db.get_settings()
+        assert values['gemini_search_content'] == '0' and values['gemini_search_bibliography'] == '0'
+        assert values['openrouter_search_content'] == '1'          # sin valor anterior: el predeterminado

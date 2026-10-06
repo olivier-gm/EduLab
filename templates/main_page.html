@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css', v='preview-rotation-1') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='js/landing-preview.js', v='1') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/landing-preview.js', v='2') }}"></script>
 </head>
 
 <body>
@@ -116,7 +116,7 @@
               <b class="pm-university__name">{{ preview_universities[0].name|upper if preview_universities else 'TU INSTITUCIÓN EDUCATIVA' }}</b>
               <div class="pm-crest">
                 {% if preview_universities %}<img
-                  src="{{ url_for('static', filename=preview_universities[0].filename) }}" alt="" decoding="async">{%
+                  src="{{ url_for('static', filename=preview_universities[0].thumb) }}" alt="" decoding="async">{%
                 endif %}
               </div>
             </div>
@@ -272,11 +272,11 @@
         </div>
 
         <div class="logos-strip reveal">
-          <img src="{{ url_for('static', filename='logos/universidad_central_de_venezuela.webp') }}"
+          <img src="{{ url_for('static', filename=logo_thumb('logos/universidad_central_de_venezuela.webp')) }}"
             alt="Universidad Central de Venezuela" loading="lazy">
-          <img src="{{ url_for('static', filename='logos/universidad_de_los_andes.png') }}"
+          <img src="{{ url_for('static', filename=logo_thumb('logos/universidad_de_los_andes.png')) }}"
             alt="Universidad de Los Andes" loading="lazy">
-          <img src="{{ url_for('static', filename='logos/universidad_simon_bolivar.png') }}"
+          <img src="{{ url_for('static', filename=logo_thumb('logos/universidad_simon_bolivar.png')) }}"
             alt="Universidad Simón Bolívar" loading="lazy">
         </div>
         <p class="logos-note">¿No aparece la tuya? Igual puedes escribirla a mano: el documento se genera sin

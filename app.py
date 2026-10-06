@@ -105,6 +105,7 @@ def inject_current_user():
             'retention_text': db.format_duration(hours), 'glossary_limit': max_terms(),
             'billing': db.billing_state(user) if user else None,
             'glossary_allowed': plans.glossary_access(user),
+            'glossary_bibliography_allowed': plans.glossary_bibliography_access(user),
             'public_glossary_limit': max((p['terms'] for p in db.plan_catalog().values() if p['enabled'] or not db.public_plans_enabled()), default=100)}
 
 
@@ -172,6 +173,9 @@ def form_error(message, endpoint='show_form'):
     """Vuelve al formulario mostrando POR QUÉ no se generó el documento."""
     flash(message, 'error')
     return redirect(url_for(endpoint))
+
+
+app.jinja_env.globals['logo_thumb'] = landing.thumb_path
 
 
 @app.route('/')

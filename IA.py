@@ -465,7 +465,7 @@ def generate_essay_content(title, subtitles, usage_sink=None, warnings=None):
         )
     try:
         text = _clean(_essay_prompt.generate(
-            user_text, temperature=0.5, max_output_tokens=20000,
+            user_text, temperature=0.5, max_output_tokens=30000,
             usage_sink=usage_sink, use_search=True, warnings=warnings))
     except Exception as e:
         err = classify_error(e)
@@ -507,7 +507,7 @@ def generate_introduction(title, body, usage_sink=None):
     user_text = f"El título del trabajo es '{title}' y el texto es el siguiente: \"{body}\"."
     try:
         text = _clean(_intro_prompt.generate(
-            user_text, temperature=0.5, max_output_tokens=5000, usage_sink=usage_sink))
+            user_text, temperature=0.5, max_output_tokens=6000, usage_sink=usage_sink))
     except Exception as e:
         err = classify_error(e)
         logger.error('Error generando introducción (%s): %s', err.code, err)
@@ -548,7 +548,7 @@ def generate_conclusion(title, body, usage_sink=None):
     user_text = f"El título del trabajo es '{title}' y el texto es el siguiente: \"{body}\"."
     try:
         text = _clean(_conclusion_prompt.generate(
-            user_text, temperature=0.5, max_output_tokens=5000, usage_sink=usage_sink))
+            user_text, temperature=0.5, max_output_tokens=6000, usage_sink=usage_sink))
     except Exception as e:
         err = classify_error(e)
         logger.error('Error generando conclusión (%s): %s', err.code, err)

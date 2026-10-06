@@ -78,12 +78,16 @@ def direct_client(key):
     return google_client(key)
 
 
-def search_enabled(provider=None, values=None):
+SEARCH_PURPOSES = ('content', 'bibliography')
+
+
+def search_enabled(provider=None, values=None, purpose='content'):
     """¿La búsqueda web (Google Search / OpenRouter web search) está activada para ese
-    proveedor? Sin `provider`, el activo. Se configura en el panel admin."""
+    proveedor y ese uso: 'content' (desarrollo del informe) o 'bibliography'? Sin `provider`,
+    el activo. Se configura en el panel admin."""
     values = settings() if values is None else values
     provider = provider or values['ai_provider']
-    return values.get(f'{provider}_search_enabled', '1') == '1'
+    return values.get(f'{provider}_search_{purpose}', '1') == '1'
 
 
 def _other_provider(values):
@@ -116,7 +120,7 @@ def _without_tools(config):
 
 
 def _call(provider, model, key, config, contents, values):
-    if getattr(config, 'tools', None) and not search_enabled(provider, values):
+    if getattr(config, 'tools', None) and not search_enabled(provider, values, values.get('_search_purpose', 'content')):
         logger.info('La búsqueda web está desactivada para %s: se genera sin búsqueda.', provider)
         config = _without_tools(config)
     if provider == 'gemini':
@@ -133,7 +137,8 @@ def _light_values(values):
     return values
 
 
-def generate_content(*, model, config, contents, fallback_config=None, fallback_contents=None, light=False):
+def generate_content(*, model, config, contents, fallback_config=None, fallback_contents=None, light=False,
+                     search_purpose='content'):
     """Genera con el proveedor activo; si falla y el fallback está activado, con el otro.
 
     fallback_config / fallback_contents: versión de la petición para el otro
@@ -145,6 +150,7 @@ def generate_content(*, model, config, contents, fallback_config=None, fallback_
     values = dict(settings())
     # Razonamiento en OpenRouter: el del admin para el principal; las tareas pequeñas usan el mínimo
     # común (un ligero que razona de más gasta su límite de tokens y devuelve vacío).
+    values['_search_purpose'] = search_purpose     # qué casilla de búsqueda del admin aplica
     values['_reasoning_effort'] = 'low' if light else values.get('openrouter_reasoning', '')
     if light:       # tareas pequeñas (p. ej. mayúsculas y tildes): modelo ligero del admin
         values = _light_values(values)

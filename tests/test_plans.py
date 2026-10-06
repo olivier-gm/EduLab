@@ -490,3 +490,74 @@ def test_admin_rechaza_limite_invalido(client):
     assert 'msg=' in resp.headers['Location']
     with app_module.app.test_request_context('/'):
         assert db.get_settings()['free_ai_limit'] == ''
+
+
+# ── Bibliografía por término en glosarios: solo plan Pro ──────────────
+
+def _glossary_post(client, **extra):
+    data = {'title': 'Biologia celular', 'document_kind': 'glossary', 'glossary_source': 'list',
+            'glossary_terms': 'Atomo\nCelula', 'incluir_bibliografia': '1'}
+    data.update(extra)
+    return client.post('/process_form', data=data)
+
+
+@pytest.mark.parametrize('plan,allowed', [('recharge', False), ('premium', False), ('pro', True)])
+def test_bibliografia_de_glosarios_solo_para_pro(client, monkeypatch, plan, allowed):
+    db.set_settings({'plans_public_enabled': '1'})
+    uid = make_user()
+    if plan == 'recharge':
+        db.get_db().execute('UPDATE users SET credits = 5 WHERE id = ?', (uid,))
+        db.get_db().commit()
+    else:
+        db.grant_plan(uid, 30, plan)
+    with app_module.app.test_request_context('/'):
+        assert plans.glossary_bibliography_access(user(uid)) is allowed
+    login(client, uid)
+    monkeypatch.setattr(app_module, 'check_glossary', lambda *a, **k: None)
+    monkeypatch.setattr(app_module, 'generate_glossary', lambda *a, **k: [])
+    monkeypatch.setattr(app_module, 'check_title', lambda *a, **k: (_ for _ in ()).throw(AssertionError('no')))
+    resp = _glossary_post(client)
+    if plan == 'recharge':                      # la recarga ni siquiera tiene glosarios
+        assert 'glossary_unavailable' in resp.headers['Location']
+    elif allowed:
+        assert 'glossary_bibliography_unavailable' not in (resp.headers.get('Location') or '')
+    else:
+        assert resp.status_code == 302 and 'glossary_bibliography_unavailable' in resp.headers['Location']
+        assert db.billing_state(user(uid))['used'] == 0                 # no gastó cupo
+
+
+def test_premium_puede_generar_el_glosario_sin_bibliografia(client, monkeypatch):
+    db.set_settings({'plans_public_enabled': '1'})
+    uid = make_user()
+    db.grant_plan(uid, 30, 'premium')
+    login(client, uid)
+    seen = []
+    monkeypatch.setattr(app_module, 'check_glossary', lambda *a, **k: None)
+    monkeypatch.setattr(app_module, 'generate_glossary', lambda *a, **k: seen.append(k['bibliography']) or [])
+    client.post('/process_form', data={'title': 'Biologia celular', 'document_kind': 'glossary',
+                                       'glossary_source': 'list', 'glossary_terms': 'Atomo\nCelula'})
+    assert seen == [False]                      # el glosario se genera, sin bibliografía
+
+
+def test_admin_y_modo_sin_planes_publicos_conservan_la_bibliografia(client):
+    admin = make_user('adm@x.com', admin=True)
+    free = make_user('free@x.com')
+    with app_module.app.test_request_context('/'):
+        db.set_settings({'plans_public_enabled': '1'})
+        assert plans.glossary_bibliography_access(user(admin)) is True
+        assert plans.glossary_bibliography_access(user(free)) is False
+        assert plans.glossary_bibliography_access(None) is False
+        db.set_settings({'plans_public_enabled': '0'})
+        assert plans.glossary_bibliography_access(user(free)) is True
+
+
+def test_el_formulario_marca_si_la_bibliografia_de_glosarios_esta_permitida(client):
+    db.set_settings({'plans_public_enabled': '1'})
+    uid = make_user()
+    db.grant_plan(uid, 30, 'premium')
+    login(client, uid)
+    assert 'data-glossary-bib="0"' in client.get('/form').get_data(as_text=True)
+    db.grant_plan(uid, 30, 'pro')
+    db.get_db().execute("UPDATE users SET plan = 'pro' WHERE id = ?", (uid,))
+    db.get_db().commit()
+    assert 'data-glossary-bib="1"' in client.get('/form').get_data(as_text=True)

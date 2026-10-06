@@ -138,6 +138,8 @@ def with_generation_quota(view):
         user = current_user()
         if request.form.get('document_kind') == 'glossary' and not glossary_access(user):
             return redirect_to_plans('glossary_unavailable')
+        if _wants_glossary_bibliography() and not glossary_bibliography_access(user):
+            return redirect_to_plans('glossary_bibliography_unavailable')
         manual = request.endpoint == 'process_form_bach' or (
             request.form.get('document_kind') != 'glossary' and request.form.get('global-mode') == 'standard')
         allowed, reason = generation_access(user, 'manual' if manual else 'ai')
@@ -150,6 +152,8 @@ def with_generation_quota(view):
         try:
             if request.form.get('document_kind') == 'glossary' and not glossary_access(user):
                 return redirect_to_plans('glossary_unavailable')
+            if _wants_glossary_bibliography() and not glossary_bibliography_access(user):
+                return redirect_to_plans('glossary_bibliography_unavailable')
             return view(*args, **kwargs)
         finally:
             if not ticket.get('done'):
@@ -163,6 +167,21 @@ def glossary_access(user):
     return bool(user and (user['is_admin'] or (ticket or db.billing_state(user))['source'] != 'recharge'))
 
 
+def _wants_glossary_bibliography():
+    return request.form.get('document_kind') == 'glossary' and 'incluir_bibliografia' in request.form
+
+
+def glossary_bibliography_access(user):
+    """La bibliografía con fuentes por término de los glosarios (una investigación web por cada
+    tanda de 25 términos, la parte más cara) es solo del plan Pro. Admin y el modo sin planes
+    públicos la tienen siempre."""
+    if not user:
+        return False
+    if user['is_admin'] or not db.public_plans_enabled():
+        return True
+    return (getattr(g, 'generation_ticket', None) or db.billing_state(user))['source'] == 'pro'
+
+
 def redirect_to_plans(reason):
     return redirect(url_for('plans.plans', reason=reason))
 
@@ -172,6 +191,8 @@ def _reason_message(reason, summary):
         return None
     if reason == 'glossary_unavailable':
         return 'La recarga incluye informes en Word. Para crear glosarios, elige un plan mensual.'
+    if reason == 'glossary_bibliography_unavailable':
+        return 'La bibliografía por término de los glosarios es exclusiva del plan Pro. Puedes generar el glosario sin ella.'
     if reason == 'monthly_limit':
         return 'Alcanzaste el cupo de tu período mensual. Tu recarga permanece en pausa hasta que venza el plan.'
     if reason in ('ai_disabled', 'manual_disabled'):
