@@ -332,6 +332,7 @@
               <th>Título</th>
               <th>Usuario</th>
               <th>Tipo</th>
+              <th>Proveedor / modelo</th>
               <th>Tokens</th>
               <th>Generado</th>
             </tr>
@@ -342,6 +343,21 @@
               <td>{{ d['title'] }}</td>
               <td>{{ d['user_name'] or d['user_email'] }}</td>
               <td><span class="badge badge--free">{{ 'Universitario' if d['doc_type'] == 'uni' else 'Bachillerato' }}</span></td>
+              <td>
+                {% if d.generation_trace_data %}
+                  {% for attempt in d.generation_trace_data %}
+                  <div class="ai-model-entry">
+                    <span class="badge {{ 'badge--approved' if attempt.success else 'badge--rejected' }}">{{ ('Fallback usado' if attempt.success else 'Fallback falló') if attempt.fallback else ('Usado' if attempt.success else 'Falló') }}</span>
+                    <span>{{ 'OpenRouter' if attempt.provider == 'openrouter' else 'Gemini' }} · {{ attempt.model }}</span>
+                    {% if attempt.error and not attempt.success %}<span class="is-dim">({{ attempt.error }})</span>{% endif %}
+                  </div>
+                  {% endfor %}
+                {% elif d['mode'] == 'manual' %}
+                  <span class="is-dim">Manual, sin IA</span>
+                {% else %}
+                  <span class="is-dim">Sin registro histórico</span>
+                {% endif %}
+              </td>
               <td>{{ '{:,}'.format(d['tokens_used']) }}</td>
               <td class="is-dim">{{ d['created_at'] }}</td>
             </tr>

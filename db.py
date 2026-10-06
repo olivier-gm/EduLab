@@ -470,6 +470,8 @@ def _migrate(conn):
 
     if 'plan_expires_at' not in columns('users'):
         conn.execute('ALTER TABLE users ADD COLUMN plan_expires_at TEXT')
+    if 'generation_trace' not in columns('documents'):
+        conn.execute('ALTER TABLE documents ADD COLUMN generation_trace TEXT')
 
     if 'mode' not in columns('documents'):
         # 'ai' = redactado por Gemini, 'manual' = escrito por el usuario. Los
@@ -687,11 +689,12 @@ def record_document(user_id, title, doc_type, tokens_used, mode='manual', file_s
         hours = ticket['hours'] if ticket else (get_retention_hours() if user['is_admin'] else billing_state(user)['hours'])
         expires_at = (created_at + timedelta(hours=hours)).strftime(DATETIME_FMT)
     db = get_db()
+    import ai_provider
     db.execute(
-        'INSERT INTO documents (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at, billing_plan) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO documents (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at, billing_plan, generation_trace) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         (user_id, title, doc_type, tokens_used, mode, file_stem, expires_at, created_at.strftime(DATETIME_FMT),
-         ticket['source'] if ticket else 'free'),
+         ticket['source'] if ticket else 'free', json.dumps(ai_provider.generation_trace.get() or [], ensure_ascii=False)),
     )
     if ticket and ticket.get('free_reserved'):
         db.execute('UPDATE users SET free_pending = free_pending - 1 WHERE id = ? AND free_pending > 0', (user_id,))
@@ -1029,13 +1032,22 @@ def list_users():
 
 def list_documents(limit=200):
     db = get_db()
-    return db.execute("""
+    rows = db.execute("""
         SELECT d.*, u.email AS user_email, u.name AS user_name
         FROM documents d
         JOIN users u ON u.id = d.user_id
         ORDER BY d.created_at DESC, d.id DESC
         LIMIT ?
     """, (limit,)).fetchall()
+    documents = []
+    for row in rows:
+        document = dict(row)
+        try:
+            document['generation_trace_data'] = json.loads(document.get('generation_trace') or '[]')
+        except (TypeError, ValueError):
+            document['generation_trace_data'] = []
+        documents.append(document)
+    return documents
 
 
 def get_stats():

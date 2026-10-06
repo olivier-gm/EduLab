@@ -18,6 +18,15 @@ import db
 logger = logging.getLogger(__name__)
 
 request_settings = ContextVar('ai_settings', default=None)
+generation_trace = ContextVar('ai_generation_trace', default=None)
+
+
+def _trace_attempt(provider, model, success, error=None, fallback=False):
+    trace = generation_trace.get()
+    if trace is not None:
+        trace.append({'provider': provider, 'model': model, 'success': success,
+                      'error': getattr(error, 'code', None) if error else None,
+                      'fallback': fallback})
 
 # Errores (según IA.classify_error) que justifican probar con el otro proveedor.
 # Los de autenticación, petición inválida o contenido bloqueado no: repetirlos en
@@ -161,12 +170,13 @@ def generate_content(*, model, config, contents, fallback_config=None, fallback_
     if not key:
         raise IA.GenerationError('auth', 'Falta la clave API del proveedor seleccionado. Configúrala desde el panel admin.')
     try:
-        return _call(provider, selected_model, key, config, contents, values)
+        response = _call(provider, selected_model, key, config, contents, values)
     except Exception as primary_error:
+        error = IA.classify_error(primary_error)
+        _trace_attempt(provider, selected_model, False, error)
         fallback = _fallback_configuration(model, values)
         if fallback is None:
             raise
-        error = IA.classify_error(primary_error)
         if error.code not in FALLBACK_CODES:
             logger.info('%s falló (%s): ese tipo de error no se reintenta con el otro proveedor.',
                         provider, error.code)
@@ -178,10 +188,14 @@ def generate_content(*, model, config, contents, fallback_config=None, fallback_
             response = _call(fb_provider, fb_model, fb_key, fallback_config or config,
                              fallback_contents or contents, values)
         except Exception as fallback_error:
+            _trace_attempt(fb_provider, fb_model, False, IA.classify_error(fallback_error), True)
             logger.error('El fallback a %s también falló: %s', fb_provider, str(fallback_error)[:200])
             raise primary_error
+        _trace_attempt(fb_provider, fb_model, True, fallback=True)
         logger.warning('El fallback a %s respondió correctamente (el principal era %s).', fb_provider, provider)
         return response
+    _trace_attempt(provider, selected_model, True)
+    return response
 
 
 def _parts(parts):

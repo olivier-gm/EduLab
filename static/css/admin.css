@@ -102,6 +102,17 @@
   color: var(--text-dim);
 }
 
+.ai-model-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+  min-width: 230px;
+  max-width: 420px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .admin-table .payment-status {
   white-space: normal;
   min-width: 170px;

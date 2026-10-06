@@ -81,10 +81,14 @@ app.register_blueprint(plans_bp)
 @app.before_request
 def load_ai_settings():
     g.ai_settings_token = ai_provider.request_settings.set(db.get_settings())
+    g.ai_trace_token = ai_provider.generation_trace.set([])
 
 
 @app.teardown_request
 def clear_ai_settings(_error):
+    trace_token = g.pop('ai_trace_token', None)
+    if trace_token is not None:
+        ai_provider.generation_trace.reset(trace_token)
     token = g.pop('ai_settings_token', None)
     if token is not None:
         ai_provider.request_settings.reset(token)
