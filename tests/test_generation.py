@@ -124,6 +124,20 @@ def test_ensayo_usa_google_search_cuando_esta_disponible(fake_api):
     assert warnings == []
 
 
+def test_ensayo_pide_conservar_los_encabezados_sin_ampliarlos(monkeypatch):
+    captured = {}
+
+    def generate(prompt, **kwargs):
+        captured['prompt'] = prompt
+        return 'Sinapsis\n\n\nTexto educativo.'
+
+    monkeypatch.setattr(IA._essay_prompt, 'generate', generate)
+    assert IA.generate_essay_content('Sistema nervioso', ['Neuronas', 'Sinapsis'])
+    assert '["Neuronas", "Sinapsis"]' in captured['prompt']
+    assert 'Copia cada encabezado exactamente' in captured['prompt']
+    assert 'No lo amplíes' in captured['prompt']
+
+
 def test_si_la_busqueda_falla_se_genera_sin_ella_y_se_avisa(fake_api):
     def handler(config):
         if config.tools:
@@ -474,3 +488,30 @@ def test_manual_bibliography_is_optional(client, monkeypatch, fake_document):
         'incluir_bibliografia': '1', 'bibliografia': 'Autor. Fuente.'})
     page = client.get('/form').get_data(as_text=True)
     assert 'id="f-incluir-bib" name="incluir_bibliografia" value="1">' in page
+
+
+@pytest.mark.parametrize('institution, expected_type, template', [
+    ('universidad', 'uni', 'input/plantilla.docx'),
+    ('bachiller', 'bach', 'input/plantilla_bach.docx'),
+])
+@pytest.mark.parametrize('kind', ['manual', 'report', 'glossary'])
+def test_unified_form_uses_selected_institution(client, monkeypatch, fake_document, institution, expected_type, template, kind):
+    captured = {}
+    def fill(output, *args, **kwargs):
+        captured.update(template=args[0], doc_type=args[7], replacements=args[2], font_name=kwargs['font_name'])
+        fake_document(output, *args, **kwargs)
+    monkeypatch.setattr(app_module.Document_process, 'fill_placeholders', staticmethod(fill))
+    monkeypatch.setattr(app_module, 'check_title', lambda *a, **k: TitleVerdict(True, 'test'))
+    monkeypatch.setattr(app_module, 'check_glossary', lambda *a, **k: None)
+    monkeypatch.setattr(app_module, 'generate_essay_content', lambda *a, **k: 'Desarrollo de prueba.')
+    monkeypatch.setattr(app_module, 'generate_glossary', lambda *a, **k: [
+        {'term': 'Célula', 'definition': 'Unidad de los seres vivos.', 'reference': ''}])
+    data = {'instituto': institution, 'title': 'Biología', 'u': 'Institución de prueba',
+            'global-mode': 'standard' if kind == 'manual' else 'ia', 'body': 'Texto manual.',
+            'document_kind': 'glossary' if kind == 'glossary' else 'report', 'glossary_count': '1', 'fuente': 'tnr'}
+    response = client.post('/process_form', data=data)
+    assert '/choose_file/' in response.location
+    assert captured['template'] == template and captured['doc_type'] == expected_type
+    assert captured['font_name'] == 'Times New Roman'
+    assert ('[estado]' in captured['replacements']) == (expected_type == 'bach')
+    assert db.get_db().execute('SELECT doc_type FROM documents').fetchone()['doc_type'] == expected_type

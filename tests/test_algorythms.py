@@ -317,7 +317,8 @@ def test_fill_placeholders_caso_extremo_no_lanza_excepcion():
     assert os.path.exists(out)
 
 
-def test_fill_placeholders_pocos_campos():
+@pytest.mark.parametrize('font_name, expected_font', [('Arial', 'Arial'), ('Times New Roman', 'Times New Roman'), ('invalida', 'Arial')])
+def test_fill_placeholders_pocos_campos(font_name, expected_font):
     """Con pocos campos (1 alumno, docente, materia), la portada no debe
     lanzar excepción y el spacer debe ser mayor que con muchos campos."""
     reps = {
@@ -339,5 +340,11 @@ def test_fill_placeholders_pocos_campos():
     Document_process.fill_placeholders(
         out, REAL_TEMPLATE_PATH, '', reps, '', '', '', 'Titulo', 'uni',
         university_name='',
+        font_name=font_name,
     )
     assert os.path.exists(out)
+    final = Document(out)
+    assert final.styles['Normal'].font.name == expected_font
+    assert final.styles['Heading 1'].font.name == expected_font
+    # LibreOffice elimina fuentes explícitas cuando coinciden con el estilo.
+    assert all(run.font.name in (None, expected_font) for paragraph in final.paragraphs for run in paragraph.runs if run.text.strip())

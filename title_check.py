@@ -83,6 +83,13 @@ class TitleVerdict:
                 'Escríbelo con palabras claras (por ejemplo, «Causas de la Revolución Francesa»).')
 
 
+class GlossaryTermsError(ValueError):
+    """Incluye los términos rechazados para reparar solo listas elegidas por la IA."""
+    def __init__(self, message, terms):
+        super().__init__(message)
+        self.terms = terms
+
+
 def _api_key():
     return (os.environ.get('JEV') or os.environ.get('TYPESAFE_API_KEY') or '').strip()
 
@@ -147,12 +154,8 @@ def check_title(title, usage_sink=None):
     return TitleVerdict(valid, None if valid else 'invalid', 'gemini')
 
 
-def check_glossary(title, terms=None, usage_sink=None, *, include_title=True):
-    """Evalúa cada entrada por separado en una consulta; no elimina términos rechazados."""
-    items = {'title': title} if include_title else {}
-    items.update({f'term_{i}': term for i, term in enumerate(terms or [])})
-    if not items:
-        return
+def _glossary_verdicts(title, items, usage_sink):
+    """Valida una tanda acotada con JEV o con el respaldo del proveedor activo."""
     state = {'topic': title, 'items': items}
     criteria = QUESTIONS[QUESTION_ID]['criteria']
     verdicts = None
@@ -186,6 +189,19 @@ def check_glossary(title, terms=None, usage_sink=None, *, include_title=True):
                 not isinstance(value, str) or value not in criteria for value in result.values()):
             raise IA.GenerationError('invalid', 'No se pudo validar la lista completa del glosario. Inténtalo de nuevo.')
         verdicts = {key: TitleVerdict(value == 'valid', value, 'gemini') for key, value in result.items()}
+    return verdicts
+
+
+def check_glossary(title, terms=None, usage_sink=None, *, include_title=True):
+    """Evalúa cada entrada; las tandas evitan esquemas demasiado grandes para Gemini."""
+    items = {'title': title} if include_title else {}
+    items.update({f'term_{i}': term for i, term in enumerate(terms or [])})
+    if not items:
+        return
+    pairs = list(items.items())
+    verdicts = {}
+    for offset in range(0, len(pairs), 50):
+        verdicts.update(_glossary_verdicts(title, dict(pairs[offset:offset + 50]), usage_sink))
     if 'title' in verdicts and not verdicts['title'].valid:
         why = _REASON_MESSAGES.get(verdicts['title'].reason, 'no parece un tema académico')
         raise ValueError(f'Revisa el título del glosario «{title}»: {why}.')
@@ -193,5 +209,5 @@ def check_glossary(title, terms=None, usage_sink=None, *, include_title=True):
     if invalid:
         examples = ', '.join(f'«{term}»' for term in invalid[:5])
         extra = f' y {len(invalid) - 5} más' if len(invalid) > 5 else ''
-        raise ValueError(f'Revisa estos términos del glosario: {examples}{extra}. '
-                         'No se reconocen como conceptos académicos; corrige la lista antes de generar.')
+        raise GlossaryTermsError(f'Revisa estos términos del glosario: {examples}{extra}. '
+                                 'No se reconocen como conceptos académicos; corrige la lista antes de generar.', invalid)

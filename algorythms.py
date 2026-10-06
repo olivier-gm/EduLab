@@ -1145,7 +1145,7 @@ class Document_process:
     def fill_placeholders(docx_output, template_path, template_path2, replacements,
                            introduction, essay_content, conclusion, head_title, id,
                            university_name='', detect_subtitles=True, bibliography='', glossary_entries=None,
-                           subtitles=()):
+                           subtitles=(), font_name='Arial'):
         if id == 'bach':
             words = ['DOCENTE:', 'ALUMNOS:', 'ALUMNO:', 'MATERIA:']
         else:
@@ -1257,6 +1257,31 @@ class Document_process:
         # Forzar actualización de campos (TOC) al abrir
         if has_content:
             Document_process.set_update_fields(document)
+
+        # La elección de la vista previa también se aplica al archivo final,
+        # incluidas las fuentes explícitas de la plantilla y de los hipervínculos.
+        selected_font = font_name if font_name in ('Arial', 'Times New Roman') else 'Arial'
+        for style in document.styles:
+            if hasattr(style, 'font'):
+                style.font.name = selected_font
+        for fonts in document.styles.element.iter(qn('w:rFonts')):
+            for attribute in ('ascii', 'hAnsi', 'eastAsia', 'cs'):
+                fonts.set(qn(f'w:{attribute}'), selected_font)
+            for attribute in ('asciiTheme', 'hAnsiTheme', 'eastAsiaTheme', 'cstheme', 'csTheme'):
+                fonts.attrib.pop(qn(f'w:{attribute}'), None)
+        for run_element in document.element.iter(qn('w:r')):
+            run_properties = run_element.find(qn('w:rPr'))
+            if run_properties is None:
+                run_properties = OxmlElement('w:rPr')
+                run_element.insert(0, run_properties)
+            fonts = run_properties.find(qn('w:rFonts'))
+            if fonts is None:
+                fonts = OxmlElement('w:rFonts')
+                run_properties.insert(0, fonts)
+            for attribute in ('ascii', 'hAnsi', 'eastAsia', 'cs'):
+                fonts.set(qn(f'w:{attribute}'), selected_font)
+            for attribute in ('asciiTheme', 'hAnsiTheme', 'eastAsiaTheme', 'cstheme', 'csTheme'):
+                fonts.attrib.pop(qn(f'w:{attribute}'), None)
 
         head_title = head_title.replace(':', '_')
         document.save(docx_output)

@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import re
 import time
@@ -140,7 +141,7 @@ def classify_error(e):
     if code == 400:
         return GenerationError(
             'bad_request',
-            'La IA rechazó la solicitud. Revisa que el título y los temas no tengan caracteres extraños.',
+            'El proveedor de IA no pudo procesar la solicitud. Si se repite, avisa al administrador.',
             text)
     return GenerationError('unknown', 'Ocurrió un error inesperado al comunicarse con la IA.', text)
 
@@ -453,6 +454,15 @@ def generate_essay_content(title, subtitles, usage_sink=None, warnings=None):
         user_text = f"Tema: '{title} ({subtitles[0]})'"
     else:
         user_text = f"Tema: '{title}'"
+    if subtitles:
+        user_text += (
+            '\nEncabezados obligatorios, en este orden: '
+            + json.dumps(list(subtitles), ensure_ascii=False)
+            + '. Copia cada encabezado exactamente en una línea independiente. '
+            'No lo amplíes, abrevies ni reformules: por ejemplo, «Sinapsis» debe '
+            'seguir siendo «Sinapsis», aunque debajo expliques la sinapsis química y eléctrica. '
+            'Desarrolla todos los apartados solicitados y separa sus bloques con tres saltos de línea.'
+        )
     try:
         text = _clean(_essay_prompt.generate(
             user_text, temperature=0.5, max_output_tokens=20000,

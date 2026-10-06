@@ -351,6 +351,10 @@ def process_form():
     user = current_user()
 
     form_data = request.form
+    institution = form_data.get('instituto', 'universidad')
+    if institution not in ('universidad', 'bachiller'):
+        return form_error('Elige universidad o bachillerato.')
+    document_type = 'bach' if institution == 'bachiller' else 'uni'
     document_kind = form_data.get('document_kind', 'report')
     if document_kind not in ('report', 'glossary'):
         return form_error('Elige trabajo normal o glosario.')
@@ -369,7 +373,7 @@ def process_form():
     if title_error:
         return form_error(title_error)
 
-    processor = FormProcessor(form_data, 'uni')
+    processor = FormProcessor(form_data, document_type)
     # Mayúsculas y tildes del título y subtítulos (modelo ligero + control de código + JEV).
     # Nunca falla: ante cualquier problema queda la primera letra en mayúscula.
     usage_sink = []
@@ -420,7 +424,9 @@ def process_form():
                            include_title=not title_validated)
             glossary_entries = generate_glossary(processor.title, count, terms=terms,
                 bibliography=incluir_bibliografia, usage_sink=usage_sink)
-            if terms is None:
+            # Las listas grandes por tema ya se validan antes de definirlas;
+            # el generador exige después conservar exactamente esa lista.
+            if terms is None and count <= 25:
                 check_glossary(processor.title, [entry['term'] for entry in glossary_entries],
                                usage_sink=usage_sink, include_title=False)
             body = ''
@@ -486,8 +492,8 @@ def process_form():
             except GenerationError as exc:
                 warnings.append(f'No se incluyó la bibliografía. {exc.user_message}')
 
-    input_doc='input/plantilla.docx'
-    input_doc2='input/plantillaempty.docx'
+    input_doc = 'input/plantilla_bach.docx' if document_type == 'bach' else 'input/plantilla.docx'
+    input_doc2 = 'input/plantilla_bachempty.docx' if document_type == 'bach' else 'input/plantillaempty.docx'
     # Check if the file exists
     file_stem = safe_filename(head_title)
     # Nombre libre en el almacenamiento (dos usuarios pueden tener el mismo título).
@@ -496,12 +502,13 @@ def process_form():
     university_name = form_data.get('u', '')
     try:
         Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
-                                            introduccion, body, conclusion, head_title, 'uni',
+                                            introduccion, body, conclusion, head_title, document_type,
                                             university_name=university_name,
                                             detect_subtitles=not manual_mode,
                                             bibliography=bibliography,
                                             glossary_entries=glossary_entries,
-                                            subtitles=processor.subtitles)
+                                            subtitles=processor.subtitles,
+                                            font_name='Times New Roman' if form_data.get('fuente') == 'tnr' else 'Arial')
     except Exception:
         logging.exception('Error armando el documento "%s"', head_title)
         return form_error('Ocurrió un error armando el documento. Inténtalo de nuevo; '
@@ -516,7 +523,7 @@ def process_form():
     except storage.StorageError:
         return form_error('No se pudo guardar el documento. Inténtalo de nuevo.')
 
-    db.record_document(user['id'], head_title, 'uni', tokens_used=sum(usage_sink),
+    db.record_document(user['id'], head_title, document_type, tokens_used=sum(usage_sink),
                        mode='manual' if manual_mode else 'ai',
                        file_stem=full_stem)
     session['file_generated'] = True

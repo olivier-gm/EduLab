@@ -159,10 +159,13 @@ def test_glossary_batches_individual_verdicts_and_accepts_medical_context(monkey
     monkeypatch.setenv('JEV', 'test-key')
     def post(url, headers, json, timeout):
         calls.append(json)
-        assert len(json['questions']) == 101
-        assert json['state']['items']['term_0'] == 'Pene'
-        assert '`items.term_99`' in json['questions']['term_99']['instructions']
-        assert 'Anatomía genital' in json['questions']['title']['instructions']
+        assert len(json['questions']) <= 50
+        if 'term_0' in json['questions']:
+            assert json['state']['items']['term_0'] == 'Pene'
+        if 'term_99' in json['questions']:
+            assert '`items.term_99`' in json['questions']['term_99']['instructions']
+        if 'title' in json['questions']:
+            assert 'Anatomía genital' in json['questions']['title']['instructions']
         return FakeResponse(body={'answers': {key: jev_payload(
             'gibberish' if key == invalid_key else 'valid')['answers']['title_validity']
             for key in json['questions']}})
@@ -172,7 +175,8 @@ def test_glossary_batches_individual_verdicts_and_accepts_medical_context(monkey
             title_check.check_glossary('Anatomía clínica', terms)
     else:
         title_check.check_glossary('Anatomía clínica', terms)
-    assert len(calls) == 1
+    assert len(calls) == 3
+    assert set().union(*(set(call['questions']) for call in calls)) == {'title'} | {f'term_{i}' for i in range(100)}
 
 
 @pytest.mark.parametrize('failure', [FakeResponse(429), FakeResponse(body={'answers': {}})])
@@ -200,3 +204,17 @@ def test_glossary_without_jev_accepts_clinical_terms_using_ai(monkeypatch):
     monkeypatch.delenv('TYPESAFE_API_KEY', raising=False)
     monkeypatch.setattr(glossary, '_json_generate', lambda *a: {'term_0': 'valid', 'term_1': 'valid'})
     title_check.check_glossary('Anatomía clínica', ['Vulva', 'Necrosis'], include_title=False)
+
+
+def test_glossary_fallback_validates_all_300_terms_in_small_schemas(monkeypatch):
+    import glossary
+    monkeypatch.setattr(title_check, 'jev_available', lambda: False)
+    calls = []
+    def generate(contents, schema, instruction, usage):
+        calls.append(schema['required'])
+        assert len(schema['properties']) <= 50
+        return {key: 'valid' for key in schema['required']}
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    title_check.check_glossary('Anatomía humana', [f'Término {i}' for i in range(300)], include_title=False)
+    assert len(calls) == 6
+    assert set().union(*map(set, calls)) == {f'term_{i}' for i in range(300)}

@@ -9,6 +9,7 @@ from werkzeug.datastructures import FileStorage
 
 import IA
 import glossary
+import title_check
 from algorythms import Document_process
 
 
@@ -95,20 +96,119 @@ def test_assignment_keeps_cover_and_tables_for_ai_and_rejects_missing_list(monke
 
 
 def test_topic_fills_duplicates_between_batches(monkeypatch):
+    monkeypatch.setattr(title_check, 'check_glossary', lambda *a, **k: None)
     calls = []
     def generate(contents, *args):
         data = json.loads(contents[0])
+        if data.get('mode') == 'select_terms':
+            return [f'Término {i:03d}' for i in range(data['count'])]
         calls.append(data)
-        available = [f'Término {i:03d}' for i in range(120)
-                     if f'Término {i:03d}' not in data['exclude_terms']]
-        chosen = available[:data['count']]
+        chosen = data['terms'][:]
         if len(calls) == 2:
             chosen[0] = 'Término 000'
         return [{'term': term, 'definition': 'Una definición breve.', 'source': -1} for term in chosen]
     monkeypatch.setattr(glossary, '_json_generate', generate)
     entries = glossary.generate_glossary('Tema de prueba', 100)
     assert len(entries) == len({e['term'] for e in entries}) == 100
-    assert len(calls) == 5 and calls[-1]['count'] == 1
+    assert len(calls) == 5 and calls[1]['terms'] == calls[2]['terms']
+
+
+def test_topic_300_terms_are_selected_in_small_batches_before_definitions(monkeypatch):
+    monkeypatch.setattr(title_check, 'check_glossary', lambda *a, **k: None)
+    monkeypatch.setattr(glossary, 'max_terms', lambda: 300)
+    calls = []
+    def generate(contents, schema, *args):
+        data = json.loads(contents[0])
+        calls.append(data)
+        if data.get('mode') == 'select_terms':
+            start = len(data['exclude_terms'])
+            assert data['count'] == 50
+            return [f'Término {i:03d}' for i in range(start, start + data['count'])]
+        assert len(data['terms']) == 25
+        return [{'term': term, 'definition': 'Una definición breve.', 'source': -1} for term in reversed(data['terms'])]
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    entries = glossary.generate_glossary('Tema amplio de prueba', 300)
+    assert len(calls) == 18 and len(entries) == 300
+    assert all(call.get('mode') == 'select_terms' for call in calls[:6])
+    assert len({entry['term'] for entry in entries}) == 300
+
+
+def test_topic_selection_retries_duplicates_without_defining_them(monkeypatch):
+    monkeypatch.setattr(glossary, 'max_terms', lambda: 300)
+    calls = []
+    def generate(contents, *args):
+        calls.append(json.loads(contents[0]))
+        return ['Término repetido'] * 300
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    with pytest.raises(IA.GenerationError, match='únicos'):
+        glossary.generate_glossary('Tema amplio', 300)
+    assert len(calls) == 3 and all(call['mode'] == 'select_terms' for call in calls)
+
+
+def test_topic_selection_keeps_new_terms_and_refills_cross_batch_duplicates(monkeypatch):
+    monkeypatch.setattr(title_check, 'check_glossary', lambda *a, **k: None)
+    calls = []
+    def generate(contents, *args):
+        data = json.loads(contents[0])
+        calls.append(data)
+        return ['Previo', 'Nuevo'] if len(calls) == 1 else ['Otro nuevo']
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    result = glossary._select_topic_terms('Tema', 2, [], _excluded=['Previo'])
+    assert result == ['Nuevo', 'Otro nuevo']
+    assert calls[1]['count'] == 1 and 'Nuevo' in calls[1]['exclude_terms']
+
+
+def test_topic_selection_can_keep_refilling_while_it_makes_progress(monkeypatch):
+    monkeypatch.setattr(title_check, 'check_glossary', lambda *a, **k: None)
+    responses = [['Previo', 'Término 1', 'Previo 2', 'Previo 3'],
+                 ['Previo', 'Término 2', 'Previo 2'], ['Previo', 'Término 3'], ['Término 4']]
+    calls = []
+    def generate(contents, *args):
+        calls.append(json.loads(contents[0]))
+        return responses[len(calls) - 1]
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    result = glossary._select_topic_terms('Tema', 4, [], _excluded=['Previo', 'Previo 2', 'Previo 3'])
+    assert len(result) == 4 and len(calls) == 4
+    assert [call['count'] for call in calls] == [4, 3, 2, 1]
+
+
+def test_glossary_retries_provider_schema_rejection_without_losing_exact_terms(monkeypatch):
+    calls = []
+    def generate(contents, schema, *args):
+        calls.append(schema)
+        if len(calls) == 1:
+            raise IA.GenerationError('bad_request', 'Esquema rechazado por el proveedor.')
+        assert 'enum' not in schema['items']['properties']['term']
+        return [{'term': 'Célula', 'definition': 'Unidad de los seres vivos.', 'source': -1}]
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    assert glossary.generate_glossary('Biología', 1, ['Célula'])[0]['term'] == 'Célula'
+    assert calls[0]['items']['properties']['term']['enum'] == ['Célula']
+    monkeypatch.setattr(glossary, '_json_generate', lambda *a: [
+        {'term': 'Otro término', 'definition': 'Definición breve.', 'source': -1}])
+    with pytest.raises(IA.GenerationError):
+        glossary.generate_glossary('Biología', 1, ['Célula'])
+
+
+def test_topic_selection_replaces_only_rejected_ai_terms_before_defining(monkeypatch):
+    selected_calls = []
+    validations = []
+    def generate(contents, schema, *args):
+        data = json.loads(contents[0])
+        if data.get('mode') == 'select_terms':
+            selected_calls.append(data)
+            return [f'Término {i:02}' for i in range(26)] if len(selected_calls) == 1 else ['Concepto válido']
+        assert 'Término 25' not in data['terms']
+        return [{'term': term, 'definition': 'Una definición breve.', 'source': -1} for term in data['terms']]
+    def validate(title, terms, **kwargs):
+        validations.append(terms)
+        if 'Término 25' in terms:
+            raise title_check.GlossaryTermsError('Término inválido.', ['Término 25'])
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    monkeypatch.setattr(title_check, 'check_glossary', validate)
+    result = glossary.generate_glossary('Tema amplio', 26)
+    assert len(result) == 26 and any(entry['term'] == 'Concepto válido' for entry in result)
+    assert len(selected_calls) == 2 and selected_calls[1]['count'] == 1
+    assert len(validations[0]) == 26 and validations[1] == ['Concepto válido']
 
 
 def test_reference_format_and_clickable_link_in_documents():
