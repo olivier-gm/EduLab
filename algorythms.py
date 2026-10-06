@@ -398,7 +398,8 @@ class Document_process:
     # según el nombre de la universidad quepa en una o dos líneas.
     _HEADER_END_BASE_PT = 150       # sin logo, nombre en 1 línea
     _HEADER_END_WRAP_EXTRA_PT = 16  # nombre en 2 líneas
-    _HEADER_END_LOGO_EXTRA_PT = 86  # logo presente
+    _HEADER_END_LOGO_EXTRA_PT = 92  # logo presente (3 cm de alto + su separación)
+    _LOGO_GAP_PT = 6                # espacio entre el membrete y el logo
     _HEADER_NAME_WRAP_THRESHOLD = 50  # a partir de este largo, se asume 2 líneas
     _MIN_SPACER_PT = 20
 
@@ -500,7 +501,7 @@ class Document_process:
     @staticmethod
     def _trim_cover_spacers(document, title_para, date_para=None,
                              has_logo=False, university_name='',
-                             detail_lines=0, title_text=''):
+                             detail_lines=0, title_text='', logo_height_pt=None):
         """Reemplaza los 22 párrafos en blanco que rodean el título por UNO
         solo, ubicado DESPUÉS del título, con la altura exacta para que el
         bloque de detalle (docente/integrantes) quede justo encima de la
@@ -561,7 +562,9 @@ class Document_process:
         if len(university_name) >= Document_process._HEADER_NAME_WRAP_THRESHOLD:
             header_end += Document_process._HEADER_END_WRAP_EXTRA_PT
         if has_logo:
-            header_end += Document_process._HEADER_END_LOGO_EXTRA_PT
+            # Altura real del logo (todos miden lo mismo salvo que el ancho tope los achique).
+            header_end += (logo_height_pt + Document_process._LOGO_GAP_PT + 1 if logo_height_pt
+                           else Document_process._HEADER_END_LOGO_EXTRA_PT)
 
         # ── Calcular la altura del spacer ──
         # Página Carta: ~792pt de alto, márgenes de 1" = 72pt arriba/abajo
@@ -733,11 +736,21 @@ class Document_process:
         normalized = normalized.strip('_')
         return normalized
 
+    # Todos los logos se dibujan con el MISMO alto, sea cual sea su proporción, para que
+    # la portada no cambie de una universidad a otra: un escudo alto no se come la página
+    # ni uno ancho deja un hueco. Un logo muy ancho se limita a LOGO_MAX_WIDTH_CM (y entonces
+    # queda un poco más bajo). Para que el alto visible sea realmente el mismo, los archivos
+    # no deben traer márgenes transparentes: tools/fix_logos.py los recorta.
+    LOGO_HEIGHT_CM = 3.0
+    LOGO_MAX_WIDTH_CM = 8.0
+
     @staticmethod
     def insert_logo(document, university_name, logo_dir='static/logos'):
-        """Inserta el logo de la universidad centrado en la parte superior del
-        documento. Devuelve True si lo encontró e insertó, False si no
-        (se usa para calcular cuánto espacio reservar en _trim_cover_spacers)."""
+        """Inserta el logo de la universidad centrado en la portada, DEBAJO del membrete y
+        antes del título (como en la portada de muestra). Devuelve True si lo encontró e
+        insertó, False si no. La altura real (pt) queda en `document._logo_height_pt` para
+        calcular cuánto espacio reservar en _trim_cover_spacers."""
+        document._logo_height_pt = 0
         if not university_name or not university_name.strip():
             return False
 
@@ -757,43 +770,57 @@ class Document_process:
             return False
 
         try:
+            from io import BytesIO
+            from PIL import Image
             # Word necesita imágenes raster compatibles; conservar transparencia.
             image_source = logo_path
             extension = os.path.splitext(logo_path)[1].lower()
             if extension in ('.webp', '.svg'):
-                from io import BytesIO
                 if extension == '.svg':
                     import resvg_py
                     image_source = BytesIO(resvg_py.svg_to_bytes(svg_path=logo_path, width=600))
                 else:
-                    from PIL import Image
                     image_source = BytesIO()
                     with Image.open(logo_path) as image:
                         image.convert('RGBA').save(image_source, format='PNG')
                     image_source.seek(0)
 
-            # Insertar el logo al principio del documento, centrado
-            # Tomamos el primer párrafo y lo usamos como ancla
-            first_para = document.paragraphs[0]
+            with Image.open(image_source) as image:
+                pixels_w, pixels_h = image.size
+            if hasattr(image_source, 'seek'):
+                image_source.seek(0)
+            if pixels_w <= 0 or pixels_h <= 0:
+                raise ValueError('el logo no tiene tamaño')
 
-            # Crear un nuevo párrafo ANTES del primer párrafo
-            new_para = OxmlElement('w:p')
-            # Configurar alineación centrada
-            pPr = OxmlElement('w:pPr')
-            jc = OxmlElement('w:jc')
-            jc.set(qn('w:val'), 'center')
-            pPr.append(jc)
-            new_para.append(pPr)
+            # Mismo alto para todos; el ancho sale de la proporción (con un tope).
+            height = Cm(Document_process.LOGO_HEIGHT_CM)
+            width = int(height * pixels_w / pixels_h)
+            if width > Cm(Document_process.LOGO_MAX_WIDTH_CM):
+                width = Cm(Document_process.LOGO_MAX_WIDTH_CM)
+                height = int(width * pixels_h / pixels_w)
 
-            # Insertar antes del primer párrafo
-            first_para._element.addprevious(new_para)
-
-            # Ahora acceder al párrafo insertado a través de python-docx
+            # Párrafo nuevo, centrado, justo después del membrete: la última línea con texto
+            # antes del título ([carrera]/[estado]); lo que hay entre ambos son espacios en
+            # blanco de la plantilla. Si no hay título, se pone al principio como antes.
             from docx.text.paragraph import Paragraph
+            title = Document_process._find_paragraph(document, '[title]', exact=True)
+            anchor = None
+            if title is not None:
+                paragraphs = document.paragraphs
+                title_index = next(i for i, p in enumerate(paragraphs) if p._p is title._p)
+                anchor = next((p for p in reversed(paragraphs[:title_index]) if p.text.strip()), None)
+            new_para = OxmlElement('w:p')
+            if anchor is not None:
+                anchor._element.addnext(new_para)
+            else:
+                document.paragraphs[0]._element.addprevious(new_para)
             inserted_para = Paragraph(new_para, document)
-            run = inserted_para.add_run()
-            run.add_picture(image_source, width=Cm(3))
+            inserted_para.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+            if anchor is not None:
+                inserted_para.paragraph_format.space_before = Pt(Document_process._LOGO_GAP_PT)
+            inserted_para.add_run().add_picture(image_source, width=width, height=height)
 
+            document._logo_height_pt = height / 12700
             logger.info('Logo insertado: %s', logo_path)
             return True
         except Exception as e:
@@ -1154,7 +1181,7 @@ class Document_process:
 
         document = Document(template_path)
 
-        # Insertar logo de la universidad (centrado arriba en portada)
+        # Insertar logo de la universidad (centrado, debajo del membrete)
         has_logo = Document_process.insert_logo(document, university_name)
 
         # Ubicar el título y la línea de fecha/lugar por su marcador, ANTES
@@ -1182,6 +1209,7 @@ class Document_process:
                 document, title_para,
                 date_para=date_para,
                 has_logo=has_logo,
+                logo_height_pt=getattr(document, '_logo_height_pt', 0),
                 university_name=replacements.get('[u]', ''),
                 detail_lines=detail_lines,
                 title_text=replacements.get('[title]', ''),

@@ -287,7 +287,7 @@ def test_underline_words_no_borra_el_logo():
     Document_process.underline_words_in_first_page(
         doc, ['DOCENTE:', 'ALUMNOS:', 'ALUMNO:', 'SECCION:', 'MATERIA:']
     )
-    assert Document_process._has_drawing(doc.paragraphs[0])
+    assert any(Document_process._has_drawing(p) for p in doc.paragraphs)
 
 
 def test_fill_placeholders_caso_extremo_no_lanza_excepcion():
