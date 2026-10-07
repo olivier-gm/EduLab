@@ -8,6 +8,7 @@
 .docs-head p { color: var(--text-soft); margin-top: 6px; max-width: 620px; }
 
 .docs-list { display: grid; gap: 14px; }
+.doc-generating { margin-bottom: 14px; border-color: var(--accent, #20e4da); }
 .docs-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 24px; flex-wrap: wrap; }
 
 .doc-item {

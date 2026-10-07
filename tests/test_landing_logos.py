@@ -104,8 +104,11 @@ def test_cada_institucion_trae_logo_completo_y_miniatura():
 def test_la_landing_sirve_solo_miniaturas(client):
     page = client.get('/').get_data(as_text=True)
     assert 'logos/thumbs/universidad_central_de_venezuela.webp' in page          # logo inicial de la hoja
-    for stem in ('universidad_central_de_venezuela', 'universidad_de_los_andes', 'universidad_simon_bolivar'):
-        assert f'logos/thumbs/{stem}.webp' in page                                # franja "Hecho para instituciones"
+    strip = page.split('<div class="logos-strip reveal">', 1)[1].split('</div>', 1)[0]
+    assert strip.count('<img ') == 5
+    for stem in ('universidad_central_de_venezuela', 'universidad_de_carabobo', 'universidad_de_los_andes',
+                 'universidad_del_zulia', 'universidad_nacional_experimental_romulo_gallegos'):
+        assert f'logos/thumbs/{stem}.webp' in strip
     # ninguna etiqueta <img> apunta al logo completo (Word lo sigue usando; la web no)
     for src in re.findall(r'<img[^>]+src="([^"]+)"', page):
         assert '/logos/' not in src or '/logos/thumbs/' in src, src

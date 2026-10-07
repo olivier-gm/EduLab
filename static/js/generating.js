@@ -25,8 +25,9 @@
   };
   var GLOSSARY = {
     prepare: { step: 1, from: 4, to: 10, text: 'Preparando la portada del glosario…' },
-    terms: { step: 2, from: 10, to: 22, text: 'Revisando la lista y la cantidad de términos…' },
-    definitions: { step: 3, from: 22, to: 82, text: 'Redactando definiciones breves para cada término…' },
+    terms: { step: 2, from: 10, to: 28, text: 'Seleccionando y validando los términos…' },
+    bibliography: { step: 3, from: 28, to: 42, text: 'Investigando las fuentes de cada tanda…' },
+    definitions: { step: 3, from: 42, to: 82, text: 'Redactando definiciones breves para cada término…' },
     check: { step: 4, from: 82, to: 90, text: 'Comprobando la cantidad y el orden alfabético…' },
     build: { step: 5, from: 90, to: 97, text: 'Armando el glosario en Word y PDF…' }
   };
@@ -36,11 +37,14 @@
   var progress = current.from;
   var finished = false;
   var failures = 0;
+  var total = 0;
+  var detail = '';
 
   function paint() {
     bar.style.width = progress.toFixed(1) + '%';
     pct.textContent = Math.floor(progress) + '%';
-    if (msg.textContent !== current.text) { msg.textContent = current.text; }
+    var message = detail || current.text;
+    if (msg.textContent !== message) { msg.textContent = message; }
     var steps = box.querySelectorAll('.loader__step');
     for (var i = 0; i < steps.length; i++) {
       var n = parseInt(steps[i].getAttribute('data-lstep'), 10);
@@ -54,17 +58,25 @@
     }
   }
 
-  function setStage(name) {
+  function setStage(name, completed, count) {
     var stage = STAGES[name];
-    if (!stage || stage === current) { return; }
+    if (!stage) { return; }
     current = stage;
+    total = count || 0;
+    detail = '';
+    if (total > 0) {
+      progress = stage.from + (stage.to - stage.from) * Math.min(completed / total, 1);
+      var labels = { terms: 'Términos seleccionados y validados', definitions: 'Términos definidos',
+                     bibliography: 'Tandas de fuentes consultadas' };
+      detail = (labels[name] || current.text) + ': ' + completed + ' de ' + total + '.';
+    }
     if (progress < stage.from) { progress = stage.from; }
     paint();
   }
 
   // Avance lento dentro de la etapa actual (nunca pasa de su tope).
   window.setInterval(function () {
-    if (finished) { return; }
+    if (finished || total > 0) { return; }
     progress += Math.max(0, current.to - progress) * 0.03 + 0.02;
     if (progress > current.to) { progress = current.to; }
     paint();
@@ -84,10 +96,11 @@
       })
       .then(function (data) {
         failures = 0;
-        if (data.status === 'running') { setStage(data.stage); return; }
+        if (data.status === 'running') { setStage(data.stage, data.completed, data.total); return; }
         finished = true;
         if (data.status === 'done') {
           progress = 100;
+          detail = '';
           current = { step: 6, text: '¡Listo! Abriendo tu documento…' };
           paint();
           window.setTimeout(function () { window.location.href = data.next; }, 450);

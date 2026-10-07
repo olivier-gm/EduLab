@@ -36,18 +36,20 @@ def test_glossary_exact_100_terms_and_short_definitions(monkeypatch):
         glossary.generate_glossary('Tema de prueba', 100, terms)
 
 
-def test_glossary_300_terms_uses_all_twelve_batches(monkeypatch):
-    monkeypatch.setattr(glossary, 'max_terms', lambda: 300)
-    terms = [f'Término {i:03}' for i in range(300)]
+def test_glossary_200_terms_reports_all_eight_batches(monkeypatch):
+    monkeypatch.setattr(glossary, 'max_terms', lambda: 200)
+    terms = [f'Término {i:03}' for i in range(200)]
     batches = []
+    progress = []
     def generate(contents, schema, *args):
         requested = json.loads(contents[0])['terms']
         batches.append(requested)
         return [{'term': term, 'definition': 'Definición breve.', 'source': -1} for term in requested]
     monkeypatch.setattr(glossary, '_json_generate', generate)
-    result = glossary.generate_glossary('Tema', 300, terms)
-    assert len(batches) == 12 and all(len(batch) == 25 for batch in batches)
+    result = glossary.generate_glossary('Tema', 200, terms, progress=lambda *args: progress.append(args))
+    assert len(batches) == 8 and all(len(batch) == 25 for batch in batches)
     assert [entry['term'] for entry in result] == terms
+    assert progress == [('definitions', n, 200) for n in range(0, 201, 25)]
 
 
 def test_file_validation_and_extraction(monkeypatch):

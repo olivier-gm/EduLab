@@ -13,7 +13,7 @@ load_dotenv()
 import ai_provider  # db debe leer el entorno después de cargar .env.
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=os.environ['GEMINI_API_KEY']) if os.environ.get('GEMINI_API_KEY') else None
+client = genai.Client(api_key=os.environ['GEMINI_API_KEY'], http_options=ai_provider.GOOGLE_HTTP_OPTIONS) if os.environ.get('GEMINI_API_KEY') else None
 
 MODEL_NAME = "gemini-3.5-flash-lite"
 

@@ -44,44 +44,68 @@
 
     <div class="docs-head">
       <h1>Mis informes</h1>
-      <p>Los documentos nuevos se conservan {{ retention_text }}. Cada documento mantiene su fecha de vencimiento original: revisa su contador y descárgalo a tiempo.</p>
+      <p>Los documentos nuevos se conservan {{ retention_text }}. Cada documento mantiene su fecha de vencimiento
+        original: revisa su contador y descárgalo a tiempo.</p>
     </div>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% for category, text in messages %}
-    <div class="flash flash--{{ category }}" role="alert"><i class="bx bx-error-circle"></i><span>{{ text }}</span></div>
+    <div class="flash flash--{{ category }}" role="alert"><i class="bx bx-error-circle"></i><span>{{ text }}</span>
+    </div>
     {% endfor %}
     {% endwith %}
+
+    {% if active_job %}
+    <article class="card doc-item doc-generating" data-job-status="{{ url_for('generation_status', token=active_job.token) }}">
+      <div class="doc-item__main">
+        <h2 class="doc-item__title">{{ active_job.title or ('Glosario' if active_job.document_kind == 'glossary' else 'Informe') }}</h2>
+        <p class="doc-item__left" role="status" aria-live="polite"><i class="bx bx-loader-alt bx-spin" aria-hidden="true"></i>
+          <span data-job-progress>Generación en curso…</span></p>
+      </div>
+      <a class="btn btn--primary" href="{{ url_for('generating', token=active_job.token) }}">Ver avance <i class="bx bx-right-arrow-alt" aria-hidden="true"></i></a>
+    </article>
+    {% endif %}
 
     {% if documents %}
     <div class="docs-list">
       {% for d in documents %}
-      <article class="card doc-item{{ ' is-urgent' if d.urgent }}" data-expires="{{ d.expires_iso }}" data-created="{{ d.created_iso }}">
+      <article class="card doc-item{{ ' is-urgent' if d.urgent }}" data-expires="{{ d.expires_iso }}"
+        data-created="{{ d.created_iso }}">
         <div class="doc-item__main">
           <h2 class="doc-item__title">{{ d.title }}</h2>
           <div class="doc-item__meta">
-            <span><i class="bx bx-{{ 'shape-triangle' if d.mode == 'ai' else 'pencil' }}"></i> {{ 'Con IA' if d.mode == 'ai' else 'Escrito por ti' }}</span>
-            <span><i class="bx bx-{{ 'been-here' if d.doc_type == 'uni' else 'book' }}"></i> {{ 'Universitario' if d.doc_type == 'uni' else 'Bachillerato' }}</span>
-            <span><i class="bx bx-calendar"></i> {{ d.created_at }} UTC</span>
+            <span><i class="bx bx-{{ 'shape-triangle' if d.mode == 'ai' else 'pencil' }}"></i> {{ 'Con IA' if d.mode ==
+              'ai' else 'Escrito por ti' }}</span>
+            <span><i class="bx bx-{{ 'been-here' if d.doc_type == 'uni' else 'book' }}"></i> {{ 'Universitario' if
+              d.doc_type == 'uni' else 'Bachillerato' }}</span>
+            <span><i class="bx bx-calendar"></i> {{ d.created_at }} (hora de Venezuela)</span>
           </div>
           <div class="doc-item__time">
             <div class="doc-item__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
               aria-valuenow="{{ (d.fraction * 100)|round|int }}" aria-label="Tiempo restante">
               <span style="width: {{ (d.fraction * 100)|round(1) }}%"></span>
             </div>
-            <span class="doc-item__left"><i class="bx bx-time-five"></i> Vence en <b data-left>{{ d.time_left }}</b></span>
+            <span class="doc-item__left"><i class="bx bx-time-five"></i> Vence en <b data-left>{{ d.time_left
+                }}</b></span>
           </div>
         </div>
         <div class="doc-item__actions">
-          <a class="btn btn--word" href="{{ url_for('my_document_download', doc_id=d.id, filetype='docx') }}" aria-label="Descargar Word" title="Descargar Word"><i class="bx bx-download" aria-hidden="true"></i><i class="bx bxs-file-doc" aria-hidden="true"></i></a>
+          <a class="btn btn--word" href="{{ url_for('my_document_download', doc_id=d.id, filetype='docx') }}"
+            aria-label="Descargar Word" title="Descargar Word"><i class="bx bx-download" aria-hidden="true"></i><i
+              class="bx bxs-file-doc" aria-hidden="true"></i></a>
           {% if d.has_pdf %}
-          <a class="btn btn--pdf" href="{{ url_for('my_document_download', doc_id=d.id, filetype='pdf') }}" aria-label="Descargar PDF" title="Descargar PDF"><i class="bx bx-download" aria-hidden="true"></i><i class="bx bxs-file-pdf" aria-hidden="true"></i></a>
+          <a class="btn btn--pdf" href="{{ url_for('my_document_download', doc_id=d.id, filetype='pdf') }}"
+            aria-label="Descargar PDF" title="Descargar PDF"><i class="bx bx-download" aria-hidden="true"></i><i
+              class="bx bxs-file-pdf" aria-hidden="true"></i></a>
           {% endif %}
           <details class="doc-share">
-            <summary class="btn btn--ghost" aria-label="Compartir documento" title="Compartir documento"><i class="bx bx-share-alt" aria-hidden="true"></i></summary>
+            <summary class="btn btn--ghost" aria-label="Compartir documento" title="Compartir documento"><i
+                class="bx bx-share-alt" aria-hidden="true"></i></summary>
             <div class="doc-share__options">
               {% for format, link in d.share_urls.items() %}
-              <button class="btn btn--{{ 'word' if format == 'docx' else 'pdf' }}" type="button" data-share-url="{{ link }}" data-share-title="{{ d.title }}">Compartir {{ 'Word' if format == 'docx' else 'PDF' }}</button>
+              <button class="btn btn--{{ 'word' if format == 'docx' else 'pdf' }}" type="button"
+                data-share-url="{{ link }}" data-share-title="{{ d.title }}">Compartir {{ 'Word' if format == 'docx'
+                else 'PDF' }}</button>
               {% endfor %}
               <span class="doc-share__status" role="status" aria-live="polite"></span>
             </div>
@@ -90,10 +114,11 @@
       </article>
       {% endfor %}
     </div>
-    {% else %}
+    {% elif not active_job %}
     <div class="card docs-empty">
       <i class="bx bx-folder-open"></i>
-      <h2>{{ 'No hay más informes disponibles en esta página' if page > 1 else 'Todavía no tienes informes guardados' }}</h2>
+      <h2>{{ 'No hay más informes disponibles en esta página' if page > 1 else 'Todavía no tienes informes guardados' }}
+      </h2>
       <p>Los documentos que generes aparecerán aquí durante {{ retention_text }}.</p>
       <a class="btn btn--primary" href="{{ url_for('show_form') }}"><i class="bx bx-plus"></i> Crear un documento</a>
     </div>
@@ -101,9 +126,11 @@
 
     {% if page > 1 or has_next %}
     <nav class="docs-pagination" aria-label="Páginas de informes">
-      {% if page > 1 %}<a class="btn btn--ghost" href="{{ url_for('my_documents', page=page - 1) }}">Anterior</a>{% endif %}
+      {% if page > 1 %}<a class="btn btn--ghost" href="{{ url_for('my_documents', page=page - 1) }}">Anterior</a>{%
+      endif %}
       <span>Página {{ page }}</span>
-      {% if has_next %}<a class="btn btn--ghost" href="{{ url_for('my_documents', page=page + 1) }}">Siguiente</a>{% endif %}
+      {% if has_next %}<a class="btn btn--ghost" href="{{ url_for('my_documents', page=page + 1) }}">Siguiente</a>{%
+      endif %}
     </nav>
     {% endif %}
   </main>
@@ -116,6 +143,30 @@
   </footer>
 
   <script>
+    (function () {
+      var item = document.querySelector('[data-job-status]');
+      if (!item) return;
+      var labels = {prepare: 'Preparando la portada', validate: 'Validando el título', terms: 'Seleccionando términos',
+        definitions: 'Términos definidos', content: 'Redactando el informe', sections: 'Preparando las secciones',
+        bibliography: 'Consultando fuentes', check: 'Comprobando el glosario', build: 'Creando Word y PDF'};
+      async function poll() {
+        try {
+          var response = await fetch(item.dataset.jobStatus, {cache: 'no-store', credentials: 'same-origin'});
+          if (!response.ok) return;
+          var data = await response.json();
+          if (data.status === 'done') { location.reload(); return; }
+          if (data.status === 'error') {
+            item.querySelector('[data-job-progress]').textContent = 'No se pudo completar el documento.';
+            var link = item.querySelector('a'); link.href = data.next; link.textContent = 'Ver motivo';
+            return;
+          }
+          item.querySelector('[data-job-progress]').textContent = (labels[data.stage] || 'Generación en curso') +
+            (data.total > 0 ? ': ' + data.completed + ' de ' + data.total : '…');
+        } catch (error) { /* Se reintenta cuando vuelva la conexión. */ }
+        setTimeout(poll, 4000);
+      }
+      poll();
+    })();
     // Mantiene "Vence en …" al día sin recargar la página (se revisa cada minuto).
     (function () {
       document.querySelectorAll('[data-share-url]').forEach(function (button) {
@@ -124,7 +175,7 @@
           var url = button.dataset.shareUrl;
           try {
             if (navigator.share) {
-              await navigator.share({title: button.dataset.shareTitle, url: url});
+              await navigator.share({ title: button.dataset.shareTitle, url: url });
             } else {
               await navigator.clipboard.writeText(url);
               status.textContent = 'Enlace copiado. Vence junto con el documento.';

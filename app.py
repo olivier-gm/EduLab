@@ -8,6 +8,7 @@ import os
 import logging
 import re
 import time
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
@@ -415,9 +416,10 @@ def process_form():
             'scan_tokens': session.pop('scan_extraction_tokens', 0),    # lectura de foto previa, si hubo
             'glossary_tokens': session.pop('glossary_extraction_tokens', 0) if is_glossary else 0,
             'prevalidated': session.pop('validated_title', {}),
+            'ai_settings': dict(ai_provider.settings()),
         }
         ticket = g.generation_ticket
-        token = db.create_job(user['id'], document_kind, ticket)
+        token = db.create_job(user['id'], document_kind, ticket, form_data.get('title', '').strip())
         ticket['handed_off'] = True            # el trabajo cierra el cupo (lo consume o lo devuelve)
     except Exception:
         jobs.release()
@@ -430,6 +432,7 @@ def process_form():
 def _run_generation(token, user_id, inputs, ticket):
     """Corre en un hilo, sin petición HTTP: genera el documento y deja el resultado en el trabajo."""
     g.generation_ticket = ticket                 # tope de términos y registro del documento
+    ai_provider.request_settings.set(inputs.get('ai_settings') or db.get_settings())
     ai_provider.generation_trace.set([])
     started = time.time()
     try:
@@ -507,13 +510,13 @@ def _generate_document(token, user_id, inputs, started):
             _stage(token, 'terms', started)
             check_glossary(processor.title, terms, usage_sink=usage_sink,
                            include_title=not title_validated)
-            _stage(token, 'definitions', started)
             glossary_entries = generate_glossary(processor.title, count, terms=terms,
-                bibliography=incluir_bibliografia, usage_sink=usage_sink)
+                bibliography=incluir_bibliografia, usage_sink=usage_sink,
+                progress=lambda stage, completed, total: db.set_job_stage(token, stage, completed, total))
+            _stage(token, 'check', started)
             # Las listas grandes por tema ya se validan antes de definirlas;
             # el generador exige después conservar exactamente esa lista.
             if terms is None and count <= 25:
-                _stage(token, 'check', started)
                 check_glossary(processor.title, [entry['term'] for entry in glossary_entries],
                                usage_sink=usage_sink, include_title=False)
             body = ''
@@ -649,6 +652,7 @@ def generating(token):
 def generation_status(token):
     job = _own_job(token)
     response = jsonify(status=job['status'], stage=job['stage'], kind=job['document_kind'],
+                       completed=job['progress_current'], total=job['progress_total'],
                        next=url_for('finish_generation', token=token))
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -732,7 +736,7 @@ def my_documents():
         label, fraction = db.time_left(doc['expires_at'], doc['created_at'])
         documents.append({
             'id': doc['id'], 'title': doc['title'], 'doc_type': doc['doc_type'],
-            'mode': doc['mode'], 'created_at': doc['created_at'],
+            'mode': doc['mode'], 'created_at': (datetime.strptime(doc['created_at'], db.DATETIME_FMT) - timedelta(hours=4)).strftime(db.DATETIME_FMT),
             'time_left': label, 'fraction': fraction,
             'expires_iso': doc['expires_at'].replace(' ', 'T') + 'Z',
             'created_iso': doc['created_at'].replace(' ', 'T') + 'Z',
@@ -742,7 +746,8 @@ def my_documents():
                 token=_share_serializer().dumps(doc['file_stem']), filetype=kind, _external=True)
                 for kind in document_filetypes(doc) if kind in available.get(doc['file_stem'], ())},
         })
-    return render_template('my_documents.html', documents=documents, page=page, has_next=len(rows) > 50)
+    return render_template('my_documents.html', documents=documents, page=page, has_next=len(rows) > 50,
+                           active_job=db.active_job(current_user()['id']))
 
 
 @app.route('/my_documents/<int:doc_id>/<filetype>')

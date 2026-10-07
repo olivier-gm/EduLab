@@ -123,13 +123,25 @@ def report_payment(client, data):
     return client.post('/plans/pay', data={**data, 'csrf_token': token})
 
 
+def test_pro_terms_migration_runs_once(client):
+    conn = db.get_db()
+    conn.execute("DELETE FROM settings WHERE key = 'migration_pro_terms_200'")
+    conn.commit()
+    db.set_settings({'pro_terms': '300'})
+    db.init_db()
+    assert db.get_settings()['pro_terms'] == '200'
+    db.set_settings({'pro_terms': '250'})
+    db.init_db()
+    assert db.get_settings()['pro_terms'] == '250'
+
+
 def test_three_plans_recharge_pauses_and_monthly_quota_rolls_over(client, monkeypatch):
     clock = datetime(2026, 10, 1, 12)
     monkeypatch.setattr(db, '_utcnow', lambda: clock)
     uid = make_user()
     catalog = db.plan_catalog()
     assert [(p['price'], p['limit'], p['terms'], p['hours']) for p in catalog.values()] == [
-        ('2.99', 20, 100, 1), ('4.99', 400, 100, 72), ('14.99', 2000, 300, 8760)]
+        ('2.99', 20, 100, 1), ('4.99', 400, 100, 72), ('14.99', 2000, 200, 8760)]
     payment = db.create_payment(uid, 'binance', 'REC001', 2.99, 'recharge')
     db.set_settings({'recharge_limit': '25'})
     assert db.review_payment(payment, True, uid, 30)
@@ -160,7 +172,7 @@ def test_plan_catalog_payment_selection_disable_and_admin_validation(client):
     login(client, uid)
     html = client.get('/plans?plan=pro').get_data(as_text=True)
     assert '$2.99' in html and '$4.99' in html and '$14.99' in html
-    assert 'name="plan_id" value="pro"' in html and '300 términos' in html
+    assert 'name="plan_id" value="pro"' in html and '200 términos' in html
     db.set_settings({'pro_enabled': '0'})
     assert 'name="plan_id" value="pro"' not in client.get('/plans?plan=pro').get_data(as_text=True)
     report_payment(client, {'method': 'binance', 'reference': 'DISABLED', 'plan_id': 'pro'})

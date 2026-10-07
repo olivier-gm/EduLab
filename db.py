@@ -183,7 +183,7 @@ PLAN_IDS = ('recharge', 'premium', 'pro')
 for _id, _name, _price, _limit, _terms, _hours, _benefits in (
     ('recharge', 'Recarga', '2.99', 20, 100, 1, 'Informes con IA\nDocumentos manuales\nDescarga solo en Word\nSin acceso a glosarios\nSaldo sin vencimiento; se pausa con un plan mensual'),
     ('premium', 'Premium', '4.99', 400, 100, 72, 'Informes y glosarios con IA\nDocumentos manuales\nUniversitario y bachillerato\nDescarga en Word y PDF'),
-    ('pro', 'Pro', '14.99', 2000, 300, 8760, 'Generaciones ilimitadas\nInformes y glosarios con IA\nBibliografía con fuentes en cada término del glosario\nDocumentos manuales\nUniversitario y bachillerato\nDescarga en Word y PDF'),
+    ('pro', 'Pro', '14.99', 2000, 200, 8760, 'Generaciones ilimitadas\nInformes y glosarios con IA\nBibliografía con fuentes en cada término del glosario\nDocumentos manuales\nUniversitario y bachillerato\nDescarga en Word y PDF'),
 ):
     for _key, _value in {'name': _name, 'price': _price, 'limit': _limit, 'terms': _terms,
                          'hours': _hours, 'enabled': 1, 'benefits': _benefits}.items():
@@ -480,6 +480,8 @@ def _migrate(conn):
                      'order_reference': 'TEXT', 'provider_status': "TEXT NOT NULL DEFAULT ''",
                      'verify_after': 'INTEGER NOT NULL DEFAULT 0', 'verify_attempt': 'TEXT'},
         'documents': {'billing_plan': "TEXT NOT NULL DEFAULT 'free'"},
+        'generation_jobs': {'title': "TEXT NOT NULL DEFAULT ''", 'progress_current': 'INTEGER NOT NULL DEFAULT 0',
+                            'progress_total': 'INTEGER NOT NULL DEFAULT 0'},
         'pending_registrations': {'purpose': "TEXT NOT NULL DEFAULT 'register'", 'verified_until': 'INTEGER NOT NULL DEFAULT 0'},
     }.items():
         existing = columns(table)
@@ -491,6 +493,11 @@ def _migrate(conn):
         conn.execute('ALTER TABLE users ADD COLUMN plan_expires_at TEXT')
     if 'generation_trace' not in columns('documents'):
         conn.execute('ALTER TABLE documents ADD COLUMN generation_trace TEXT')
+
+    # Cambia una sola vez el límite anterior de Pro; después el admin puede editarlo.
+    if not conn.execute("SELECT key FROM settings WHERE key = 'migration_pro_terms_200'").fetchone():
+        conn.execute("UPDATE settings SET value = '200' WHERE key = 'pro_terms' AND value = '300'")
+        conn.execute("INSERT INTO settings (key, value) VALUES ('migration_pro_terms_200', '1')")
 
     if 'mode' not in columns('documents'):
         # 'ai' = redactado por Gemini, 'manual' = escrito por el usuario. Los
@@ -1139,14 +1146,14 @@ def job_ticket(ticket):
     return {key: ticket[key] for key in TICKET_KEYS if ticket and key in ticket}
 
 
-def create_job(user_id, document_kind, ticket):
+def create_job(user_id, document_kind, ticket, title=''):
     token = uuid.uuid4().hex
     now = _utcnow().strftime(DATETIME_FMT)
     db = get_db()
     db.execute(
-        'INSERT INTO generation_jobs (token, user_id, document_kind, ticket, created_at, updated_at) '
-        'VALUES (?, ?, ?, ?, ?, ?)',
-        (token, user_id, document_kind, json.dumps(job_ticket(ticket)), now, now))
+        'INSERT INTO generation_jobs (token, user_id, document_kind, ticket, title, created_at, updated_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        (token, user_id, document_kind, json.dumps(job_ticket(ticket)), title, now, now))
     db.commit()
     return token
 
@@ -1163,10 +1170,11 @@ def active_job(user_id):
         'ORDER BY id DESC LIMIT 1', (user_id, cutoff)).fetchone()
 
 
-def set_job_stage(token, stage):
+def set_job_stage(token, stage, completed=0, total=0):
     db = get_db()
-    db.execute("UPDATE generation_jobs SET stage = ?, updated_at = ? WHERE token = ? AND status = 'running'",
-               (stage, _utcnow().strftime(DATETIME_FMT), token))
+    db.execute("UPDATE generation_jobs SET stage = ?, progress_current = ?, progress_total = ?, "
+               "updated_at = ? WHERE token = ? AND status = 'running'",
+               (stage, completed, total, _utcnow().strftime(DATETIME_FMT), token))
     db.commit()
 
 

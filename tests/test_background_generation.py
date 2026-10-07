@@ -285,18 +285,54 @@ def test_los_avisos_del_documento_se_muestran_una_sola_vez(client, fake_document
 
 
 def test_el_hilo_de_fondo_respeta_el_tope_de_terminos_del_plan(client, background, fake_document, monkeypatch):
-    """Sin petición HTTP el tope sale de la reserva de cupo del trabajo: Pro (300) sí, Premium (100) no."""
+    """Sin petición HTTP el tope sale de la reserva de cupo del trabajo: Pro (200) sí, Premium (100) no."""
     db.set_settings({'plans_public_enabled': '1'})
     monkeypatch.setattr(app_module, 'check_glossary', lambda *a, **k: None)
     monkeypatch.setattr(app_module, 'generate_glossary', lambda *a, **k: [
         {'term': 'Término', 'definition': 'Definición breve.', 'reference': ''}])
     db.grant_plan(client.uid, 30, 'pro')
-    wait_for(token_of(start(client, document_kind='glossary', glossary_count='250', title='Biologia celular')), 'done')
+    wait_for(token_of(start(client, document_kind='glossary', glossary_count='200', title='Biologia celular')), 'done')
     # Premium: 100 términos como máximo
     conn = db.get_db()
     conn.execute("UPDATE generation_jobs SET status = 'done'")
     conn.execute("UPDATE users SET plan = 'premium' WHERE id = ?", (client.uid,))
     conn.commit()
-    token = token_of(start(client, document_kind='glossary', glossary_count='250', title='Biologia celular'))
+    token = token_of(start(client, document_kind='glossary', glossary_count='200', title='Biologia celular'))
     job = wait_for(token, 'error')
     assert 'entre 1 y 100' in job['message']
+
+
+def test_glosario_en_segundo_plano_informa_avance_y_conserva_proveedor(client, background, fake_document, monkeypatch):
+    import ai_provider
+    gate = threading.Event()
+    providers = []
+    db.set_settings({'plans_public_enabled': '1', 'ai_provider': 'openrouter'})
+    db.grant_plan(client.uid, 30, 'pro')
+    monkeypatch.setattr(app_module, 'check_glossary', lambda *a, **k: None)
+
+    def generate(title, count, **kwargs):
+        providers.append(ai_provider.settings()['ai_provider'])
+        kwargs['progress']('definitions', 25, count)
+        assert gate.wait(15)
+        providers.append(ai_provider.settings()['ai_provider'])
+        kwargs['progress']('definitions', count, count)
+        return [{'term': f'Término {i}', 'definition': 'Definición breve.'} for i in range(count)]
+
+    monkeypatch.setattr(app_module, 'generate_glossary', generate)
+    token = token_of(start(client, document_kind='glossary', glossary_count='200', title='Biología celular'))
+    wait_stage(token, 'definitions')
+    status = client.get(f'/generating/{token}/status').json
+    assert status['completed'] == 25 and status['total'] == 200
+    html = client.get('/my_documents').get_data(as_text=True)
+    assert 'Biología celular' in html and f'/generating/{token}' in html
+    assert 'data-job-status=' in html and 'Todavía no tienes informes guardados' not in html
+    other = app_module.app.test_client()
+    with other.session_transaction() as sess:
+        sess['user_id'] = db.create_user('otro@x.com', 'Otro')
+    assert token not in other.get('/my_documents').get_data(as_text=True)
+    db.set_settings({'ai_provider': 'gemini'})
+    gate.set()
+    wait_for(token, 'done')
+    assert 'data-job-status=' not in client.get('/my_documents').get_data(as_text=True)
+    assert providers == ['openrouter', 'openrouter']
+    assert '/choose_file/' in client.get(f'/generating/{token}/finish').location

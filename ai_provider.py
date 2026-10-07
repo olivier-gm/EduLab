@@ -17,6 +17,7 @@ from google import genai
 import db
 
 logger = logging.getLogger(__name__)
+GOOGLE_HTTP_OPTIONS = {'timeout': 120000, 'retry_options': {'attempts': 1}}
 
 request_settings = ContextVar('ai_settings', default=None)
 generation_trace = ContextVar('ai_generation_trace', default=None)
@@ -77,7 +78,7 @@ def configuration(default_model='gemini-3.5-flash-lite', values=None, provider=N
 
 @lru_cache(maxsize=4)
 def google_client(key):
-    return genai.Client(api_key=key)
+    return genai.Client(api_key=key, http_options=GOOGLE_HTTP_OPTIONS)
 
 
 def direct_client(key):

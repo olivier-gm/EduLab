@@ -258,7 +258,7 @@ def test_paid_generations_count_once_and_failed_generation_refunds_credit(client
     db.grant_plan(uid, 30, 'pro')
     assert client.get(f'/s/{token}/pdf').status_code == 403
     old_expiry = doc['expires_at']
-    terms = [f'Término {i:03}' for i in range(300)]
+    terms = [f'Término {i:03}' for i in range(200)]
     monkeypatch.setattr(app_module, 'check_glossary', lambda *args, **kwargs: None)
     monkeypatch.setattr(app_module, 'generate_glossary', lambda title, count, **kwargs:
                         [{'term': term, 'definition': 'Definición breve.'} for term in kwargs['terms']])
@@ -267,7 +267,7 @@ def test_paid_generations_count_once_and_failed_generation_refunds_credit(client
     assert db.get_user_by_id(uid)['credits'] == 1 and db.get_user_by_id(uid)['plan_used'] == 1
     assert db.list_documents()[0]['expires_at'] == (clock + timedelta(hours=8760)).strftime(db.DATETIME_FMT)
     assert db.list_documents()[-1]['expires_at'] == old_expiry
-    assert 'max="300"' in client.get('/form').get_data(as_text=True)
+    assert 'max="200"' in client.get('/form').get_data(as_text=True)
     db.grant_plan(uid, 30, 'premium')
     html = post_form(client, document_kind='glossary', glossary_source='list', glossary_terms='\n'.join(terms))
     assert 'entre 1 y 100 términos' in html

@@ -318,7 +318,7 @@ def generate_bibliography(title, body, usage_sink=None):
     return result
 
 
-def _select_topic_terms(title, count, usage_sink, _excluded=()):
+def _select_topic_terms(title, count, usage_sink, _excluded=(), progress=None):
     """Fija la lista antes de definir: las tandas no vuelven a elegir los términos."""
     from title_check import check_glossary, GlossaryTermsError
     if count > 100:
@@ -328,6 +328,8 @@ def _select_topic_terms(title, count, usage_sink, _excluded=()):
         for offset in range(0, count, 50):
             terms.extend(_select_topic_terms(title, min(50, count - offset), usage_sink,
                                             _excluded=tuple(_excluded) + tuple(terms)))
+            if progress:
+                progress('terms', len(terms), count)
         return sorted(terms, key=alphabetic_key)
     accepted = []
     rejected = []
@@ -387,13 +389,15 @@ def _select_topic_terms(title, count, usage_sink, _excluded=()):
     raise IA.GenerationError('invalid', 'La IA no completó una lista de términos únicos. Inténtalo de nuevo.')
 
 
-def _research_batches(title, terms, usage_sink):
+def _research_batches(title, terms, usage_sink, progress=None):
     """Investiga las fuentes de cada tanda de BATCH_SIZE términos por separado, en paralelo.
 
     Con una sola investigación para toda la lista, 300 términos compartían unas pocas fuentes
     (con OpenRouter, como máximo 3 búsquedas por llamada). Así cada tanda busca las suyas.
     Devuelve {posición del primer término de la tanda: contexto de _source_context}."""
     starts = list(range(0, len(terms), BATCH_SIZE))
+    if progress:
+        progress('bibliography', 0, len(starts))
 
     def research(start):
         return _source_context(title, '\n'.join(terms[start:start + BATCH_SIZE]), usage_sink)
@@ -401,9 +405,14 @@ def _research_batches(title, terms, usage_sink):
     # La primera tanda va sola: si agota la cuota, las demás ven la pausa y no lanzan búsquedas
     # que fallarían igual (todas a la vez gastarían intentos inútiles).
     contexts = {starts[0]: research(starts[0])}
+    if progress:
+        progress('bibliography', 1, len(starts))
     with ThreadPoolExecutor(max_workers=RESEARCH_WORKERS) as pool:
         futures = [pool.submit(copy_context().run, research, start) for start in starts[1:]]
-        contexts.update({start: future.result() for start, future in zip(starts[1:], futures)})
+        for start, future in zip(starts[1:], futures):
+            contexts[start] = future.result()
+            if progress:
+                progress('bibliography', len(contexts), len(starts))
     return contexts
 
 
@@ -419,23 +428,29 @@ def _record_batches_status(contexts):
 
 
 def generate_glossary(title, count, terms=None, bibliography=False, usage_sink=None, exclude_terms=None,
-                      _context=None):
+                      _context=None, progress=None):
     if not isinstance(count, int) or not 1 <= count <= max_terms():
         raise ValueError(f'El glosario debe tener entre 1 y {max_terms()} términos.')
     if terms is not None:
         terms = validate_terms(terms)
         count = len(terms)
     elif count > 25:
-        terms = _select_topic_terms(title, count, usage_sink)
+        if progress:
+            progress('terms', 0, count)
+        terms = _select_topic_terms(title, count, usage_sink, progress=progress)
     record_status = bibliography and _context is None
     if record_status and count <= BATCH_SIZE:
+        if progress:
+            progress('bibliography', 0, 1)
         _context = _source_context(title, '\n'.join(terms) if terms else f'Glosario de {count} términos sobre {title}', usage_sink)
     if count > BATCH_SIZE:
         # Tandas de 25; cuatro reintentos adicionales ante respuestas incompletas.
         # Con bibliografía, cada tanda investiga sus propias fuentes (en paralelo, antes de
         # definir) y las conserva si hay que repetirla: un reintento no repite las búsquedas.
-        contexts = _research_batches(title, terms, usage_sink) if record_status else {}
+        contexts = _research_batches(title, terms, usage_sink, progress=progress) if record_status else {}
         entries = []
+        if progress:
+            progress('definitions', 0, count)
         attempts = (count + 24) // 25 + 4
         for attempt in range(attempts):
             remaining = count - len(entries)
@@ -447,6 +462,8 @@ def generate_glossary(title, count, terms=None, bibliography=False, usage_sink=N
                 entries.extend(generate_glossary(title, min(BATCH_SIZE, remaining), batch, bibliography,
                     usage_sink, exclude_terms=[entry['term'] for entry in entries],
                     _context=contexts.get(start, _context)))
+                if progress:
+                    progress('definitions', len(entries), count)
             except IA.GenerationError as exc:
                 if exc.code != 'invalid' or attempt == attempts - 1:
                     raise
@@ -456,6 +473,8 @@ def generate_glossary(title, count, terms=None, bibliography=False, usage_sink=N
             _record_batches_status(contexts)
         return sorted(entries, key=lambda entry: alphabetic_key(entry['term']))
     sources, research, reason = _context or ([], '', '')
+    if progress:
+        progress('definitions', 0, count)
     ai_bibliography = bibliography and not sources
     schema = {'type': 'array', 'minItems': count, 'maxItems': count, 'items': {
         'type': 'object', 'properties': {'term': {'type': 'string'}, 'definition': {'type': 'string'},
@@ -525,5 +544,8 @@ def generate_glossary(title, count, terms=None, bibliography=False, usage_sink=N
     excluded = set(map(alphabetic_key, exclude_terms or []))
     if record_status:
         _bibliography_status(sources, reason)
-    return sorted([entry for entry in entries if alphabetic_key(entry['term']) not in excluded],
-                  key=lambda entry: alphabetic_key(entry['term']))
+    result = sorted([entry for entry in entries if alphabetic_key(entry['term']) not in excluded],
+                    key=lambda entry: alphabetic_key(entry['term']))
+    if progress:
+        progress('definitions', len(result), count)
+    return result

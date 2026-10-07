@@ -86,7 +86,7 @@ def test_default_free_mode_hides_plans_and_preserves_paid_balances(client):
     assert plans.generation_access(user, 'ai') == (True, None)
     assert plans.generation_access(user, 'manual') == (True, None)
     assert plans.access_summary(user)['ai']['limit'] == 5
-    assert db.billing_state(user)['terms'] == 300
+    assert db.billing_state(user)['terms'] == 200
     assert db.reserve_generation(uid, allow_free=True)['source'] == 'free'
     assert db.get_user_by_id(uid)['plan_used'] == 400
     assert db.get_user_by_id(uid)['credits'] == 20
