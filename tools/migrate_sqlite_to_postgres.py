@@ -42,9 +42,11 @@ def migrate(source_path, destination, force=False):
             columns = [c for c in source_columns if c in dest_columns]    # solo las que existen en ambos
             rows = source.execute(f'SELECT {", ".join(columns)} FROM {table}').fetchall()
             placeholders = ', '.join('?' for _ in columns)
+            # init_db() ya siembra algún ajuste en el destino: el valor del origen manda.
+            upsert = ' ON CONFLICT (key) DO UPDATE SET value = excluded.value' if table == 'settings' else ''
             for row in rows:
                 destination.execute(
-                    f'INSERT INTO {table} ({", ".join(columns)}) VALUES ({placeholders})', tuple(row))
+                    f'INSERT INTO {table} ({", ".join(columns)}) VALUES ({placeholders}){upsert}', tuple(row))
             counts[table] = len(rows)
 
         if destination._pg:

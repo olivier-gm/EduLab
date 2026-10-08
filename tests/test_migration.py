@@ -42,7 +42,7 @@ def run(source, force=False):
 
 def test_copia_todo_y_conserva_los_ids(paths, monkeypatch):
     source, destination = paths
-    assert run(source) == {'users': 2, 'documents': 1, 'payments': 1, 'settings': 2}
+    assert run(source) == {'users': 2, 'documents': 1, 'payments': 1, 'settings': 3}   # + el ajuste que siembra init_db
 
     from flask import Flask
     with Flask(__name__).app_context():
