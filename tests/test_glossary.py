@@ -52,6 +52,48 @@ def test_glossary_200_terms_reports_all_eight_batches(monkeypatch):
     assert progress == [('definitions', n, 200) for n in range(0, 201, 25)]
 
 
+def test_glossary_splits_a_batch_after_repeated_invalid_responses(monkeypatch):
+    terms = [f'Término {i:02}' for i in range(26)]
+    batch_sizes = []
+    progress = []
+    def generate(contents, schema, *args):
+        requested = json.loads(contents[0])['terms']
+        batch_sizes.append(len(requested))
+        if len(batch_sizes) <= 2:
+            raise IA.GenerationError('invalid', 'Respuesta inválida de prueba.')
+        return [{'term': term, 'definition': 'Definición breve.', 'source': -1} for term in requested]
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    result = glossary.generate_glossary('Tema', 26, terms,
+        progress=lambda *args: progress.append(args))
+    assert len(result) == 26 and batch_sizes == [25, 25, 13, 12, 1]
+    assert progress == [('definitions', 0, 26), ('retry', 0, 26),
+                        ('definitions', 13, 26), ('definitions', 25, 26),
+                        ('definitions', 26, 26)]
+
+
+def test_split_batches_keep_their_original_research_context(monkeypatch):
+    terms = [f'Término {i:02}' for i in range(50)]
+    monkeypatch.setattr(glossary, '_research_batches', lambda *a, **k: {
+        0: ([], '0', ''), 25: ([], '25', '')})
+    monkeypatch.setattr(glossary, '_record_batches_status', lambda *a: None)
+    attempts = []
+
+    def generate(contents, schema, *args):
+        data = json.loads(contents[0])
+        requested = data['terms']
+        attempts.append(len(requested))
+        if len(attempts) <= 2:
+            raise IA.GenerationError('invalid', 'Respuesta incompleta.')
+        start = int(data['research'])
+        assert set(requested) <= set(terms[start:start + 25])
+        return [{'term': term, 'definition': 'Definición breve.', 'source': -1,
+                 'reference': 'Autor. (2026). Obra. Editorial.'} for term in requested]
+
+    monkeypatch.setattr(glossary, '_json_generate', generate)
+    result = glossary.generate_glossary('Tema', 50, terms, bibliography=True)
+    assert len(result) == 50 and attempts == [25, 25, 13, 12, 25]
+
+
 def test_file_validation_and_extraction(monkeypatch):
     result = {'terms': ['Energía', 'Átomo'], 'unreadable': False}
     monkeypatch.setattr(glossary, '_json_generate', lambda *a, **k: result)

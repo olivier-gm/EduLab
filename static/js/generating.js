@@ -28,6 +28,7 @@
     terms: { step: 2, from: 10, to: 28, text: 'Seleccionando y validando los términos…' },
     bibliography: { step: 3, from: 28, to: 42, text: 'Investigando las fuentes de cada tanda…' },
     definitions: { step: 3, from: 42, to: 82, text: 'Redactando definiciones breves para cada término…' },
+    retry: { step: 3, from: 42, to: 82, text: 'Ajustando una tanda para completar sus definiciones…' },
     check: { step: 4, from: 82, to: 90, text: 'Comprobando la cantidad y el orden alfabético…' },
     build: { step: 5, from: 90, to: 97, text: 'Armando el glosario en Word y PDF…' }
   };
@@ -67,6 +68,7 @@
     if (total > 0) {
       progress = stage.from + (stage.to - stage.from) * Math.min(completed / total, 1);
       var labels = { terms: 'Términos seleccionados y validados', definitions: 'Términos definidos',
+                     retry: 'Reintentando una tanda; términos definidos',
                      bibliography: 'Tandas de fuentes consultadas' };
       detail = (labels[name] || current.text) + ': ' + completed + ' de ' + total + '.';
     }

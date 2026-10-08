@@ -444,29 +444,42 @@ def generate_glossary(title, count, terms=None, bibliography=False, usage_sink=N
             progress('bibliography', 0, 1)
         _context = _source_context(title, '\n'.join(terms) if terms else f'Glosario de {count} términos sobre {title}', usage_sink)
     if count > BATCH_SIZE:
-        # Tandas de 25; cuatro reintentos adicionales ante respuestas incompletas.
+        # Tandas de 25; si una respuesta inválida persiste, dividirla evita repetir
+        # el mismo bloque grande y conserva el contexto de búsqueda de sus fuentes.
         # Con bibliografía, cada tanda investiga sus propias fuentes (en paralelo, antes de
         # definir) y las conserva si hay que repetirla: un reintento no repite las búsquedas.
         contexts = _research_batches(title, terms, usage_sink, progress=progress) if record_status else {}
         entries = []
         if progress:
             progress('definitions', 0, count)
-        attempts = (count + 24) // 25 + 4
-        for attempt in range(attempts):
-            remaining = count - len(entries)
-            if not remaining:
-                break
+        while len(entries) < count:
             start = len(entries)
-            batch = terms[start:start + BATCH_SIZE] if terms is not None else None
-            try:
-                entries.extend(generate_glossary(title, min(BATCH_SIZE, remaining), batch, bibliography,
-                    usage_sink, exclude_terms=[entry['term'] for entry in entries],
-                    _context=contexts.get(start, _context)))
-                if progress:
-                    progress('definitions', len(entries), count)
-            except IA.GenerationError as exc:
-                if exc.code != 'invalid' or attempt == attempts - 1:
-                    raise
+            batch_size = min(BATCH_SIZE - start % BATCH_SIZE, count - start)
+            retries = 0
+            while True:
+                batch = terms[start:start + batch_size] if terms is not None else None
+                context_start = (start // BATCH_SIZE) * BATCH_SIZE
+                try:
+                    generated = generate_glossary(title, batch_size, batch, bibliography,
+                        usage_sink, exclude_terms=[entry['term'] for entry in entries],
+                        _context=contexts.get(context_start, _context))
+                    entries.extend(generated)
+                    if progress:
+                        progress('definitions', len(entries), count)
+                    break
+                except IA.GenerationError as exc:
+                    if exc.code != 'invalid' or retries:
+                        if exc.code != 'invalid' or batch_size == 1:
+                            raise
+                    retries += 1
+                    if retries >= 2 and batch_size > 1:
+                        previous_size = batch_size
+                        batch_size = (batch_size + 1) // 2
+                        retries = 0
+                        logger.warning('Tanda de glosario no válida; se divide de %d a %d términos y se reintenta.',
+                                       previous_size, batch_size)
+                        if progress:
+                            progress('retry', len(entries), count)
         if len(entries) != count:
             raise IA.GenerationError('invalid', 'La IA no completó todos los términos solicitados. Inténtalo de nuevo.')
         if record_status:
