@@ -66,6 +66,31 @@ def test_titulo_valido(jev, gemini):
     assert verdict.valid and verdict.provider == 'jev' and gemini.calls == 0
 
 
+def test_microsoft_decision_usa_la_clave_existente_y_el_endpoint_de_decisiones(jev, gemini, monkeypatch):
+    import ai_provider
+    monkeypatch.setattr(ai_provider, 'settings', lambda: {**ai_provider.db.SETTING_DEFAULTS,
+        'decision_provider': 'openrouter'})
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'openrouter-test')
+    verdict = title_check.check_title('La célula')
+    assert verdict.valid and verdict.provider == 'openrouter' and gemini.calls == 0
+    call = jev.calls[0]
+    assert call['url'] == 'https://openrouter.ai/api/alpha/decisions'
+    assert call['headers']['Authorization'] == 'Bearer openrouter-test'
+    assert call['json']['model'] == 'microsoft/microsoft-decision-1'
+
+
+def test_microsoft_normaliza_criterios_de_ortografia_sin_modificar_el_original(jev, monkeypatch):
+    import ai_provider
+    monkeypatch.setattr(ai_provider, 'settings', lambda: {**ai_provider.db.SETTING_DEFAULTS,
+        'decision_provider': 'openrouter'})
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'openrouter-test')
+    questions = {'title': {'type': 'choice', 'instructions': 'Revisa las tildes.',
+        'criteria': {'correct': {'definition': 'Tildes correctas'}, 'incorrect': 'Tildes incorrectas'}}}
+    title_check._call_jev({'title': 'Célula'}, questions)
+    assert isinstance(jev.calls[0]['json']['questions']['title']['criteria']['correct'], str)
+    assert isinstance(questions['title']['criteria']['correct'], dict)
+
+
 def test_la_peticion_es_una_pregunta_choice_con_la_clave_en_el_header(jev, gemini):
     title_check.check_title('La célula')
     call = jev.calls[0]

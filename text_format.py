@@ -12,7 +12,7 @@ pasa por dos controles antes de usarse:
   1. Código (regla dura): la propuesta debe ser EXACTAMENTE el texto original salvo
      mayúsculas/minúsculas y tildes. Si cambia una letra, una palabra, el orden o
      la puntuación, se descarta. La ñ no se puede convertir en n ni al revés.
-  2. JEV (TypeSafe), si hay clave: revisa las mayúsculas y las tildes en consultas
+  2. El validador elegido en admin, si hay clave: revisa mayúsculas y tildes en consultas
      independientes. Rechazar una no descarta la corrección aprobada de la otra.
      Las decisiones dudosas tienen una segunda revisión enfocada.
 
@@ -198,7 +198,7 @@ def _jev_approved(changed, aspect, context, *, review=False):
     try:
         payload = title_check._call_jev(state, _jev_questions(list(changed), aspect))
     except Exception as exc:
-        logger.warning('JEV no pudo revisar %s (%s); %s.', aspect, type(exc).__name__,
+        logger.warning('El validador no pudo revisar %s (%s); %s.', aspect, type(exc).__name__,
                        'se conserva esa parte del original' if review else 'se usa solo el control de código')
         return set() if review else set(changed)
     approved, uncertain = set(), {}
@@ -221,7 +221,7 @@ def _jev_approved(changed, aspect, context, *, review=False):
     if uncertain:
         # Una sola revisión enfocada, sin los otros subtítulos que pueden distraer
         # al clasificador. Nunca se relaja el umbral para recuperar una corrección.
-        logger.info('JEV revisa %s en %d campo(s) con decisión dudosa.', aspect, len(uncertain))
+        logger.info('%s revisa %s en %d campo(s) con decisión dudosa.', title_check.decision_provider(), aspect, len(uncertain))
         approved.update(_jev_approved(uncertain, aspect, {'title': context.get('title', '')}, review=True))
     return approved
 

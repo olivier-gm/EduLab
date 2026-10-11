@@ -155,6 +155,13 @@
             <label class="check"><input type="checkbox" name="openrouter_search_bibliography" {% if settings['openrouter_search_bibliography'] == '1' %}checked{% endif %}> Búsqueda web en la bibliografía (informes y glosarios)</label>
           </fieldset>
         </div>
+        <label>Validador de decisiones
+          <select class="input" name="decision_provider">
+            <option value="jev" {% if settings['decision_provider'] == 'jev' %}selected{% endif %}>JEV · TypeSafe</option>
+            <option value="openrouter" {% if settings['decision_provider'] == 'openrouter' %}selected{% endif %}>Microsoft Decision · OpenRouter</option>
+          </select>
+        </label>
+        <p class="admin-form__hint">Valida títulos y términos de glosarios, y revisa por separado mayúsculas y tildes. Microsoft Decision usa <code>microsoft/microsoft-decision-1</code> y la clave de OpenRouter de este panel o del servidor. Si el validador falla, se conserva el respaldo de IA actual.</p>
         <label>Proveedor del modelo ligero
           <select class="input" name="light_provider">
             <option value="same" {% if settings['light_provider'] == 'same' %}selected{% endif %}>El mismo que el principal</option>

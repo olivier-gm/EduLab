@@ -135,6 +135,19 @@ def test_admin_exige_la_clave_del_proveedor_del_ligero(admin, monkeypatch):
     assert save(admin, light_provider='gemini')['light_provider'] == 'same'
 
 
+def test_admin_alterna_el_validador_sin_cambiar_el_modelo_principal(admin):
+    assert save(admin, decision_provider='openrouter')['decision_provider'] == 'openrouter'
+    assert save(admin, decision_provider='incorrecto')['decision_provider'] == 'openrouter'
+    assert save(admin, decision_provider='jev')['decision_provider'] == 'jev'
+    page = admin.get('/admin/').get_data(as_text=True)
+    assert 'name="decision_provider"' in page and 'Microsoft Decision' in page
+
+
+def test_admin_exige_openrouter_para_microsoft_aunque_genere_con_gemini(admin, monkeypatch):
+    monkeypatch.delenv('OPENROUTER_API_KEY')
+    assert save(admin, ai_provider='gemini', decision_provider='openrouter')['decision_provider'] == 'jev'
+
+
 # ── Esquema estricto para OpenAI ─────────────────────────────────────
 
 def test_el_esquema_se_vuelve_estricto_sin_tocar_el_original():

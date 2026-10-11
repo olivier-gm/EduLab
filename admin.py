@@ -181,6 +181,10 @@ def save_ai_settings():
     if provider not in ('gemini', 'openrouter'):
         return back('Elige Gemini directo u OpenRouter.')
     values = {'ai_provider': provider}
+    decision_provider = request.form.get('decision_provider', db.get_settings()['decision_provider'])
+    if decision_provider not in ('jev', 'openrouter'):
+        return back('Elige JEV o Microsoft Decision como validador.')
+    values['decision_provider'] = decision_provider
     for prefix, default in [('gemini', IA.MODEL_NAME), ('openrouter', 'google/gemini-3.8-flash')]:
         model = (request.form.get(f'{prefix}_model') or default).strip()
         if not _valid_model_id(prefix, model):
@@ -215,6 +219,8 @@ def save_ai_settings():
             values[name] = '1' if request.form.get(name) else '0'
     proposed = {**db.get_settings(), **values}
     try:
+        if decision_provider == 'openrouter' and not ai_provider.configuration(values=proposed, provider='openrouter')[2]:
+            return back('Microsoft Decision necesita la clave API de OpenRouter. Añádela antes de guardar.')
         _, _, active_key = ai_provider.configuration(values=proposed)
         if values['fallback_enabled'] == '1':
             _, _, other_key = ai_provider.configuration(values=proposed, provider=ai_provider._other_provider(proposed))

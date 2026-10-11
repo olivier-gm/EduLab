@@ -1,5 +1,5 @@
 # title_check.py
-"""Validación del título del trabajo con JEV (TypeSafe System One).
+"""Validación académica con JEV o Microsoft Decision, seleccionable en admin.
 
 Antes se le preguntaba a Gemini "responde TRUE o FALSE" y se interpretaba el
 texto libre. Con JEV es una pregunta de tipo Choice: devuelve la opción elegida
@@ -7,7 +7,7 @@ y una probabilidad por opción, así que el umbral es explícito, la respuesta n
 depende de cómo redacte el modelo y además se sabe POR QUÉ se rechazó (texto sin
 sentido, o un saludo/instrucción que no es un tema).
 
-Si JEV no está disponible (sin clave, sin red, cuota, error del servicio) se usa
+Si el validador no está disponible (sin clave, red, cuota, error del servicio) se usa
 el validador de Gemini de IA.py como respaldo, para no bloquear a los usuarios.
 Solo se lanza GenerationError si fallan las dos vías.
 
@@ -23,6 +23,7 @@ from typing import Optional
 import requests
 
 import IA
+import ai_provider
 
 logger = logging.getLogger(__name__)
 
@@ -91,34 +92,56 @@ class GlossaryTermsError(ValueError):
 
 
 def _api_key():
+    if decision_provider() == 'openrouter':
+        return ai_provider.configuration(provider='openrouter')[2].strip()
     return (os.environ.get('JEV') or os.environ.get('TYPESAFE_API_KEY') or '').strip()
 
 
+def decision_provider():
+    return ai_provider.settings().get('decision_provider', 'jev')
+
+
 def jev_available():
-    return bool(_api_key())
+    """Disponibilidad del validador seleccionado; nombre conservado para sus callers."""
+    try:
+        return bool(_api_key())
+    except IA.GenerationError:
+        return False
 
 
 def _call_jev(state, questions=None):
-    """Una consulta a JEV. Lanza requests.RequestException o RuntimeError."""
+    """Consulta al validador seleccionado con el contrato compartido de decisiones."""
+    provider = decision_provider()
+    url = 'https://openrouter.ai/api/alpha/decisions' if provider == 'openrouter' else JEV_URL
+    model = 'microsoft/microsoft-decision-1' if provider == 'openrouter' else JEV_MODEL
+    questions = QUESTIONS if questions is None else questions
+    if provider == 'openrouter':
+        questions = {key: {**question, 'criteria': {
+            option: json.dumps(value, ensure_ascii=False) if isinstance(value, dict) else value
+            for option, value in question['criteria'].items()}}
+            for key, question in questions.items()}
     last = None
     for attempt in range(JEV_ATTEMPTS):
         try:
             response = requests.post(
-                JEV_URL,
+                url,
                 headers={'Authorization': 'Bearer ' + _api_key()},
-                json={'state': state, 'model': JEV_MODEL, 'questions': QUESTIONS if questions is None else questions},
+                json={'state': state, 'model': model, 'questions': questions},
                 timeout=JEV_TIMEOUT,
             )
         except (requests.Timeout, requests.ConnectionError) as e:
             last = e
             continue
         if response.status_code >= 500:
-            last = RuntimeError(f'JEV respondió {response.status_code}')
+            last = RuntimeError(f'{model} respondió {response.status_code}')
             continue
         if response.status_code != 200:
             # 4xx: clave inválida, cuota, petición mal formada… reintentar no ayuda.
-            raise RuntimeError(f'JEV respondió {response.status_code}')
-        return response.json()
+            raise RuntimeError(f'{model} respondió {response.status_code}')
+        payload = response.json()
+        if provider == 'openrouter':
+            ai_provider._trace_attempt('openrouter', payload.get('model', model), True)
+        return payload
     raise last
 
 
@@ -127,11 +150,11 @@ def _parse(payload, question_id=QUESTION_ID):
     probabilities = answer.get('probabilities') or {}
     p_valid = float(probabilities.get('valid', 1.0 if answer.get('choice') == 'valid' else 0.0))
     if p_valid >= VALID_THRESHOLD:
-        return TitleVerdict(True, None, 'jev', p_valid)
+        return TitleVerdict(True, None, decision_provider(), p_valid)
     # Rechazado: la razón es la opción no válida más probable.
     others = {k: v for k, v in probabilities.items() if k != 'valid'}
     reason = max(others, key=others.get) if others else answer.get('choice')
-    return TitleVerdict(False, reason, 'jev', p_valid)
+    return TitleVerdict(False, reason, decision_provider(), p_valid)
 
 
 def check_title(title, usage_sink=None):
@@ -140,15 +163,15 @@ def check_title(title, usage_sink=None):
     if jev_available():
         try:
             verdict = _parse(_call_jev(title))
-            logger.info('Título evaluado con JEV: valid=%s p=%.2f reason=%s',
-                        verdict.valid, verdict.p_valid, verdict.reason)
+            logger.info('Título evaluado con %s: valid=%s p=%.2f reason=%s',
+                        decision_provider(), verdict.valid, verdict.p_valid, verdict.reason)
             return verdict
         except Exception as e:
             # Sin detalles de la petición (llevaría la clave); solo el motivo.
-            logger.warning('JEV no pudo evaluar el título (%s: %s). Se usa Gemini como respaldo.',
-                           type(e).__name__, str(e)[:160])
+            logger.warning('%s no pudo evaluar el título (%s: %s). Se usa Gemini como respaldo.',
+                           decision_provider(), type(e).__name__, str(e)[:160])
     else:
-        logger.info('No hay clave JEV configurada; el título se evalúa con Gemini.')
+        logger.info('No hay clave del validador %s; el título se evalúa con Gemini.', decision_provider())
 
     valid = IA.check_title(title, usage_sink=usage_sink)      # puede lanzar GenerationError
     return TitleVerdict(valid, None if valid else 'invalid', 'gemini')
@@ -170,10 +193,10 @@ def _glossary_verdicts(title, items, usage_sink):
         try:
             payload = _call_jev(state, questions)
             verdicts = {key: _parse(payload, key) for key in items}
-            logger.info('Glosario evaluado con JEV: %s entradas.', len(items))
+            logger.info('Glosario evaluado con %s: %s entradas.', decision_provider(), len(items))
         except Exception as exc:
-            logger.warning('JEV no pudo evaluar el glosario (%s). Se usa Gemini como respaldo.',
-                           type(exc).__name__)
+            logger.warning('%s no pudo evaluar el glosario (%s). Se usa Gemini como respaldo.',
+                           decision_provider(), type(exc).__name__)
     if verdicts is None:
         # Reutiliza la generación JSON y el proveedor configurado en el admin.
         from glossary import _json_generate

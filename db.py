@@ -156,6 +156,7 @@ SETTING_DEFAULTS = {
     'bibliography_provider': '',
     'bibliography_model': '',
     'ai_provider': 'gemini',
+    'decision_provider': 'jev',
     # Si el proveedor activo falla (cuota, caída, error desconocido), reintenta
     # con el otro. Necesita la clave de los dos proveedores.
     'fallback_enabled': '0',
