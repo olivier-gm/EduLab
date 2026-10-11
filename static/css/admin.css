@@ -102,6 +102,25 @@
   color: var(--text-dim);
 }
 
+.admin-doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px 4px 0;
+  padding: 5px 9px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--r-full);
+  color: #d5d4e2;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-doc-link:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.admin-doc-link--word { border-color: rgba(76, 153, 255, 0.4); color: #83b8ff; }
+.admin-doc-link--pdf { border-color: rgba(255, 103, 94, 0.4); color: #ff9189; }
+.admin-doc-expiry { display: block; color: var(--text-dim); font-size: 0.72rem; }
+
 .ai-model-entry {
   display: flex;
   align-items: center;

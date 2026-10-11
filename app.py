@@ -31,7 +31,7 @@ import jobs
 import landing
 import ai_provider
 import rate_limit
-from auth import auth_bp, current_user, login_required
+from auth import auth_bp, current_user, login_required, admin_required
 from admin import admin_bp
 import plans
 import retention
@@ -767,6 +767,32 @@ def my_document_download(doc_id, filetype):
     except FileNotFoundError:
         flash('Ese archivo ya no está disponible.', 'error')
         return redirect(url_for('my_documents'))
+
+
+@app.route('/admin/documents/<int:doc_id>/<filetype>')
+@admin_required
+@rate_limit.rate_limit(30, 60, key_func=rate_limit.per_ip)
+def admin_document_download(doc_id, filetype):
+    """El administrador puede recuperar archivos ajenos mientras sigan vigentes."""
+    if filetype not in SHARE_FILETYPES:
+        return render_template('404.html'), 404
+    doc = db.get_document_by_id(doc_id)
+    if doc is None:
+        return render_template('404.html'), 404
+    if db.time_left(doc['expires_at'])[1] <= 0:
+        return render_template('404.html'), 410
+    if filetype not in document_filetypes(doc):
+        return render_template('404.html'), 403
+    try:
+        return storage.serve(
+            doc['file_stem'], filetype,
+            download_name=f"{safe_filename(doc['title'])}.{filetype}",
+        )
+    except FileNotFoundError:
+        return render_template('404.html'), 404
+    except Exception as e:
+        logging.error('Error descargando documento desde admin: %s', e)
+        return render_template('404.html'), 404
 
 
 @app.route('/s/<token>/<filetype>')

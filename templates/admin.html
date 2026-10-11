@@ -342,6 +342,7 @@
               <th>Proveedor / modelo</th>
               <th>Tokens</th>
               <th>Generado</th>
+              <th>Archivos</th>
             </tr>
           </thead>
           <tbody>
@@ -367,6 +368,23 @@
               </td>
               <td>{{ '{:,}'.format(d['tokens_used']) }}</td>
               <td class="is-dim">{{ d['created_at'] }}</td>
+              <td>
+                {% if d.download_types %}
+                  {% for filetype in d.download_types %}
+                  <a class="admin-doc-link admin-doc-link--{{ 'word' if filetype == 'docx' else 'pdf' }}"
+                    href="{{ url_for('admin_document_download', doc_id=d['id'], filetype=filetype) }}"
+                    aria-label="Descargar {{ 'Word' if filetype == 'docx' else 'PDF' }}: {{ d['title'] }}"
+                    title="Descargar {{ 'Word' if filetype == 'docx' else 'PDF' }}">
+                    <i class="bx bx-download" aria-hidden="true"></i>{{ 'Word' if filetype == 'docx' else 'PDF' }}
+                  </a>
+                  {% endfor %}
+                  <small class="admin-doc-expiry">Vence en {{ d.expiry_text }}</small>
+                {% elif d['file_stem'] and d.expiry_text == 'vencido' %}
+                  <span class="is-dim">Expirado</span>
+                {% else %}
+                  <span class="is-dim">Sin archivo disponible</span>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>

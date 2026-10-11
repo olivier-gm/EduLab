@@ -17,6 +17,7 @@ import json
 import ai_provider
 import IA
 import binance_payments
+import storage
 from auth import admin_required, current_user
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -59,13 +60,22 @@ def dashboard():
             'Configurada en el servidor' if os.environ.get(env_name) else 'Sin configurar')
         for prefix, env_name in [('gemini', 'GEMINI_API_KEY'), ('openrouter', 'OPENROUTER_API_KEY')]
     }
+    documents = db.list_documents(limit=100)
+    available = storage.stems_available()
+    for document in documents:
+        expiry_text, remaining = db.time_left(document.get('expires_at'))
+        document['expiry_text'] = expiry_text
+        document['download_types'] = [
+            ext for ext in ('docx', 'pdf')
+            if remaining > 0 and ext in available.get(document['file_stem'], ())
+        ]
     return render_template(
         'admin.html',
         stats=stats, daily=daily, days=days,
         chart_max_documents=max(1, max(row['documents'] for row in daily)),
         chart_max_tokens=max(1, max(row['tokens'] for row in daily)),
         users=db.list_users(),
-        documents=db.list_documents(limit=100),
+        documents=documents,
         settings=values,
         landing_universities=landing.universities(),
         landing_selected=landing.selected_ids(values),

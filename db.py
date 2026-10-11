@@ -748,6 +748,13 @@ def get_user_document(user_id, doc_id):
     ).fetchone()
 
 
+def get_document_by_id(doc_id):
+    """Documento por ID, incluidos los vencidos para que admin pueda mostrar su estado."""
+    return get_db().execute(
+        'SELECT * FROM documents WHERE id = ? AND file_stem IS NOT NULL', (doc_id,),
+    ).fetchone()
+
+
 def format_duration(hours):
     days, hours = divmod(max(0, int(hours)), 24)
     parts = []
