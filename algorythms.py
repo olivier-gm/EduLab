@@ -8,6 +8,7 @@ import pathlib
 import threading
 import unicodedata
 import re
+from form_processor import is_essay_title
 
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
@@ -1275,7 +1276,10 @@ class Document_process:
             Document_process.add_glossary(document, glossary_entries)
         else:
             Document_process.parrafos(introduction, document, 'Introducción', flagi, detect_subtitles)
-            Document_process.parrafos(essay_content, document, head_title, flage, detect_subtitles, subtitles)
+            essay_mode = is_essay_title(head_title)
+            body = ' '.join(essay_content.split()) if essay_mode else essay_content
+            Document_process.parrafos(body, document, head_title, flage,
+                                     False if essay_mode else detect_subtitles, subtitles)
             Document_process.parrafos(conclusion, document, 'Conclusión', False, detect_subtitles)
             if bibliography:
                 if introduction or essay_content or conclusion:

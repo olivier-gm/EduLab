@@ -138,6 +138,19 @@ def test_ensayo_pide_conservar_los_encabezados_sin_ampliarlos(monkeypatch):
     assert 'No lo amplíes' in captured['prompt']
 
 
+def test_titulo_de_ensayo_pide_argumentacion_y_un_solo_parrafo(monkeypatch):
+    captured = {}
+    def generate(prompt, **kwargs):
+        captured['prompt'] = prompt
+        return 'Primer argumento.\n\nSegundo argumento.\nTercer argumento.'
+    monkeypatch.setattr(IA._essay_prompt, 'generate', generate)
+    assert IA.generate_essay_content('Ensayo sobre la educación', ['Importancia', 'Retos']) == (
+        'Primer argumento. Segundo argumento. Tercer argumento.')
+    assert 'un único párrafo corrido' in captured['prompt']
+    assert 'argumentos, análisis y conectivos' in captured['prompt']
+    assert 'Encabezados obligatorios' not in captured['prompt']
+
+
 def test_si_la_busqueda_falla_se_genera_sin_ella_y_se_avisa(fake_api):
     def handler(config):
         if config.tools:

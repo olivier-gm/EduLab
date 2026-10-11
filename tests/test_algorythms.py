@@ -5,6 +5,7 @@ import zipfile
 import pytest
 from docx import Document
 from algorythms import Document_process
+from form_processor import is_essay_title
 
 # Assume current working directory during tests is the project root
 TEMPLATE_PATH = 'Templates/Universitario.docx'
@@ -14,6 +15,33 @@ REAL_TEMPLATE_PATH = 'input/plantilla.docx'
 TEST_OUTPUT_DIR = 'tests/output'
 TEST_OUTPUT_DOCX = os.path.join(TEST_OUTPUT_DIR, 'test_output.docx')
 TEST_OUTPUT_PDF = os.path.join('output', 'test_output.pdf') # hardcoded in app logic
+
+
+@pytest.mark.parametrize('title,expected', [
+    ('ENSAYO DE LA CÉLULA', True), ('Ensayo sobre la educación', True),
+    ('Ensayo argumentativo acerca de la salud', True), ('Ensayo: inteligencia artificial', True),
+    ('Ensayo clínico sobre vacunas', False), ('Métodos de ensayo de materiales', False),
+    ('La célula', False), ('Ensayo de', False)])
+def test_detecta_solo_la_peticion_explicita_de_ensayo(title, expected):
+    assert is_essay_title(title) is expected
+
+
+def test_desarrollo_de_ensayo_se_guarda_como_un_parrafo(tmp_path, monkeypatch):
+    monkeypatch.setattr(Document_process, 'convert', lambda *a: None)
+    cover = tmp_path / 'cover.docx'
+    doc = Document()
+    doc.add_paragraph('[title]')
+    doc.save(cover)
+    output = tmp_path / 'essay.docx'
+    title = 'Ensayo sobre la educación'
+    Document_process.fill_placeholders(str(output), str(cover), '', {'[title]': title},
+        'Introducción primera.\n\nIntroducción segunda.',
+        'Primer argumento.\n\nSegundo argumento.\nTercer argumento.',
+        'Conclusión primera.\n\nConclusión segunda.', title, 'uni', subtitles=['Primer argumento.'])
+    paragraphs = [p.text for p in Document(output).paragraphs]
+    assert paragraphs.count('Primer argumento. Segundo argumento. Tercer argumento.') == 1
+    assert 'Introducción primera.' in paragraphs and 'Introducción segunda.' in paragraphs
+    assert 'Conclusión primera.' in paragraphs and 'Conclusión segunda.' in paragraphs
 
 @pytest.fixture(autouse=True)
 def setup_teardown():

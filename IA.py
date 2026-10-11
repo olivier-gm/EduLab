@@ -4,6 +4,7 @@ import logging
 import re
 import time
 import hashlib
+from form_processor import is_essay_title
 
 from dotenv import load_dotenv
 from google import genai
@@ -454,7 +455,17 @@ def generate_essay_content(title, subtitles, usage_sink=None, warnings=None):
         user_text = f"Tema: '{title} ({subtitles[0]})'"
     else:
         user_text = f"Tema: '{title}'"
-    if subtitles:
+    essay_mode = is_essay_title(title)
+    if essay_mode:
+        user_text += (
+            '\nFormato de ensayo solicitado: redacta SOLO el desarrollo en un único párrafo corrido, '
+            'con argumentos, análisis y conectivos que enlacen las ideas. '
+            'No uses títulos, subtítulos, listas, viñetas ni saltos de párrafo. '
+            'Los subtítulos proporcionados son temas que debes integrar en la argumentación, '
+            'no encabezados. No añadas introducción, conclusión ni bibliografía: se generan aparte. '
+            'Esta instrucción de formato prevalece sobre los ejemplos de informes por apartados.'
+        )
+    elif subtitles:
         user_text += (
             '\nEncabezados obligatorios, en este orden: '
             + json.dumps(list(subtitles), ensure_ascii=False)
@@ -476,7 +487,7 @@ def generate_essay_content(title, subtitles, usage_sink=None, warnings=None):
     if not text:
         raise GenerationError(
             'empty', 'La IA no devolvió texto para este tema. Inténtalo de nuevo o reformula el título.')
-    return text
+    return ' '.join(text.split()) if essay_mode else text
 
 
 # ---------------------------------------------------------------------------

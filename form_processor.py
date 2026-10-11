@@ -1,6 +1,12 @@
 # form_processor.py
 import re
 
+def is_essay_title(title):
+    return bool(re.match(
+        r'^\s*ensayo(?:\s+(?:argumentativo|expositivo|crítico|critico|reflexivo|académico|academico))?'
+        r'(?:\s*:\s*|\s+(?:sobre|acerca\s+de|de|del)\s+)\S', title, re.IGNORECASE))
+
+
 class FormProcessor:
     def __init__(self, form_data, route):
         self.route = route
