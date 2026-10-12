@@ -9,6 +9,10 @@ def is_essay_title(title):
 
 class FormProcessor:
     def __init__(self, form_data, route):
+        form_data = {
+            key: value.strip() if isinstance(value, str) and key not in ('body', 'introduccion', 'conclusion') else value
+            for key, value in form_data.items()
+        }
         self.route = route
         if self.route == 'bach':
             self.u = form_data.get('u', '')

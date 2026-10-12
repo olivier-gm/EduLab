@@ -254,7 +254,7 @@ def process_form_bach():
     full_stem = storage.unique_stem(file_stem)
     docx_output = f'output/{full_stem}.docx'
 
-    university_name = form_data.get('u', '')
+    university_name = form_data.get('u', '').strip()
     try:
         Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
                                             introduccion, body, conclusion, head_title, 'bach',
@@ -595,7 +595,7 @@ def _generate_document(token, user_id, inputs, started):
     # Nombre libre en el almacenamiento (dos usuarios pueden tener el mismo título).
     full_stem = storage.unique_stem(file_stem)
     docx_output = f'output/{full_stem}.docx'
-    university_name = form_data.get('u', '')
+    university_name = form_data.get('u', '').strip()
     try:
         Document_process.fill_placeholders(docx_output, input_doc, input_doc2, replacements,
                                             introduccion, body, conclusion, head_title, document_type,

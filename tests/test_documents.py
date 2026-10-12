@@ -186,6 +186,49 @@ def test_otro_usuario_no_puede_descargar(client):
     assert resp.status_code == 302 and '/my_documents' in resp.headers['Location']
 
 
+def test_admin_loads_download_links_without_querying_storage(client, monkeypatch):
+    owner, admin = make_user(), make_user('admin@x.com')
+    db.get_db().execute('UPDATE users SET is_admin = 1 WHERE id = ?', (admin,))
+    db.get_db().commit()
+    db.record_document(owner, 'Documento ajeno', 'uni', 0, file_stem=STEM)
+    doc_id = db.list_user_documents(owner)[0]['id']
+
+    def no_storage(*args, **kwargs):
+        pytest.fail('Abrir el panel no debe consultar ni descargar archivos del almacenamiento')
+
+    for name in ('stems_available', 'list_files', 'exists', 'serve'):
+        monkeypatch.setattr(app_module.storage, name, no_storage)
+    login(client, admin)
+    html = client.get('/admin/').get_data(as_text=True)
+    for filetype in ('docx', 'pdf'):
+        assert f'/admin/documents/{doc_id}/{filetype}' in html
+    set_expiry(timedelta(minutes=-1))
+    html = client.get('/admin/').get_data(as_text=True)
+    assert f'/admin/documents/{doc_id}/' not in html and 'Expirado' in html
+
+
+def test_admin_downloads_require_admin_existing_file_and_original_expiry(client):
+    owner, admin = make_user(), make_user('admin@x.com')
+    db.get_db().execute('UPDATE users SET is_admin = 1 WHERE id = ?', (admin,))
+    db.get_db().commit()
+    db.record_document(owner, 'Documento ajeno', 'uni', 0, file_stem=STEM)
+    doc_id = db.list_user_documents(owner)[0]['id']
+    link = f'/admin/documents/{doc_id}'
+    assert client.get(link + '/docx').status_code == 302
+    login(client, owner)
+    assert client.get(link + '/docx').status_code == 302
+    login(client, admin)
+    assert client.get(link + '/docx').status_code == 404
+    make_files(STEM)
+    for filetype in ('docx', 'pdf'):
+        response = client.get(f'{link}/{filetype}')
+        assert response.status_code == 200 and response.data == b'contenido'
+        assert response.headers['Content-Disposition'].startswith('attachment;')
+    assert client.get(link + '/exe').status_code == 404
+    set_expiry(timedelta(minutes=-1))
+    assert client.get(link + '/docx').status_code == 410
+
+
 def test_no_se_descarga_un_informe_vencido(client):
     uid = make_user()
     make_files(STEM)

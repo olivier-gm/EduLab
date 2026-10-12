@@ -25,7 +25,7 @@
   var form = $('#docForm');
   if (!form) { return; }
 
-  var up = function (v) { return (v || '').toUpperCase(); };
+  var up = function (v) { return (v || '').trim().toUpperCase(); };
   var setText = function (el, value) { if (el) { el.textContent = value; } };
 
   /* ==========================================================
@@ -58,8 +58,8 @@
     setText(pv.u, up($('#f-u').value) || 'INSTITUCIÓN');
     setText(pv.area, up($('#f-area').value));
     setText(pv.carrera, up($('#f-carrera').value));
-    show(pv.area, !!$('#f-area').value && isUni());
-    show(pv.carrera, !!$('#f-carrera').value && isUni());
+    show(pv.area, !!$('#f-area').value.trim() && isUni());
+    show(pv.carrera, !!$('#f-carrera').value.trim() && isUni());
   }
 
   function renderTitle() {

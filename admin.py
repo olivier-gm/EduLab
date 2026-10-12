@@ -17,7 +17,6 @@ import json
 import ai_provider
 import IA
 import binance_payments
-import storage
 from auth import admin_required, current_user
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -61,14 +60,11 @@ def dashboard():
         for prefix, env_name in [('gemini', 'GEMINI_API_KEY'), ('openrouter', 'OPENROUTER_API_KEY')]
     }
     documents = db.list_documents(limit=100)
-    available = storage.stems_available()
     for document in documents:
         expiry_text, remaining = db.time_left(document.get('expires_at'))
         document['expiry_text'] = expiry_text
-        document['download_types'] = [
-            ext for ext in ('docx', 'pdf')
-            if remaining > 0 and ext in available.get(document['file_stem'], ())
-        ]
+        # La existencia del archivo se comprueba al descargar, sin listar R2 al abrir el panel.
+        document['download_types'] = ('docx', 'pdf') if remaining > 0 and document['file_stem'] else ()
     return render_template(
         'admin.html',
         stats=stats, daily=daily, days=days,
