@@ -55,7 +55,8 @@
   var show = function (el, on) { if (el) { el.style.display = on ? '' : 'none'; } };
 
   function renderHeader() {
-    setText(pv.u, up($('#f-u').value) || 'INSTITUCIÓN');
+    setText(pv.u, up($('#f-u').value));
+    show(pv.u, !!$('#f-u').value.trim());
     setText(pv.area, up($('#f-area').value));
     setText(pv.carrera, up($('#f-carrera').value));
     show(pv.area, !!$('#f-area').value.trim() && isUni());
@@ -811,14 +812,6 @@
   }
 
   function validateStep(n) {
-    if (n === 1) {
-      var u = $('#f-u');
-      if (!u.value.trim()) {
-        fieldError('#f-u', true, 'Indica el nombre de tu institución.');
-        return false;
-      }
-      fieldError('#f-u', false);
-    }
     if (n === 3) {
       var t = $('#f-title');
       if (t.value.trim().length < 5) {
