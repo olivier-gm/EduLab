@@ -9,6 +9,8 @@ import threading
 import unicodedata
 import re
 from form_processor import is_essay_title
+from math_format import (append_math, has_math, is_display_math, math_spans,
+                         protect_math, restore_math)
 
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
@@ -854,6 +856,12 @@ class Document_process:
         if not text:
             return False
 
+        # An equation is content, even when it is short or contains Markdown.
+        if has_math(text):
+            return False
+        if re.search(r'[=<>≤≥≠]', text) and re.search(r'[\d^_+*/()]', text):
+            return False
+
         # Marcado explícito del modelo: '## Título' o '**Título**'
         if re.match(r'^\s*#{1,6}\s+\S', text):
             return True
@@ -890,7 +898,9 @@ class Document_process:
         # Se corta por cualquier racha de saltos: el modelo no es consistente
         # (a veces usa '\n\n\n', a veces uno solo) y en este formato nunca
         # parte un mismo párrafo en varias líneas.
-        return [b.strip() for b in re.split(r'[\r\n]+', body) if b.strip()]
+        body, equations = protect_math(body)
+        return [restore_math(b.strip(), equations)
+                for b in re.split(r'[\r\n]+', body) if b.strip()]
 
     # ── Marcas de énfasis que la IA escribe en markdown ────────────────
     #
@@ -948,20 +958,41 @@ class Document_process:
     @staticmethod
     def _strip_inline_markers(text):
         """El mismo texto sin las marcas de énfasis (para subtítulos, que ya van en negrita)."""
-        return ''.join(t for t, _, _ in Document_process._inline_segments(text))
+        protected, equations = protect_math(text)
+        return restore_math(''.join(t for t, _, _ in Document_process._inline_segments(protected)), equations)
 
     @staticmethod
     def _add_inline(paragraph, text, strip_stray=True, size=None, base_bold=False):
         """Agrega `text` al párrafo convirtiendo las marcas markdown en negrita/cursiva."""
+        protected, equations = protect_math(text)
+        if equations:
+            # Protect multiplication and all math punctuation from Markdown rules.
+            for chunk, bold, italic in Document_process._inline_segments(protected, strip_stray):
+                chunk = restore_math(chunk, equations)
+                position = 0
+                for match in math_spans(chunk):
+                    Document_process._add_text_run(paragraph, chunk[position:match.start()],
+                                                   bold or base_bold, italic, size)
+                    append_math(paragraph, match)
+                    position = match.end()
+                Document_process._add_text_run(paragraph, chunk[position:], bold or base_bold,
+                                               italic, size)
+            return
         for chunk, bold, italic in Document_process._inline_segments(text, strip_stray):
-            run = paragraph.add_run(chunk)
-            run.font.name = 'Arial'
-            if size:
-                run.font.size = size
-            if bold or base_bold:
-                run.bold = True
-            if italic:
-                run.italic = True
+            Document_process._add_text_run(paragraph, chunk, bold or base_bold, italic, size)
+
+    @staticmethod
+    def _add_text_run(paragraph, text, bold, italic, size):
+        if not text:
+            return
+        run = paragraph.add_run(text)
+        run.font.name = 'Arial'
+        if size:
+            run.font.size = size
+        if bold:
+            run.bold = True
+        if italic:
+            run.italic = True
 
     @staticmethod
     def parrafos(body, document, topic, flag, detect_subtitles=True, known_subtitles=()):
@@ -1013,11 +1044,12 @@ class Document_process:
         # ── Cuerpo ──
         for block in Document_process._split_blocks(body):
             text = Document_process._clean_markdown(block)
-            if not re.search(r'\w', text):
+            if not re.search(r'\w', text) and not has_math(block):
                 continue            # una línea de solo puntos o signos no es un párrafo
 
             key = Document_process._subtitle_key(text)
             ellipsis_title = (detect_subtitles and re.search(r'(\.{3}|…)$', text) is not None
+                              and not has_math(block)
                               and len(text) <= Document_process.SUBTITLE_MAX_LEN
                               and not re.search(r'[.!?]\s+\S', text))
             is_known = detect_subtitles and key in known
@@ -1027,7 +1059,8 @@ class Document_process:
                 shown = known[key] if is_known else Document_process._strip_inline_markers(text)
                 shown = shown.rstrip('.…:; ').strip()
                 shown = shown[:1].upper() + shown[1:]
-                sp = document.add_paragraph(shown)
+                sp = document.add_paragraph()
+                Document_process._add_inline(sp, shown, size=Pt(12), base_bold=True)
                 try:
                     sp.style = document.styles['Heading 2']
                 except KeyError:
@@ -1046,6 +1079,7 @@ class Document_process:
                 bp = document.add_paragraph()
                 bp.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
                 bp.paragraph_format.line_spacing = Pt(21)
+                bp.paragraph_format.first_line_indent = Cm(1.27)
                 # Separación real entre párrafos (antes quedaban pegados)
                 bp.paragraph_format.space_after = Pt(12)
                 # Sin quitar las marcas antes: _clean_markdown borraba los asteriscos
@@ -1058,6 +1092,9 @@ class Document_process:
                     bp.paragraph_format.first_line_indent = Cm(-0.5)
                     bp.add_run('• ').font.name = 'Arial'
                 Document_process._add_inline(bp, marked, strip_stray=detect_subtitles, size=Pt(12))
+                if is_display_math(marked):
+                    bp.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                    bp.paragraph_format.first_line_indent = Cm(0)
 
         if flag:
             document._break_before_next = True
@@ -1121,6 +1158,9 @@ class Document_process:
         paragraph.paragraph_format.space_after = Pt(12)
         paragraph.paragraph_format.keep_together = True
         paragraph.paragraph_format.line_spacing = Pt(21 if size == 12 else 14)
+        if not prefix:
+            paragraph.paragraph_format.left_indent = Cm(1.27)
+            paragraph.paragraph_format.first_line_indent = Cm(-1.27)
         if prefix:
             paragraph.add_run(prefix).font.size = Pt(size)
         position = 0
