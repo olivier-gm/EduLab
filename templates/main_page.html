@@ -14,9 +14,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css', v='preview-rotation-1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css', v='mobile-cta-1') }}">
 
-  <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/ui.js', v='mobile-cta-1') }}"></script>
   <script defer src="{{ url_for('static', filename='js/landing-preview.js', v='2') }}"></script>
 </head>
 
@@ -71,7 +71,7 @@
       <div class="hero__orb hero__orb--b"></div>
 
       <div class="shell hero__grid">
-        <div>
+        <div class="hero__copy">
           <span class="pill hero__badge">
             <i class="bx bx-shape-triangle"></i> Impulsado por inteligencia artificial
           </span>
@@ -80,14 +80,15 @@
             Informes y glosarios <em>listos en minutos.</em>
           </h1>
 
-          <p class="hero__lead">
+          <p class="hero__lead hero__lead--desktop">
             Crea tu informe académico o un <strong>glosario de términos</strong> con definiciones breves
             y en orden alfabético. Elige un tema o sube la asignación con tu lista de términos.
             EduLab prepara la portada y el contenido para descargar en <strong>Word</strong> y <strong>PDF</strong>.
           </p>
+          <p class="hero__lead hero__lead--mobile">Crea tu trabajo con IA y descárgalo en <strong>Word y PDF</strong>.</p>
 
           <div class="hero__cta">
-            <a class="btn btn--primary btn--lg" href="{{ url_for('show_form') }}">
+            <a class="btn btn--primary btn--lg" href="{{ url_for('show_form') }}" data-hero-create>
               <i class="bx bx-edit-alt"></i> Crear mi documento
             </a>
             <a class="btn btn--ghost btn--lg" href="#como-funciona">
@@ -390,6 +391,12 @@
       </div>
     </div>
   </footer>
+
+  <div class="mobile-create" data-mobile-create hidden>
+    <a class="btn btn--primary" href="{{ url_for('show_form') }}">
+      <i class="bx bx-edit-alt" aria-hidden="true"></i> Crear documento
+    </a>
+  </div>
 
 </body>
 

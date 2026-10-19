@@ -48,6 +48,35 @@
     window.addEventListener('scroll', onScroll, { passive: true });
   }
 
+  /* Keep the create action available after scrolling past the mobile hero. */
+  var heroCreate = document.querySelector('[data-hero-create]');
+  var mobileCreate = document.querySelector('[data-mobile-create]');
+  if (heroCreate && mobileCreate) {
+    var mobileScreen = window.matchMedia('(max-width: 620px)');
+    var finalCreate = document.querySelector('.cta-final .btn');
+    var createTicking = false;
+    var updateCreate = function () {
+      createTicking = false;
+      var bounds = heroCreate.getBoundingClientRect();
+      var navBottom = nav ? nav.getBoundingClientRect().bottom : 0;
+      var menuOpen = links && links.classList.contains('is-open');
+      var finalBounds = finalCreate && finalCreate.getBoundingClientRect();
+      var finalVisible = finalBounds && finalBounds.top < window.innerHeight && finalBounds.bottom > navBottom;
+      mobileCreate.hidden = !mobileScreen.matches || menuOpen || finalVisible || bounds.bottom > navBottom;
+    };
+    var requestCreate = function () {
+      if (createTicking) { return; }
+      createTicking = true;
+      window.requestAnimationFrame(updateCreate);
+    };
+    window.addEventListener('scroll', requestCreate, { passive: true });
+    window.addEventListener('resize', requestCreate);
+    window.addEventListener('pageshow', requestCreate);
+    if (burger) { burger.addEventListener('click', requestCreate); }
+    if (links) { links.addEventListener('click', requestCreate); }
+    updateCreate();
+  }
+
   /* ---- Aparición progresiva de secciones ----
      Se calcula con getBoundingClientRect en lugar de IntersectionObserver:
      es igual de barato aquí y no depende de que el observador se dispare. */
