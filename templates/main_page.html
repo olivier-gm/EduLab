@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css', v='mobile-cta-1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css', v='institutions-2') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js', v='mobile-cta-1') }}"></script>
   <script defer src="{{ url_for('static', filename='js/landing-preview.js', v='2') }}"></script>
@@ -272,17 +272,20 @@
             escudo listo para la portada.</p>
         </div>
 
-        <div class="logos-strip reveal">
-          <img src="{{ url_for('static', filename=logo_thumb('logos/universidad_central_de_venezuela.webp')) }}"
-            alt="Universidad Central de Venezuela" loading="lazy">
-          <img src="{{ url_for('static', filename=logo_thumb('logos/universidad_de_carabobo.png')) }}"
-            alt="Universidad de Carabobo" loading="lazy">
-          <img src="{{ url_for('static', filename=logo_thumb('logos/universidad_de_los_andes.png')) }}"
-            alt="Universidad de Los Andes" loading="lazy">
-          <img src="{{ url_for('static', filename=logo_thumb('logos/universidad_del_zulia.png')) }}"
-            alt="Universidad del Zulia" loading="lazy">
-          <img src="{{ url_for('static', filename=logo_thumb('logos/universidad_nacional_experimental_romulo_gallegos.png')) }}"
-            alt="Universidad Nacional Experimental Rómulo Gallegos" loading="lazy">
+        <div class="logos-strip reveal" role="list" aria-label="Instituciones con escudo disponible">
+          {% for acronym, name, filename in [
+            ('UCV', 'Universidad Central de Venezuela', 'universidad_central_de_venezuela.webp'),
+            ('UC', 'Universidad de Carabobo', 'universidad_de_carabobo.png'),
+            ('ULA', 'Universidad de Los Andes', 'universidad_de_los_andes.png'),
+            ('LUZ', 'Universidad del Zulia', 'universidad_del_zulia.png'),
+            ('UNERG', 'Universidad Nacional Experimental Rómulo Gallegos', 'universidad_nacional_experimental_romulo_gallegos.png')
+          ] %}
+          <figure class="logos-card" role="listitem">
+            <img src="{{ url_for('static', filename=logo_thumb('logos/' ~ filename)) }}"
+              alt="Escudo de {{ name }}" loading="lazy" decoding="async" width="96" height="96">
+            <figcaption><strong>{{ acronym }}</strong><span>{{ name }}</span></figcaption>
+          </figure>
+          {% endfor %}
         </div>
         <p class="logos-note">¿No aparece la tuya? Igual puedes escribirla a mano: el documento se genera sin
           problema.</p>

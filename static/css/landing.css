@@ -418,26 +418,46 @@
 
 /* ---------------- INSTITUCIONES ---------------- */
 .logos-strip {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 16px 34px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.logos-strip img {
-  height: 72px;
-  width: 100px;
-  max-width: 100%;
+.logos-card {
+  margin: 0;
+  padding: 26px 12px 20px;
+  text-align: center;
+  border: 1px solid rgba(0, 217, 218, 0.16);
+  border-radius: 20px;
+  background: radial-gradient(ellipse at 50% 0, rgba(0, 217, 218, 0.10), transparent 70%), rgba(255, 255, 255, 0.025);
+  transition: transform 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+
+.logos-card img {
+  display: block;
+  height: 96px;
+  width: 100%;
   object-fit: contain;
-  padding: 8px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.94);
-  transition: transform 0.35s var(--ease);
+  margin-bottom: 18px;
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.3));
 }
 
-.logos-strip img:hover {
-  transform: translateY(-4px) scale(1.05);
+.logos-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(0, 217, 218, 0.45);
+}
+
+.logos-card strong { display: block; color: var(--accent, #00d9da); font-size: 1rem; letter-spacing: 0.08em; }
+.logos-card figcaption span { display: block; margin-top: 6px; color: var(--text-soft); font-size: 0.76rem; line-height: 1.5; }
+
+@media (max-width: 800px) {
+  .logos-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .logos-card:last-child { grid-column: 1 / -1; justify-self: center; width: calc((100% - 12px) / 2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logos-card { transition: none; }
+  .logos-card:hover { transform: none; }
 }
 
 .logos-note {
@@ -709,8 +729,4 @@
     grid-column: span 1;
   }
 
-  .logos-strip img {
-    height: 60px;
-    width: 80px;
-  }
 }
