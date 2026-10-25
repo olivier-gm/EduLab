@@ -1161,8 +1161,8 @@ class Document_process:
         paragraph.paragraph_format.keep_together = True
         paragraph.paragraph_format.line_spacing = Pt(21 if size == 12 else 14)
         if not prefix:
-            paragraph.paragraph_format.left_indent = Cm(1.27)
-            paragraph.paragraph_format.first_line_indent = Cm(-1.27)
+            paragraph.paragraph_format.left_indent = Cm(0)
+            paragraph.paragraph_format.first_line_indent = Cm(0)
         if prefix:
             paragraph.add_run(prefix).font.size = Pt(size)
         position = 0

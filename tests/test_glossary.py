@@ -262,7 +262,8 @@ def test_bibliography_each_source_line_is_a_separate_reference(separator):
     Document_process.parrafos(separator.join(sources), document, 'Bibliografía', False, False)
     paragraphs = document.paragraphs[1:]
     assert [paragraph.text for paragraph in paragraphs] == sources
-    assert all(paragraph.paragraph_format.first_line_indent < 0 for paragraph in paragraphs)
+    assert all(paragraph.paragraph_format.first_line_indent == 0
+               and paragraph.paragraph_format.left_indent == 0 for paragraph in paragraphs)
 
 
 def test_bibliography_keeps_source_url_with_its_reference():
@@ -291,6 +292,9 @@ def test_reference_format_and_clickable_link_in_documents():
         else:
             Document_process.parrafos(reference, document, 'Bibliografía', False, False)
         paragraph = document.paragraphs[-1]
+        if not glossary_mode:
+            assert paragraph.paragraph_format.left_indent == 0
+            assert paragraph.paragraph_format.first_line_indent == 0
         assert any(run.italic and run.text == 'Croquis de un tatami' for run in paragraph.runs)
         assert paragraph._p.xpath('.//w:br')
         hyperlinks = paragraph._p.xpath('.//w:hyperlink')
