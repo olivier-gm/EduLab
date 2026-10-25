@@ -255,6 +255,28 @@ def test_topic_selection_replaces_only_rejected_ai_terms_before_defining(monkeyp
     assert len(validations[0]) == 26 and validations[1] == ['Concepto válido']
 
 
+@pytest.mark.parametrize('separator', ['\n', '\r\n', '\n\n', '\n \n'])
+def test_bibliography_each_source_line_is_a_separate_reference(separator):
+    sources = ['Autor A. (2024). Obra A; Editorial A.', 'Autor B. (2023). Obra B.']
+    document = Document()
+    Document_process.parrafos(separator.join(sources), document, 'Bibliografía', False, False)
+    paragraphs = document.paragraphs[1:]
+    assert [paragraph.text for paragraph in paragraphs] == sources
+    assert all(paragraph.paragraph_format.first_line_indent < 0 for paragraph in paragraphs)
+
+
+def test_bibliography_keeps_source_url_with_its_reference():
+    document = Document()
+    Document_process.parrafos('Autor A. (2024). Obra A.\nhttps://example.org/a\n'
+                             'Autor B. (2023). Obra B.\nhttps://example.org/b',
+                             document, 'Bibliografía', False, False)
+    paragraphs = document.paragraphs[1:]
+    assert len(paragraphs) == 2
+    for paragraph, author in zip(paragraphs, ['Autor A.', 'Autor B.']):
+        assert paragraph.text.startswith(author)
+        assert len(paragraph._p.xpath('.//w:hyperlink')) == 1
+
+
 def test_reference_format_and_clickable_link_in_documents():
     reference = glossary.format_source({
         'author': 'Artola, I. y Artola, R.', 'year': '2005',

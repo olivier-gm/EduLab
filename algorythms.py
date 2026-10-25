@@ -1037,8 +1037,10 @@ class Document_process:
             run.font.color.rgb = RGBColor(0, 0, 0)
 
         if topic == 'Bibliografía' and not detect_subtitles:
-            for reference in re.split(r'\n\s*\n', body.strip()):
-                Document_process._add_reference(document, reference)
+            # La URL en su propia línea sigue perteneciendo a la referencia anterior.
+            for reference in re.split(r'\r?\n(?![ \t]*https?://)', body.strip()):
+                if reference.strip():
+                    Document_process._add_reference(document, reference.strip())
             return
 
         # ── Cuerpo ──
