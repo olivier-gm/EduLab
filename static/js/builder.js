@@ -265,9 +265,6 @@
     show($('#conclusion-option'), !glossary);
     show($('#sections-help'), !glossary);
     setText($('#sections-title'), glossary ? 'Bibliografía por término' : 'Secciones del informe');
-    setText($('#bibliography-description'), glossary
-      ? 'Una fuente junto a cada definición'
-      : 'Incluye las fuentes consultadas');
     setText($('#bibliography-help'), glossary
       ? 'Cada término llevará su propia fuente, junto a su definición.'
       : 'La bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.');
