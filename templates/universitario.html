@@ -11,11 +11,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/form.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/form.css', v='optional-sections-1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='js/builder.js', v='logo-thumbs-1') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/builder.js', v='optional-sections-1') }}"></script>
 </head>
 
 <body>
@@ -374,24 +374,25 @@
             </div>
           </details>
 
-          <details class="block content-disclosure" id="sections-options">
-            <summary><i class="bx bx-layer" aria-hidden="true"></i><span><strong id="sections-title">Secciones del informe</strong><small id="sections-summary">Introducción y conclusión · sin bibliografía</small></span><i class="bx bx-chevron-down" aria-hidden="true"></i></summary>
+          <details class="block content-disclosure" id="sections-options" open>
+            <summary><i class="bx bx-layer" aria-hidden="true"></i><span><strong id="sections-title">Secciones del informe</strong><small id="sections-summary">Opcionales · elige las que necesites</small></span><i class="bx bx-chevron-down" aria-hidden="true"></i></summary>
             <div class="content-disclosure__body">
+              <p class="help section-guide" id="sections-help">El desarrollo se incluye siempre. Marca las secciones que necesites añadir.</p>
               <div class="section-toggles">
                 <div class="section-option" id="intro-option">
-                  <input type="checkbox" id="f-incluir-intro" name="incluir_introduccion" value="1" checked>
-                  <label for="f-incluir-intro">Introducción</label>
+                  <input type="checkbox" id="f-incluir-intro" name="incluir_introduccion" value="1">
+                  <label for="f-incluir-intro"><span>Introducción</span><small>Presenta el tema</small></label>
                 </div>
                 <div class="section-option" id="conclusion-option">
-                  <input type="checkbox" id="f-incluir-concl" name="incluir_conclusion" value="1" checked>
-                  <label for="f-incluir-concl">Conclusión</label>
+                  <input type="checkbox" id="f-incluir-concl" name="incluir_conclusion" value="1">
+                  <label for="f-incluir-concl"><span>Conclusión</span><small>Resume las ideas finales</small></label>
                 </div>
                 <div class="section-option">
                   <input type="checkbox" id="f-incluir-bib" name="incluir_bibliografia" value="1">
-                  <label for="f-incluir-bib">Bibliografía</label>
+                  <label for="f-incluir-bib"><span>Bibliografía</span><small id="bibliography-description">Incluye las fuentes consultadas</small></label>
                 </div>
               </div>
-              <p class="help" id="bibliography-help">La bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.</p>
+              <p class="help" id="bibliography-help" style="display:none;">La bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.</p>
             </div>
           </details>
 
@@ -535,7 +536,7 @@
         <div class="loader__step" data-lstep="1"><i class="bx bx-circle"></i> Preparando la portada</div>
         <div class="loader__step" data-lstep="2"><i class="bx bx-circle"></i> Validando el título</div>
         <div class="loader__step" data-lstep="3"><i class="bx bx-circle"></i> Redactando el desarrollo</div>
-        <div class="loader__step" data-lstep="4"><i class="bx bx-circle"></i> Introducción y conclusión</div>
+        <div class="loader__step" data-lstep="4"><i class="bx bx-circle"></i> Organizando las secciones</div>
         <div class="loader__step" data-lstep="5"><i class="bx bx-circle"></i> Armando el Word y el PDF</div>
       </div>
 

@@ -263,7 +263,11 @@
     show($('label[for="f-incluir-concl"]'), !glossary);
     show($('#intro-option'), !glossary);
     show($('#conclusion-option'), !glossary);
+    show($('#sections-help'), !glossary);
     setText($('#sections-title'), glossary ? 'Bibliografía por término' : 'Secciones del informe');
+    setText($('#bibliography-description'), glossary
+      ? 'Una fuente junto a cada definición'
+      : 'Incluye las fuentes consultadas');
     setText($('#bibliography-help'), glossary
       ? 'Cada término llevará su propia fuente, junto a su definición.'
       : 'La bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.');
@@ -357,17 +361,21 @@
   function applySections() {
     show($('#wrap-introduccion'), chkIntro.checked);
     show($('#wrap-conclusion'), chkConcl.checked);
-    var bibliography = $('#f-incluir-bib').checked;
+    var bibBox = $('#f-incluir-bib');
+    var bibliography = bibBox.checked;
     show($('#wrap-bibliografia'), bibliography);
+    show($('#bibliography-help'), bibliography || bibBox.disabled);
     var sections = [];
     if (isGlossary()) {
       setText($('#sections-summary'), bibliography ? 'Activada · una fuente junto a cada definición' : 'Opcional · desactivada');
       return;
     }
     if (chkIntro.checked) sections.push('Introducción');
-    if (chkConcl.checked) sections.push('conclusión');
-    setText($('#sections-summary'), (sections.length ? sections.join(' y ') : 'Solo desarrollo') +
-      (bibliography ? ' · con bibliografía' : ' · sin bibliografía'));
+    if (chkConcl.checked) sections.push('Conclusión');
+    if (bibliography) sections.push('Bibliografía');
+    setText($('#sections-summary'), sections.length
+      ? 'Incluye: ' + sections.join(' · ')
+      : 'Opcionales · elige las que necesites');
   }
 
   chkIntro.addEventListener('change', applySections);
@@ -881,7 +889,7 @@
     { at: 10, step: 2, text: 'Validando que el título sea apto para un trabajo académico…' },
     { at: 26, step: 3, text: 'La IA está redactando el desarrollo del tema…' },
     { at: 58, step: 3, text: 'Ampliando cada tema con detalle y coherencia…' },
-    { at: 72, step: 4, text: 'Escribiendo la introducción y la conclusión…' },
+    { at: 72, step: 4, text: 'Organizando las secciones del documento…' },
     { at: 84, step: 5, text: 'Maquetando el documento en Word y generando el PDF…' },
     { at: 93, step: 5, text: 'Ya casi listo, dando los toques finales…' }
   ];
