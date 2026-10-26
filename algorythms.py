@@ -502,6 +502,99 @@ class Document_process:
         return total
 
     @staticmethod
+    def _layout_long_student_details(document, title_para, date_para, replacements, words, font_name):
+        """Aísla los nombres largos en una columna y reserva su altura antes de posicionar la portada."""
+        from math import ceil
+        from PIL import ImageFont
+
+        section = document.sections[0]
+        column_width = (section.page_width - section.left_margin - section.right_margin) / 2
+        text_width = column_width / 12700 - 12  # márgenes interiores de las celdas
+        students = [(replacements.get(f'[{i}]', '').strip(), replacements.get(f'[id{i}]', '').strip())
+                    for i in range(1, 9) if replacements.get(f'[{i}]', '').strip()
+                    or replacements.get(f'[id{i}]', '').strip()]
+        if not students:
+            return None
+        serif = font_name == 'Times New Roman'
+        try:
+            font = ImageFont.truetype('times.ttf' if serif else 'arial.ttf', 120)
+        except OSError:
+            font = ImageFont.truetype('LiberationSerif-Regular.ttf' if serif else 'LiberationSans-Regular.ttf', 120)
+
+        def width(text, size):
+            return font.getlength(text) * size / 120
+
+        if not any(width(' '.join(student), 12) > text_width for student in students):
+            return None
+        paragraphs = document.paragraphs
+        start = next(i for i, p in enumerate(paragraphs) if p._p is title_para._p)
+        end = next(i for i, p in enumerate(paragraphs) if p._p is date_para._p)
+        details = [p for p in paragraphs[start + 1:end] if p.text.strip()]
+        left = []
+        for p in details:
+            text = re.split(r'\t|\[[1-8]\]', p.text, maxsplit=1)[0]
+            for key, value in replacements.items():
+                text = text.replace(key, value if key != '[alumnos]' else '')
+            if text.strip():
+                left.append(text.strip())
+
+        def lines(text, size):
+            count = 0
+            for hard_line in text.split('\n'):
+                line = ''
+                for word in hard_line.split():
+                    candidate = (line + ' ' + word).strip()
+                    if line and width(candidate, size) > text_width:
+                        count += max(1, ceil(width(line, size) / text_width))
+                        line = word
+                    else:
+                        line = candidate
+                count += max(1, ceil(width(line, size) / text_width))
+            return count
+
+        _, title_capacity, title_line_height = Document_process._title_metrics(replacements.get('[title]', ''))
+        title_bottom = section.page_height.pt / 2 + max(1, ceil(len(replacements.get('[title]', '')) / title_capacity)) * title_line_height / 2
+        date_y = section.page_height.pt - section.bottom_margin.pt - Document_process._DATE_BOTTOM_OFFSET_PT
+        available = date_y - title_bottom - Document_process._TITLE_GAP_PT - Document_process._DETAIL_LINE_HEIGHT_PT
+        for size in range(12, 7, -1):
+            right = [replacements.get('[alumnos]', 'ALUMNOS:')]
+            for name, identity in students:
+                combined = ' '.join(part for part in (name, identity) if part)
+                right.append(name + '\n' + identity if name and identity and width(combined, size) > text_width
+                             else combined)
+            height = (max(sum(lines(text, size) for text in column) for column in (left, right)) + 1) * (size + 2)
+            if height <= available:
+                break
+
+        table = document.add_table(rows=1, cols=2)
+        table.autofit = False
+        for column in table.columns:
+            column.width = int(column_width)
+        table.rows[0]._tr.get_or_add_trPr().append(OxmlElement('w:cantSplit'))
+        date_para._p.addprevious(table._tbl)
+        for cell, texts, alignment in zip(table.rows[0].cells, (left, right),
+                                         (WD_PARAGRAPH_ALIGNMENT.LEFT, WD_PARAGRAPH_ALIGNMENT.RIGHT)):
+            cell.width = int(column_width)
+            for index, text in enumerate(texts):
+                p = cell.paragraphs[0] if index == 0 else cell.add_paragraph()
+                p.text = text
+                p.alignment = alignment
+                p.paragraph_format.left_indent = Pt(0)
+                p.paragraph_format.first_line_indent = Pt(0)
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+                p.paragraph_format.line_spacing = Pt(size + 2)
+                p.paragraph_format.keep_together = True
+            Document_process.underline_words_in_first_page(cell, words)
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.font.name = font_name if serif else 'Arial'
+                    run.font.size = Pt(size)
+        for p in details:
+            Document_process.delete_paragraph(p)
+        return ceil(height / Document_process._DETAIL_LINE_HEIGHT_PT)
+
+    @staticmethod
     def _trim_cover_spacers(document, title_para, date_para=None,
                              has_logo=False, university_name='',
                              detail_lines=0, title_text='', logo_height_pt=None):
@@ -1238,9 +1331,12 @@ class Document_process:
         # Contar líneas de detalle ANTES de borrar los párrafos en blanco
         detail_lines = 0
         if title_para is not None and date_para is not None:
-            detail_lines = Document_process._estimate_detail_lines(
-                document, title_para, date_para, replacements,
-            )
+            detail_lines = Document_process._layout_long_student_details(
+                document, title_para, date_para, replacements, words, font_name)
+            if detail_lines is None:
+                detail_lines = Document_process._estimate_detail_lines(
+                    document, title_para, date_para, replacements,
+                )
 
         # Recortar los párrafos en blanco que ya no cumplen ningún propósito
         # de posicionamiento (ver _trim_cover_spacers) y reservar sólo el
