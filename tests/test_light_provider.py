@@ -111,6 +111,17 @@ def save(admin, **fields):
     return db.get_settings()
 
 
+def test_workshop_reasoning_is_independent_and_rejects_invalid_values(admin):
+    settings = save(admin, openrouter_reasoning='low', openrouter_workshop_reasoning='xhigh')
+    assert settings['openrouter_reasoning'] == 'low'
+    assert settings['openrouter_workshop_reasoning'] == 'xhigh'
+    settings = save(admin, openrouter_reasoning='high', openrouter_workshop_reasoning='invalid')
+    assert settings['openrouter_reasoning'] == 'low'
+    assert settings['openrouter_workshop_reasoning'] == 'xhigh'
+    page = admin.get('/admin/').get_data(as_text=True)
+    assert 'name="openrouter_workshop_reasoning"' in page
+
+
 @pytest.mark.parametrize('model', ['openai/gpt-6-luna', 'openai/gpt-6-luna:floor', 'google/gemini-3.8-flash',
                                    'anthropic/claude-sonnet-5-5:nitro', 'meta-llama/llama-4-maverick'])
 def test_admin_acepta_ids_de_openrouter_de_cualquier_proveedor(admin, model):

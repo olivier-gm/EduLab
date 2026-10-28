@@ -503,6 +503,48 @@ def test_manual_bibliography_is_optional(client, monkeypatch, fake_document):
     assert 'id="f-incluir-bib" name="incluir_bibliografia" value="1">' in page
 
 
+@pytest.mark.parametrize('institution', ['universidad', 'bachiller'])
+def test_workshop_answers_questions_and_ignores_report_options(client, monkeypatch, fake_document, institution):
+    captured = {}
+    def generate(questions, usage_sink=None):
+        captured['questions'] = questions
+        return [{'question': question, 'answer': 'Respuesta de prueba.'} for question in questions]
+    def fill(output, *args, **kwargs):
+        captured.update(args=args, kwargs=kwargs)
+        fake_document(output, *args, **kwargs)
+    monkeypatch.setattr(app_module, 'generate_workshop', generate)
+    monkeypatch.setattr(app_module.Document_process, 'fill_placeholders', staticmethod(fill))
+    for name in ('check_title', 'generate_essay_content', 'generate_introduction', 'generate_conclusion', 'generate_bibliography'):
+        monkeypatch.setattr(app_module, name, lambda *a, **kw: pytest.fail('El taller solo responde sus preguntas'))
+    html = post_form(client, instituto=institution, document_kind='workshop', title='Taller número uno',
+        subtitle_1='¿Qué es la célula?', subtitle_2='Explique la mitosis', incluir_bibliografia='1',
+        **{'global-mode': 'standard'})
+    assert 'Descargar Word' in html and 'Índice incluido' not in html
+    assert 'Taller con preguntas y respuestas' in html
+    assert captured['questions'] == ['¿Qué es la célula?', 'Explique la mitosis']
+    assert captured['args'][3:6] == ('', '', '')
+    assert captured['kwargs']['bibliography'] == ''
+    assert len(captured['kwargs']['workshop_entries']) == 2
+    assert db.get_stats()['total_documents'] == 1
+
+
+def test_workshop_missing_questions_does_not_start_or_consume_generation(client, monkeypatch):
+    monkeypatch.setattr(app_module.jobs, 'start', lambda *a, **kw: pytest.fail('No iniciar sin preguntas'))
+    html = post_form(client, document_kind='workshop')
+    assert 'Añade al menos una pregunta' in html
+    assert db.get_db().execute('SELECT COUNT(*) FROM generation_jobs').fetchone()[0] == 0
+    assert db.get_stats()['total_documents'] == 0
+
+
+def test_workshop_cannot_bypass_ai_access_with_manual_mode(client, monkeypatch):
+    db.set_settings({'free_ai_limit': '0', 'free_manual_limit': '5'})
+    monkeypatch.setattr(app_module, 'generate_workshop', lambda *a, **kw: pytest.fail('Sin acceso a IA'))
+    response = client.post('/process_form', data={'document_kind': 'workshop', 'global-mode': 'standard',
+        'title': 'Taller de prueba', 'subtitle_1': '¿Qué es una célula?'})
+    assert response.status_code == 302 and '/plans' in response.location
+    assert db.get_stats()['total_documents'] == 0
+
+
 @pytest.mark.parametrize('institution, expected_type, template', [
     ('universidad', 'uni', 'input/plantilla.docx'),
     ('bachiller', 'bach', 'input/plantilla_bach.docx'),

@@ -32,7 +32,12 @@
     check: { step: 4, from: 82, to: 90, text: 'Comprobando la cantidad y el orden alfabético…' },
     build: { step: 5, from: 90, to: 97, text: 'Armando el glosario en Word y PDF…' }
   };
-  var STAGES = kind === 'glossary' ? GLOSSARY : REPORT;
+  var WORKSHOP = {
+    prepare: { step: 1, from: 4, to: 15, text: 'Preparando la portada del taller…' },
+    content: { step: 2, from: 15, to: 88, text: 'Respondiendo cada pregunta del taller…' },
+    build: { step: 3, from: 88, to: 97, text: 'Armando las preguntas y respuestas en Word y PDF…' }
+  };
+  var STAGES = kind === 'glossary' ? GLOSSARY : kind === 'workshop' ? WORKSHOP : REPORT;
 
   var current = STAGES.prepare;
   var progress = current.from;

@@ -455,6 +455,18 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
   clip-path: inset(50%);
 }
 
+.content-choices--kind {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#workshop-help {
+  margin: 0 0 14px;
+}
+
+#topics-error {
+  color: #ffaaa2;
+}
+
 .content-choices label {
   display: flex;
   align-items: center;
@@ -842,7 +854,12 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
   transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
 }
 
-.topic-row button:hover {
+.topic-row button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.topic-row button:hover:not(:disabled) {
   background: rgba(255, 107, 107, 0.16);
   border-color: rgba(255, 107, 107, 0.45);
   color: #ff9b9b;
@@ -1289,12 +1306,14 @@ input[type="date"].input::-webkit-calendar-picker-indicator {
   }
 
   .content-choices--kind {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .content-choices--kind label {
-    gap: 8px;
-    padding: 12px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 10px 4px;
   }
 
   .content-choices--kind small {

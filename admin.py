@@ -215,10 +215,11 @@ def save_ai_settings():
     if light_provider not in ('same', 'gemini', 'openrouter'):
         return back('Elige el proveedor del modelo ligero.')
     values['light_provider'] = light_provider
-    reasoning = request.form.get('openrouter_reasoning') or ''
-    if reasoning not in ('', 'low', 'medium', 'high', 'xhigh'):
-        return back('Elige un esfuerzo de razonamiento de la lista.')
-    values['openrouter_reasoning'] = reasoning
+    for name in ('openrouter_reasoning', 'openrouter_workshop_reasoning'):
+        reasoning = request.form.get(name, db.get_settings().get(name, '')) or ''
+        if reasoning not in ('', 'low', 'medium', 'high', 'xhigh'):
+            return back('Elige un esfuerzo de razonamiento de la lista.')
+        values[name] = reasoning
     for prefix in ('gemini', 'openrouter'):
         for purpose in ('content', 'bibliography'):
             name = f'{prefix}_search_{purpose}'

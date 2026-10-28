@@ -11,11 +11,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/form.css', v='optional-sections-2') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/form.css', v='workshop-1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
 
   <script defer src="{{ url_for('static', filename='js/ui.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='js/builder.js', v='optional-sections-2') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/builder.js', v='workshop-1') }}"></script>
 </head>
 
 <body>
@@ -265,6 +265,8 @@
             <div class="content-choices content-choices--kind">
                 <input type="radio" id="kind-report" name="document_kind" value="report" checked>
                 <label for="kind-report"><i class="bx bx-file" aria-hidden="true"></i><span><strong>Informe</strong><small>Desarrollo por secciones</small></span></label>
+                <input type="radio" id="kind-workshop" name="document_kind" value="workshop" {% if not access.ai.ok %}disabled{% endif %}>
+                <label for="kind-workshop"><i class="bx bx-list-check" aria-hidden="true"></i><span><strong>Taller</strong><small>Respuestas a tus preguntas</small></span></label>
                 <input type="radio" id="kind-glossary" name="document_kind" value="glossary" {% if not access.ai.ok or not glossary_allowed %}disabled{% endif %}>
                 <label for="kind-glossary"><i class="bx bx-book-open" aria-hidden="true"></i><span><strong>Glosario</strong><small>Definiciones breves y ordenadas</small></span></label>
             </div>
@@ -364,12 +366,14 @@
 
           <!-- ---- Modo IA: temas específicos (subtitle_1..subtitle_8) ---- -->
           <details class="block content-disclosure" id="ia-block">
-            <summary><i class="bx bx-list-ul" aria-hidden="true"></i><span><strong>Personalizar los temas</strong><small id="topics-summary">Opcional · la IA organiza el desarrollo</small></span><i class="bx bx-chevron-down" aria-hidden="true"></i></summary>
+            <summary><i class="bx bx-list-ul" aria-hidden="true"></i><span><strong id="topics-title">Personalizar los temas</strong><small id="topics-summary">Opcional · la IA organiza el desarrollo</small></span><i class="bx bx-chevron-down" aria-hidden="true"></i></summary>
             <div class="content-disclosure__body">
+              <p class="help" id="workshop-help" style="display:none;">Escribe de 1 a 8 preguntas o enunciados. La IA responderá cada uno en el orden que indiques.</p>
               <div class="topics" id="topics"></div>
+              <p class="help" id="topics-error" role="alert" style="display:none;"></p>
               <p class="help" id="topics-empty">Añade hasta 8 temas que quieras incluir en el desarrollo.</p>
               <button type="button" class="add-btn" id="add-topic" style="margin-top: 12px;">
-                <i class="bx bx-plus"></i> Añadir tema
+                <i class="bx bx-plus"></i> <span id="add-topic-label">Añadir tema</span>
               </button>
             </div>
           </details>

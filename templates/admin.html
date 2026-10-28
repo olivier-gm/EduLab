@@ -101,7 +101,7 @@
       <h2 class="admin-section__title"><i class="bx bx-brain"></i> Proveedor y modelo de IA</h2>
       <form method="POST" action="{{ url_for('admin.save_ai_settings') }}" class="card admin-form">
         <input type="hidden" name="csrf_token" value="{{ ai_csrf_token }}">
-        <p class="admin-form__hint">El proveedor seleccionado se usa para informes, glosarios y lectura de archivos. Los cambios se aplican a las siguientes generaciones.</p>
+        <p class="admin-form__hint">El proveedor seleccionado se usa para informes, talleres, glosarios y lectura de archivos. Los cambios se aplican a las siguientes generaciones.</p>
         <label>Proveedor activo
           <select class="input" name="ai_provider">
             <option value="gemini" {% if settings['ai_provider'] == 'gemini' %}selected{% endif %}>Gemini directo · Google AI Studio</option>
@@ -135,13 +135,24 @@
             <label>ID del modelo en OpenRouter
               <input class="input" name="openrouter_model" maxlength="160" value="{{ settings['openrouter_model'] }}" placeholder="openai/gpt-6-luna:floor" required>
             </label>
-            <label>Esfuerzo de razonamiento (modelo principal)
+            <label>Razonamiento para informes y glosarios
               <select class="input" name="openrouter_reasoning">
                 {% for value, label in [('', 'El predeterminado del modelo'), ('low', 'Bajo'), ('medium', 'Medio'), ('high', 'Alto'), ('xhigh', 'Máximo (xhigh)')] %}
                 <option value="{{ value }}" {% if settings['openrouter_reasoning'] == value %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
               </select>
             </label>
+            <fieldset>
+              <legend>Talleres</legend>
+              <label>Razonamiento para responder las preguntas
+                <select class="input" name="openrouter_workshop_reasoning">
+                  {% for value, label in [('', 'El predeterminado del modelo'), ('low', 'Bajo'), ('medium', 'Medio'), ('high', 'Alto'), ('xhigh', 'Máximo (xhigh)')] %}
+                  <option value="{{ value }}" {% if settings['openrouter_workshop_reasoning'] == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <p class="admin-form__hint">Solo se aplica a las respuestas de talleres con OpenRouter. Es independiente de informes y glosarios; también se usa si OpenRouter entra como fallback.</p>
+            </fieldset>
             <p class="admin-form__hint">Más razonamiento mejora la calidad pero gasta más tokens (y dinero) y tarda más. Se le suma margen al límite de salida para que el texto no se corte. Si el modelo no admite el nivel elegido, OpenRouter rechaza la petición.</p>
             <label>Modelo ligero (mayúsculas y tildes del título)
               <input class="input" name="openrouter_light_model" maxlength="160" value="{{ settings['openrouter_light_model'] }}" placeholder="Vacío = el mismo de arriba">

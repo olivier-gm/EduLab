@@ -149,7 +149,7 @@ def _light_values(values):
 
 
 def generate_content(*, model, config, contents, fallback_config=None, fallback_contents=None, light=False,
-                     search_purpose='content'):
+                     search_purpose='content', reasoning_purpose='content'):
     """Genera con el proveedor activo; si falla y el fallback está activado, con el otro.
 
     fallback_config / fallback_contents: versión de la petición para el otro
@@ -162,7 +162,8 @@ def generate_content(*, model, config, contents, fallback_config=None, fallback_
     # Razonamiento en OpenRouter: el del admin para el principal; las tareas pequeñas usan el mínimo
     # común (un ligero que razona de más gasta su límite de tokens y devuelve vacío).
     values['_search_purpose'] = search_purpose     # qué casilla de búsqueda del admin aplica
-    values['_reasoning_effort'] = 'low' if light else values.get('openrouter_reasoning', '')
+    reasoning_key = 'openrouter_workshop_reasoning' if reasoning_purpose == 'workshop' else 'openrouter_reasoning'
+    values['_reasoning_effort'] = 'low' if light else values.get(reasoning_key, '')
     if light:       # tareas pequeñas (p. ej. mayúsculas y tildes): modelo ligero del admin
         values = _light_values(values)
         if values.get('light_provider') in ('gemini', 'openrouter'):

@@ -249,14 +249,17 @@
   function applyMode() {
     var mode = ($('input[name="global-mode"]:checked') || {}).value || 'ia';
     var glossary = isGlossary();
-    show($('#ia-block'), !glossary && mode === 'ia');
-    show($('#manual-block'), !glossary && mode === 'standard');
-    show($('#writer-options'), !glossary);
-    show($('#scan-block'), !glossary && mode === 'ia');
+    var workshop = isWorkshop();
+    show($('#ia-block'), workshop || (!glossary && mode === 'ia'));
+    show($('#manual-block'), !glossary && !workshop && mode === 'standard');
+    show($('#writer-options'), !glossary && !workshop);
+    show($('#scan-block'), !glossary && !workshop && mode === 'ia');
+    show($('#sections-options'), !workshop);
+    show($('#workshop-help'), workshop);
     show($('#glossary-source-block'), glossary);
     show($('#glossary-block'), glossary);
-    $('#f-incluir-intro').disabled = glossary;
-    $('#f-incluir-concl').disabled = glossary;
+    $('#f-incluir-intro').disabled = glossary || workshop;
+    $('#f-incluir-concl').disabled = glossary || workshop;
     $('#f-incluir-intro').hidden = glossary;
     $('#f-incluir-concl').hidden = glossary;
     show($('label[for="f-incluir-intro"]'), !glossary);
@@ -270,21 +273,30 @@
       : 'La bibliografía irá en una página después de la conclusión, o al final si no hay conclusión.');
     setText($('#document-note'), glossary
       ? 'Recibirás Word y PDF con portada y glosario en orden alfabético, sin introducción ni conclusión.'
+      : workshop ? 'Recibirás un taller con portada y tus preguntas respondidas en orden, sin índice, introducción, conclusión ni bibliografía.'
       : 'Recibirás Word y PDF con índice y páginas separadas para cada sección.');
     // La bibliografía por término de los glosarios es solo del plan Pro.
     var bibBox = $('#f-incluir-bib');
     var bibLocked = glossary && form.dataset.glossaryBib !== '1';
-    bibBox.disabled = bibLocked;
+    bibBox.disabled = bibLocked || workshop;
     if (bibLocked) {
       bibBox.checked = false;
       setText($('#bibliography-help'), 'La bibliografía por término de los glosarios es exclusiva del plan Pro.');
     }
     applySections();
     applyGlossarySource();
+    if (topicsBox) {
+      if (workshop && !$('.topic-row', topicsBox)) topicsBox.appendChild(buildTopicRow());
+      reindexTopics();
+    }
   }
 
   function isGlossary() {
     return ($('input[name="document_kind"]:checked') || {}).value === 'glossary';
+  }
+
+  function isWorkshop() {
+    return ($('input[name="document_kind"]:checked') || {}).value === 'workshop';
   }
 
   $$('input[name="document_kind"]').forEach(function (r) {
@@ -296,10 +308,12 @@
     var glossary = isGlossary();
     show($('#glossary-count-wrap'), !list);
     show($('#glossary-list-wrap'), list);
-    setText($('#title-label'), glossary ? (list ? 'Título del glosario' : 'Tema del glosario') : 'Título del trabajo');
-    $('#f-title').placeholder = glossary ? 'Ej. Biología celular' : 'Ej. El sistema nervioso';
+    var workshop = isWorkshop();
+    setText($('#title-label'), glossary ? (list ? 'Título del glosario' : 'Tema del glosario') : workshop ? 'Título del taller' : 'Título del trabajo');
+    $('#f-title').placeholder = glossary ? 'Ej. Biología celular' : workshop ? 'Ej. Taller de biología' : 'Ej. El sistema nervioso';
     setText($('#title-help'), glossary
       ? (list ? 'Da contexto a tu lista y aparecerá en la portada.' : 'La IA elegirá los términos relacionados con este tema.')
+      : workshop ? 'Este título identifica el documento y aparece en la portada. Las respuestas se basan en las preguntas de abajo.'
       : 'Sé específico: mientras más claro el título, mejor queda el desarrollo.');
   }
 
@@ -506,16 +520,27 @@
   var addTopic = $('#add-topic');
 
   function reindexTopics() {
+    var workshop = isWorkshop();
+    var rows = $$('.topic-row', topicsBox);
     $$('.topic-row', topicsBox).forEach(function (row, idx) {
       var input = $('input', row);
       input.name = 'subtitle_' + (idx + 1);
-      input.placeholder = 'Tema ' + (idx + 1) + ' a desarrollar';
+      input.placeholder = workshop ? 'Pregunta ' + (idx + 1) + ' o enunciado' : 'Tema ' + (idx + 1) + ' a desarrollar';
+      input.setAttribute('aria-label', (workshop ? 'Pregunta ' : 'Tema ') + (idx + 1));
+      input.required = workshop;
+      var button = $('button', row);
+      button.disabled = workshop && rows.length === 1;
+      button.setAttribute('aria-label', workshop ? 'Quitar pregunta' : 'Quitar tema');
     });
     addTopic.disabled = $$('.topic-row', topicsBox).length >= MAX_TOPICS;
     var count = $$('.topic-row', topicsBox).length;
-    show($('#topics-empty'), count === 0);
-    setText($('#topics-summary'), count ? count + (count === 1 ? ' tema añadido' : ' temas añadidos') : 'Opcional · la IA organiza el desarrollo');
-    if (count) $('#ia-block').open = true;
+    show($('#topics-empty'), !workshop && count === 0);
+    show($('#topics-error'), false);
+    setText($('#topics-title'), workshop ? 'Preguntas del taller' : 'Personalizar los temas');
+    setText($('#add-topic-label'), workshop ? 'Añadir pregunta' : 'Añadir tema');
+    setText($('#topics-summary'), workshop ? 'Obligatorio · mínimo 1, máximo 8'
+      : count ? count + (count === 1 ? ' tema añadido' : ' temas añadidos') : 'Opcional · la IA organiza el desarrollo');
+    if (count || workshop) $('#ia-block').open = true;
   }
 
   function buildTopicRow() {
@@ -526,6 +551,11 @@
     input.type = 'text';
     input.className = 'input';
     input.maxLength = 300;
+    input.addEventListener('input', function () {
+      input.classList.remove('is-error');
+      input.removeAttribute('aria-invalid');
+      show($('#topics-error'), false);
+    });
 
     var del = document.createElement('button');
     del.type = 'button';
@@ -824,6 +854,23 @@
         return false;
       }
       fieldError('#f-title', false);
+      if (isWorkshop()) {
+        var questions = $$('.topic-row input', topicsBox);
+        var invalidQuestion = questions.find(function (input) {
+          return !input.value.trim().replace(/^[.\u2026:;\s]+|[.\u2026:;\s]+$/g, '');
+        });
+        if (!questions.length || invalidQuestion) {
+          $('#ia-block').open = true;
+          setText($('#topics-error'), 'Escribe una pregunta en cada campo. Puedes quitar las que no necesites; deja al menos una.');
+          show($('#topics-error'), true);
+          if (invalidQuestion) {
+            invalidQuestion.classList.add('is-error');
+            invalidQuestion.setAttribute('aria-invalid', 'true');
+            invalidQuestion.focus();
+          }
+          return false;
+        }
+      }
       if (scanningPhoto) { setText($('#scan-status'), 'Espera a que termine la lectura de la foto.'); return false; }
       if (isGlossary()) {
         if (extractingTerms) { setText($('#terms-status'), 'Espera a que termine la lectura del archivo.'); return false; }
@@ -899,8 +946,14 @@
     { at: 84, step: 5, text: 'Armando el glosario en Word y PDF…' }
   ];
 
+  var WORKSHOP_PHASES = [
+    { at: 0, step: 1, text: 'Preparando la portada del taller…' },
+    { at: 26, step: 3, text: 'Respondiendo las preguntas del taller…' },
+    { at: 84, step: 5, text: 'Armando las preguntas y respuestas en Word y PDF…' }
+  ];
+
   function paintPhase() {
-    var phases = isGlossary() ? GLOSSARY_PHASES : PHASES;
+    var phases = isGlossary() ? GLOSSARY_PHASES : isWorkshop() ? WORKSHOP_PHASES : PHASES;
     var current = phases[0];
     for (var i = 0; i < phases.length; i++) {
       if (progress >= phases[i].at) { current = phases[i]; }
@@ -920,13 +973,15 @@
   }
 
   function startLoader(validating) {
-    if (isGlossary()) {
-      ['Preparando la portada', 'Revisando los términos', 'Definiendo los términos',
-        'Comprobando el glosario', 'Armando el Word y el PDF'].forEach(function (label, i) {
+    var labels = isGlossary()
+      ? ['Preparando la portada', 'Revisando los términos', 'Definiendo los términos', 'Comprobando el glosario', 'Armando el Word y el PDF']
+      : isWorkshop()
+        ? ['Preparando la portada', 'Revisando las preguntas', 'Respondiendo las preguntas', 'Organizando las respuestas', 'Armando el Word y el PDF']
+        : ['Preparando la portada', 'Validando el título', 'Redactando el desarrollo', 'Organizando las secciones', 'Armando el Word y el PDF'];
+    labels.forEach(function (label, i) {
         var item = $('[data-lstep="' + (i + 1) + '"]');
         item.innerHTML = '<i class="bx bx-circle"></i> ' + label;
-      });
-    }
+    });
     loader.classList.add('is-on');
     document.body.style.overflow = 'hidden';
     progress = 0;
@@ -970,7 +1025,7 @@
 
     saveDraft();
     btnSubmit.disabled = true;
-    var needsValidation = isGlossary() || ($('input[name="global-mode"]:checked') || {}).value !== 'standard';
+    var needsValidation = !isWorkshop() && (isGlossary() || ($('input[name="global-mode"]:checked') || {}).value !== 'standard');
     if (needsValidation) {
       startLoader(true);
       try {

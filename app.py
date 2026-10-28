@@ -21,6 +21,7 @@ load_dotenv()
 from form_processor import FormProcessor
 from algorythms import Document_process
 from IA import generate_essay_content, generate_introduction, generate_conclusion, GenerationError
+from workshop import generate_workshop, questions_from_form
 from title_check import check_title, check_glossary
 from text_format import format_texts
 from glossary import extract_terms, parse_terms, generate_glossary, generate_bibliography
@@ -382,10 +383,10 @@ def process_form():
     if institution not in ('universidad', 'bachiller'):
         return form_error('Elige universidad o bachillerato.')
     document_kind = form_data.get('document_kind', 'report')
-    if document_kind not in ('report', 'glossary'):
-        return form_error('Elige trabajo normal o glosario.')
+    if document_kind not in ('report', 'workshop', 'glossary'):
+        return form_error('Elige informe, taller o glosario.')
     is_glossary = document_kind == 'glossary'
-    manual_mode = not is_glossary and form_data.get('global-mode') == 'standard'
+    manual_mode = document_kind == 'report' and form_data.get('global-mode') == 'standard'
 
     # Se valida ANTES de llamar a la IA: un usuario sin permiso no debe
     # gastar tokens. Con IA y manual hay reglas distintas (ver plans.py).
@@ -393,11 +394,15 @@ def process_form():
     if not allowed:
         return plans.redirect_to_plans(reason)
 
-    # El título sale en la portada en ambos modos, y en modo IA además es el
-    # tema a investigar: sin uno válido no hay nada que generar.
+    # En talleres el título solo identifica la portada; se valida aquí su formato.
     title_error = validate_title_field(form_data.get('title'))
     if title_error:
         return form_error(title_error)
+    if document_kind == 'workshop':
+        try:
+            questions_from_form(form_data)
+        except ValueError as exc:
+            return form_error(str(exc))
 
     # Un documento a la vez por usuario: un segundo envío (o recargar) vuelve al avance del que ya corre.
     db.reap_stale_jobs()
@@ -458,7 +463,8 @@ def _generate_document(token, user_id, inputs, started):
     document_type = inputs['document_type']
     document_kind = inputs['document_kind']
     is_glossary = document_kind == 'glossary'
-    manual_mode = not is_glossary and form_data.get('global-mode') == 'standard'
+    is_workshop = document_kind == 'workshop'
+    manual_mode = document_kind == 'report' and form_data.get('global-mode') == 'standard'
 
     processor = FormProcessor(form_data, document_type)
     # Mayúsculas y tildes del título y subtítulos (modelo ligero + control de código + JEV).
@@ -472,14 +478,15 @@ def _generate_document(token, user_id, inputs, started):
     # 'Lo escribo yo': el usuario redacta el contenido a mano en vez de
     # pedírselo a la IA. Estos checkboxes controlan, en ambos modos, si la
     # introducción y la conclusión se incluyen en el documento o no.
-    incluir_introduccion = not is_glossary and 'incluir_introduccion' in form_data
-    incluir_conclusion = not is_glossary and 'incluir_conclusion' in form_data
-    incluir_bibliografia = 'incluir_bibliografia' in form_data
+    incluir_introduccion = document_kind == 'report' and 'incluir_introduccion' in form_data
+    incluir_conclusion = document_kind == 'report' and 'incluir_conclusion' in form_data
+    incluir_bibliografia = not is_workshop and 'incluir_bibliografia' in form_data
 
     introduccion = ''
     conclusion = ''
     bibliography = ''
     glossary_entries = None
+    workshop_entries = None
     # Lista compartida donde cada llamada a la IA anota sus tokens
     # (ver IA._record_usage); se suma al final para guardarla en la BD.
     usage_sink.append(inputs['scan_tokens'])
@@ -492,7 +499,17 @@ def _generate_document(token, user_id, inputs, started):
     # saber (se muestran en la pantalla de descarga).
     warnings = []
 
-    if is_glossary:
+    if is_workshop:
+        try:
+            questions_from_form(form_data)
+            _stage(token, 'content', started)
+            workshop_entries = generate_workshop(processor.subtitles, usage_sink=usage_sink)
+            body = ''
+        except ValueError as exc:
+            raise JobFailed(str(exc))
+        except GenerationError as exc:
+            raise JobFailed(f'No se pudo generar el taller. {exc.user_message}')
+    elif is_glossary:
         try:
             source = form_data.get('glossary_source', 'topic')
             if source == 'list':
@@ -603,6 +620,7 @@ def _generate_document(token, user_id, inputs, started):
                                             detect_subtitles=not manual_mode,
                                             bibliography=bibliography,
                                             glossary_entries=glossary_entries,
+                                            workshop_entries=workshop_entries,
                                             subtitles=processor.subtitles,
                                             font_name='Times New Roman' if form_data.get('fuente') == 'tnr' else 'Arial')
     except Exception:

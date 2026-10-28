@@ -174,6 +174,7 @@ SETTING_DEFAULTS = {
     'light_provider': 'same',
     # Esfuerzo de razonamiento del modelo principal en OpenRouter: '' (el del modelo), low, medium, high o xhigh.
     'openrouter_reasoning': '',
+    'openrouter_workshop_reasoning': '',
     'gemini_light_model': '',
     'openrouter_light_model': '',
     'gemini_api_key': '',  # Cifradas; nunca se rellenan en el HTML.

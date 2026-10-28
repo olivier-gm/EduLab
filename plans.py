@@ -144,7 +144,7 @@ def with_generation_quota(view):
         if _wants_glossary_bibliography() and not glossary_bibliography_access(user):
             return redirect_to_plans('glossary_bibliography_unavailable')
         manual = request.endpoint == 'process_form_bach' or (
-            request.form.get('document_kind') != 'glossary' and request.form.get('global-mode') == 'standard')
+            request.form.get('document_kind', 'report') == 'report' and request.form.get('global-mode') == 'standard')
         allowed, reason = generation_access(user, 'manual' if manual else 'ai')
         if not allowed:
             return redirect_to_plans(reason)

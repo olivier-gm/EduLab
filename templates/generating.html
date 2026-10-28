@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
 
-  <script defer src="{{ url_for('static', filename='js/generating.js', v='3') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/generating.js', v='workshop-1') }}"></script>
 </head>
 
 <body>
@@ -43,6 +43,10 @@
         <div class="loader__step" data-lstep="3"><i class="bx bx-circle"></i> Definiendo los términos</div>
         <div class="loader__step" data-lstep="4"><i class="bx bx-circle"></i> Comprobando el glosario</div>
         <div class="loader__step" data-lstep="5"><i class="bx bx-circle"></i> Armando el Word y el PDF</div>
+        {% elif kind == 'workshop' %}
+        <div class="loader__step" data-lstep="1"><i class="bx bx-circle"></i> Preparando la portada</div>
+        <div class="loader__step" data-lstep="2"><i class="bx bx-circle"></i> Respondiendo las preguntas</div>
+        <div class="loader__step" data-lstep="3"><i class="bx bx-circle"></i> Armando el Word y el PDF</div>
         {% else %}
         <div class="loader__step" data-lstep="1"><i class="bx bx-circle"></i> Preparando la portada</div>
         <div class="loader__step" data-lstep="2"><i class="bx bx-circle"></i> Validando el título</div>

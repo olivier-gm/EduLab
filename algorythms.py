@@ -1308,7 +1308,7 @@ class Document_process:
     def fill_placeholders(docx_output, template_path, template_path2, replacements,
                            introduction, essay_content, conclusion, head_title, id,
                            university_name='', detect_subtitles=True, bibliography='', glossary_entries=None,
-                           subtitles=(), font_name='Arial'):
+                           subtitles=(), font_name='Arial', workshop_entries=None):
         if id == 'bach':
             words = ['DOCENTE:', 'ALUMNOS:', 'ALUMNO:', 'MATERIA:']
         else:
@@ -1398,7 +1398,7 @@ class Document_process:
 
         has_content = essay_content != '' or introduction != '' or conclusion != '' or bibliography != ''
 
-        if has_content and glossary_entries is None:
+        if has_content and glossary_entries is None and workshop_entries is None:
             # Insertar página de Tabla de Contenido
             Document_process.add_toc_page(document)
 
@@ -1410,7 +1410,16 @@ class Document_process:
         if conclusion != '':
             flage = True
 
-        if glossary_entries is not None:
+        if workshop_entries is not None:
+            document.add_page_break()
+            for index, entry in enumerate(workshop_entries, 1):
+                before = len(document.paragraphs)
+                Document_process.parrafos(entry['answer'], document,
+                    f"{index}. {entry['question']}", False, False)
+                heading = document.paragraphs[before]
+                heading.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+                heading.paragraph_format.keep_with_next = True
+        elif glossary_entries is not None:
             Document_process.add_glossary(document, glossary_entries)
         else:
             Document_process.parrafos(introduction, document, 'Introducción', flagi, detect_subtitles)

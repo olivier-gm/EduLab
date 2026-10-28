@@ -133,6 +133,8 @@
         <span class="done__note"><i class="bx bx-time-five"></i> Vence en {{ expiry_text }} · <a href="{{ url_for('my_documents') }}" class="inline-link">Ver mis informes</a></span>
         {% if document_kind == 'glossary' %}
         <span class="done__note"><i class="bx bx-sort-a-z"></i> Glosario en orden alfabético</span>
+        {% elif document_kind == 'workshop' %}
+        <span class="done__note"><i class="bx bx-list-check"></i> Taller con preguntas y respuestas, sin índice</span>
         {% else %}
         <span class="done__note"><i class="bx bx-list-ol"></i> Índice incluido</span>
         <span class="done__note"><i class="bx bx-refresh"></i> Actualiza el índice al abrirlo en Word</span>
