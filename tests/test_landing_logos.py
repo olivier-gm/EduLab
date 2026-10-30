@@ -104,7 +104,7 @@ def test_cada_institucion_trae_logo_completo_y_miniatura():
 def test_la_landing_sirve_solo_miniaturas(client):
     page = client.get('/').get_data(as_text=True)
     assert 'logos/thumbs/universidad_central_de_venezuela.webp' in page          # logo inicial de la hoja
-    strip = page.split('<div class="logos-strip reveal">', 1)[1].split('</div>', 1)[0]
+    strip = re.search(r'<div class="logos-strip reveal"[^>]*>(.*?)</div>', page, re.S).group(1)
     assert strip.count('<img ') == 5
     for stem in ('universidad_central_de_venezuela', 'universidad_de_carabobo', 'universidad_de_los_andes',
                  'universidad_del_zulia', 'universidad_nacional_experimental_romulo_gallegos'):

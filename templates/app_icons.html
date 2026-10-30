@@ -12,6 +12,11 @@
 <script defer src="{{ url_for('static', filename='js/pwa.js') }}"></script>
 <meta name="apple-mobile-web-app-title" content="EduLab">
 <meta property="og:site_name" content="EduLab">
+{% if seo_canonical|default(none) %}
+<link rel="canonical" href="{{ seo_canonical }}">
+{% elif seo_auth_page|default(false) %}
+<meta name="robots" content="noindex, follow">
+{% endif %}
 <meta property="og:image" content="{{ url_for('static', filename='img/icon.png', v='2', _external=True) }}">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:alt" content="Icono de EduLab: cerebro turquesa sobre fondo oscuro">

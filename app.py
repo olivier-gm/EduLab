@@ -36,6 +36,7 @@ from auth import auth_bp, current_user, login_required, admin_required
 from admin import admin_bp
 import plans
 import retention
+import seo
 import storage
 from plans import plans_bp
 
@@ -81,6 +82,7 @@ rate_limit.init_app(app)
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(plans_bp)
+seo.init_app(app)
 
 
 @app.before_request
